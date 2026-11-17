@@ -1,0 +1,42 @@
+package com.agoria.app.util
+
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
+
+object Share {
+
+    fun shareFile(
+        context: Context,
+        file: File,
+        mime: String,
+        title: String = "Share with",
+    ) {
+        if (!file.exists()) return
+        val authority = "${context.packageName}.fileprovider"
+        val uri = FileProvider.getUriForFile(context, authority, file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, title))
+    }
+
+    fun shareZip(context: Context, file: File) =
+        shareFile(context, file, "application/zip", "Share build ZIP")
+
+    fun shareJson(context: Context, file: File) =
+        shareFile(context, file, "application/json", "Share Agoria data")
+
+    fun shareText(context: Context, text: String, title: String = "Share with") {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, title))
+    }
+}
