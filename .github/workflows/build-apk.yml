@@ -31,9 +31,16 @@ jobs:
           ndk-version: r27c
           build-tools-version: 35.0.0
           cmake-version: 3.22.1
+          emulator: false
+          # Disable automatic tools package installation (deprecated/removed)
+          packages: ''
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
+
+      - name: Install required SDK packages
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "cmdline-tools;latest"
 
       - name: Cache Gradle wrapper
         uses: actions/cache@v4
