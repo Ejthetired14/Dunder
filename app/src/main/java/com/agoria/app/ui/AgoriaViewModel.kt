@@ -199,7 +199,14 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
-            val flow = combine(
+            val flow = combine<
+                AgentEntity?,
+                List<MessageEntity>,
+                List<DiaryEntryEntity>,
+                List<TaskEntity>,
+                List<BuildEntity>,
+                List<MemoryEntity>
+            >(
                 agents.map { it.firstOrNull { it.id == agentId } },
                 messagesFor(agentId),
                 diaryFor(agentId),

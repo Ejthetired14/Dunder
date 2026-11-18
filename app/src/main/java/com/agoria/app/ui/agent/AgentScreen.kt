@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
