@@ -6,6 +6,7 @@ import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.ApprovalEntity
+import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.Repository
 import com.agoria.app.util.Json
 import com.agoria.app.util.Notifier
@@ -118,7 +119,7 @@ class AgentRuntime(
         val decided = approval.copy(
             status = "approved",
             decidedAt = now,
-            decisionNote = note.ifBlank { null },
+            result = note.ifBlank { null },
         )
         repo.updateApproval(decided)
         repo.setAgentStatus(approval.agentId, "working")
@@ -135,7 +136,7 @@ class AgentRuntime(
         val decided = approval.copy(
             status = "denied",
             decidedAt = now,
-            decisionNote = note.ifBlank { null },
+            result = note.ifBlank { null },
         )
         repo.updateApproval(decided)
         Notifier.cancelApproval(context, approval.title)
@@ -457,7 +458,7 @@ class AgentRuntime(
                     repo.updateInfrastructureFund(agentAmount)
                     val fund = repo.getInfrastructureFund()
                     log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
-                    repo.addDiary(agentId, "revenue", "Earned ${amountCents/100} USD ($source). Agent fund: ${agentAmount/100}, User: ${userAmount/100}. Infrastructure fund: ${fund/100}", 4)
+                    repo.addDiary(agentId, "revenue", "Earned \${amountCents/100} USD ($source). Agent fund: \${agentAmount/100}, User: \${userAmount/100}. Infrastructure fund: \${fund/100}", 4)
                 } else {
                     log("${agent.name} tried to record revenue with zero amount.", "error")
                 }
@@ -541,7 +542,7 @@ class AgentRuntime(
                         if (cost <= fund) {
                             repo.updateProvider(provider.copy(model = targetModel.ifBlank { provider.model }, priority = priority, enabled = true, updatedAt = Time.now()))
                             repo.updateInfrastructureFund(-cost)
-                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: \${cost/100}. Fund remaining: \${(fund-cost)/100}", 4)
+                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '\${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: \${cost/100}. Fund remaining: \${(fund-cost)/100}", 4)
                             log("${agent.name} reinvested \${cost/100} to upgrade $targetProvider")
                         } else {
                             repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need \${cost/100}, have \${fund/100}.", 2)
@@ -641,7 +642,7 @@ class AgentRuntime(
     private suspend fun executeApproval(approval: ApprovalEntity) {
         val agent = repo.agent(approval.agentId)
             ?: return run {
-                repo.updateApproval(approval.copy(status = "failed", executedAt = Time.now(), result = "Agent no longer exists"))
+                repo.updateApproval(approval.copy(status = "failed", decidedAt = Time.now(), result = "Agent no longer exists"))
             }
 
         val outcome = when (approval.type) {
@@ -695,7 +696,7 @@ class AgentRuntime(
         repo.updateApproval(
             approval.copy(
                 status = if (ok) "executed" else "failed",
-                executedAt = Time.now(),
+                decidedAt = Time.now(),
                 result = outcome.take(2000),
             ),
         )

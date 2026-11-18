@@ -263,7 +263,7 @@ object PromptBuilder {
 
     fun reinvestmentPrompt(context: AgentContext): String {
         val fund = context.infrastructureFundCents
-        val providers = context.providers.filter { it.enabled }.joinToString("\n") { "- ${it.name}: model=${it.model}, priority=${it.priority}" }
+        val providers = context.providers.filter { it.enabled }.joinToString("\n") { "- ${it.name}: model=${it.model}" }
         return """
             ## Task: Decide how to reinvest infrastructure fund
             
@@ -273,13 +273,11 @@ object PromptBuilder {
             
             Options:
             1. **Upgrade model** for a provider (e.g., switch to a stronger model)
-            2. **Increase priority** of a provider (lower number = higher priority = used more often)
-            3. **Enable a new provider** that requires payment
-            4. **Save** for larger upgrade
+            2. **Enable a new provider** that requires payment
+            3. **Save** for larger upgrade
             
             Costs (approximate):
             - Model upgrade: \$5-15
-            - Priority boost (per level): \$2
             - New paid provider: \$10-30
             
             Max single reinvestment: \$50 (hard cap)

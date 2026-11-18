@@ -6,6 +6,7 @@ import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
+import com.agoria.app.data.RevenueEntity
 import com.agoria.app.util.Json
 import com.agoria.app.util.SecretCipher
 import com.agoria.app.util.Time
@@ -223,8 +224,6 @@ class Repository(
             status = "pending",
             createdAt = Time.now(),
             decidedAt = null,
-            decisionNote = null,
-            executedAt = null,
             result = null,
         )
         db.approvalDao().insert(approval)
@@ -438,23 +437,21 @@ class Repository(
 
     suspend fun addBuild(
         agentId: String,
-        approvalId: String?,
         name: String,
         description: String,
-        relativePath: String,
         zipPath: String,
         fileCount: Int,
     ): BuildEntity {
         val build = BuildEntity(
             id = UUID.randomUUID().toString(),
             agentId = agentId,
-            approvalId = approvalId,
             name = name,
             description = description,
-            relativePath = relativePath,
-            zipPath = zipPath,
             fileCount = fileCount,
+            zipPath = zipPath,
+            status = "building",
             createdAt = Time.now(),
+            completedAt = null,
         )
         db.buildDao().insert(build)
         return build

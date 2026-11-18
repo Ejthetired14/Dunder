@@ -1023,7 +1023,8 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errors = root.optJSONArray("errors")?.joinToString(", ") { it.toString() } ?: "Unknown error"
+                    val errorsArray = root.optJSONArray("errors")
+                    val errors = errorsArray?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Cloudflare deploy failed: $errors")
                 }
                 val result = root.optJSONObject("result")
@@ -1040,7 +1041,8 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    return ConnectorResult(false, "Worker not found or error: ${root.optJSONArray("errors")?.joinToString()}")
+                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    return ConnectorResult(false, "Worker not found or error: $errors")
                 }
                 ConnectorResult(true, root.optString("result"))
             }
@@ -1051,7 +1053,8 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    return ConnectorResult(false, "Delete failed: ${root.optJSONArray("errors")?.joinToString()}")
+                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    return ConnectorResult(false, "Delete failed: $errors")
                 }
                 ConnectorResult(true, "Deleted worker '$name'.")
             }
@@ -1061,7 +1064,8 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    return ConnectorResult(false, "List failed: ${root.optJSONArray("errors")?.joinToString()}")
+                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    return ConnectorResult(false, "List failed: $errors")
                 }
                 val result = root.optJSONObject("result") ?: return ConnectorResult(true, "No workers found.")
                 val sb = StringBuilder("Cloudflare Workers:\n")
@@ -1089,7 +1093,8 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errors = root.optJSONArray("errors")?.joinToString(", ") { it.toString() } ?: "Unknown error"
+                    val errorsArray = root.optJSONArray("errors")
+                    val errors = errorsArray?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Cloudflare deploy failed: $errors")
                 }
                 val result = root.optJSONObject("result")
