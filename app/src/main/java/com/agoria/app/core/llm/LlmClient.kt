@@ -171,7 +171,7 @@ class LlmClient(private val repo: Repository) {
         val requestBuilder = Request.Builder()
             .url(url)
             .addHeader("Content-Type", "application/json")
-            .addHeader("User-Agent", "Agoria/1.0 (Android)")
+            .addHeader("User-Agent", "Dunder/1.0 (Android)")
         if (!key.isNullOrBlank()) {
             requestBuilder.addHeader("Authorization", "Bearer $key")
         }

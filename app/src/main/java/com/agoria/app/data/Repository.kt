@@ -466,7 +466,7 @@ class Repository(
 
     suspend fun exportSnapshot(): JSONObject {
         val root = JSONObject()
-        root.put("app", "Agoria")
+        root.put("app", "Dunder")
         root.put("version", 1)
         root.put("exportedAt", Time.iso(Time.now()))
         val s = settings()

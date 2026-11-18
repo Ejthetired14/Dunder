@@ -260,7 +260,7 @@ object ConnectorCatalog {
             auth = ConnectorAuth.WEBHOOK,
             fields = listOf(
                 ConnectorField("webhookUrl", "Webhook URL", "A Discord channel webhook URL.", true, true, "https://discord.com/api/webhooks/..."),
-                ConnectorField("username", "Display name", "Optional. Overrides the webhook name.", false, false, "Agoria"),
+                ConnectorField("username", "Display name", "Optional. Overrides the webhook name.", false, false, "Dunder"),
             ),
             actions = listOf(
                 ConnectorActionDef("post", "Post message", "Post a message. Requires approval.", true, "{\"content\": \"...\"}"),

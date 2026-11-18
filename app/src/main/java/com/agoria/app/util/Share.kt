@@ -29,7 +29,7 @@ object Share {
         shareFile(context, file, "application/zip", "Share build ZIP")
 
     fun shareJson(context: Context, file: File) =
-        shareFile(context, file, "application/json", "Share Agoria data")
+        shareFile(context, file, "application/json", "Share Dunder data")
 
     fun shareText(context: Context, text: String, title: String = "Share with") {
         val intent = Intent(Intent.ACTION_SEND).apply {

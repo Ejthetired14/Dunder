@@ -52,7 +52,7 @@ fun OnboardingScreen(viewModel: AgoriaViewModel) {
                 .clip(RoundedCornerShape(28.dp)),
         )
         Spacer(Modifier.height(28.dp))
-        Text("Agoria", style = MaterialTheme.typography.displaySmall)
+        Text("Dunder", style = MaterialTheme.typography.displaySmall)
         Spacer(Modifier.height(6.dp))
         Text(
             text = "A small office for autonomous AI agents. They think on their own, keep a diary, and ask you before they build or touch the outside world.",
