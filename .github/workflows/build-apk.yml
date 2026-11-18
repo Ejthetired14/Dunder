@@ -30,20 +30,12 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 35
-          ndk-version: r27c
-          build-tools-version: 35.0.0
-          cmake-version: 3.22.1
-          emulator: false
-          # Disable automatic tools package installation (deprecated/removed)
-          packages: ''
-
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
+          cmdline-tools-version: latest
+          accept-android-sdk-licenses: true
 
       - name: Install required SDK packages
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "cmdline-tools;latest"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "ndk;27.2.12479018" "cmake;3.22.1"
 
       - name: Cache Gradle wrapper
         uses: actions/cache@v4
