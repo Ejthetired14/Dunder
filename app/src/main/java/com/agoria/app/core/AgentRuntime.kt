@@ -21,6 +21,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.agoria.app.core.BuildRunner.BuildProgress
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
@@ -38,6 +39,10 @@ class AgentRuntime(
     private val mutexes = ConcurrentHashMap<String, Mutex>()
     private val _state = MutableStateFlow(RuntimeState())
     val state = _state.asStateFlow()
+
+    // Build progress for UI
+    private val _buildProgress = MutableStateFlow<BuildProgress?>(null)
+    val buildProgress = _buildProgress.asStateFlow()
 
     private var loopJob: Job? = null
 
@@ -649,7 +654,10 @@ class AgentRuntime(
         val outcome = when (approval.type) {
             "build_project" -> {
                 val details = Json.tryObject(approval.details) ?: JSONObject()
-                val build = buildRunner.build(agent, approval)
+                _buildProgress.update { null } // reset
+                val build = buildRunner.build(agent, approval) { progress ->
+                    _buildProgress.update { progress }
+                }
                 if (build != null) {
                     "Build complete: ${build.name} (${build.fileCount} files)"
                 } else {

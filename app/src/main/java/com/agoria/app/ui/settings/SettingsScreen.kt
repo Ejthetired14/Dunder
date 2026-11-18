@@ -65,11 +65,12 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val state by viewModel.settingsScreenState.collectAsStateWithLifecycle()
     val tests by viewModel.providerTests.collectAsStateWithLifecycle()
-    val revenue by viewModel.revenue.collectAsStateWithLifecycle()
     var showReset by remember { mutableStateOf(false) }
+    val settings = state.settings
+    val providers = state.providers
+    val revenue = state.revenue
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
     var agentSplit by remember { mutableStateOf(50) }

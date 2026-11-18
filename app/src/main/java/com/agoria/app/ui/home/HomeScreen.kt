@@ -83,21 +83,20 @@ fun HomeScreen(
     onOpenOffice: () -> Unit,
 ) {
     val context = LocalContext.current
-    val agents by viewModel.agents.collectAsStateWithLifecycle()
-    val diary by viewModel.diary.collectAsStateWithLifecycle()
-    val pending by viewModel.pendingApprovals.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val runtime by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val state by viewModel.homeScreenState.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
 
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
 
-    val autonomyEnabled = settings?.autonomyEnabled ?: false
-    val officeName = settings?.officeName ?: "Dunder"
-    val userName = settings?.userName ?: "Boss"
-    val latestDiary = diary.take(5)
+    val autonomyEnabled = state.settings?.autonomyEnabled ?: false
+    val officeName = state.settings?.officeName ?: "Dunder"
+    val userName = state.settings?.userName ?: "Boss"
+    val latestDiary = state.latestDiary
+    val agents = state.agents
+    val pending = state.pendingApprovals
+    val runtime = state
 
     Scaffold(
         topBar = {

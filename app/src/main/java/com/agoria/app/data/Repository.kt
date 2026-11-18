@@ -40,6 +40,19 @@ class Repository(
     fun buildsFor(agentId: String) = db.buildDao().observeForAgent(agentId)
     fun memoriesFor(agentId: String) = db.memoryDao().observeForAgent(agentId)
 
+    // Paged queries
+    fun buildsForAgentPaged(agentId: String, limit: Int = 20, offset: Int = 0) =
+        db.buildDao().observePagedForAgent(agentId, limit, offset)
+    suspend fun buildsCountForAgent(agentId: String) = db.buildDao().countForAgent(agentId)
+
+    fun diaryForAgentPaged(agentId: String, limit: Int = 20, offset: Int = 0) =
+        db.diaryDao().observePagedForAgent(agentId, limit, offset)
+    suspend fun diaryCountForAgent(agentId: String) = db.diaryDao().countForAgent(agentId)
+
+    fun messagesForAgentPaged(agentId: String, limit: Int = 20, offset: Int = 0) =
+        db.messageDao().observePagedForAgent(agentId, limit, offset)
+    suspend fun messagesCountForAgent(agentId: String) = db.messageDao().countForAgent(agentId)
+
     suspend fun seedIfNeeded() = db.withTransaction {
         var current = db.settingsDao().get()
         if (current == null) {

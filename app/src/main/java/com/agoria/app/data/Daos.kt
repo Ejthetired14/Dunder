@@ -39,6 +39,12 @@ interface DiaryDao {
     @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC")
     fun observeForAgent(agentId: String): Flow<List<DiaryEntryEntity>>
 
+    @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
+    fun observePagedForAgent(agentId: String, limit: Int, offset: Int): Flow<List<DiaryEntryEntity>>
+
+    @Query("SELECT COUNT(*) FROM diary_entries WHERE agentId = :agentId")
+    suspend fun countForAgent(agentId: String): Int
+
     @Query("SELECT * FROM diary_entries ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<DiaryEntryEntity>
 
@@ -53,6 +59,12 @@ interface DiaryDao {
 interface MessageDao {
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC")
     fun observeForAgent(agentId: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC LIMIT :limit OFFSET :offset")
+    fun observePagedForAgent(agentId: String, limit: Int, offset: Int): Flow<List<MessageEntity>>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE agentId = :agentId")
+    suspend fun countForAgent(agentId: String): Int
 
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForAgent(agentId: String, limit: Int): List<MessageEntity>
@@ -164,6 +176,12 @@ interface BuildDao {
 
     @Query("SELECT * FROM builds WHERE agentId = :agentId ORDER BY createdAt DESC")
     fun observeForAgent(agentId: String): Flow<List<BuildEntity>>
+
+    @Query("SELECT * FROM builds WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
+    fun observePagedForAgent(agentId: String, limit: Int, offset: Int): Flow<List<BuildEntity>>
+
+    @Query("SELECT COUNT(*) FROM builds WHERE agentId = :agentId")
+    suspend fun countForAgent(agentId: String): Int
 
     @Query("SELECT * FROM builds WHERE id = :id")
     suspend fun get(id: String): BuildEntity?

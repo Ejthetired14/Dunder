@@ -6,9 +6,17 @@ import androidx.lifecycle.viewModelScope
 import com.agoria.app.AgoriaApplication
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
+import com.agoria.app.core.BuildRunner
 import com.agoria.app.data.AgentEntity
+import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.BuildEntity
+import com.agoria.app.data.DiaryEntryEntity
+import com.agoria.app.data.MemoryEntity
+import com.agoria.app.data.MessageEntity
+import com.agoria.app.data.ProviderEntity
+import com.agoria.app.data.RevenueEntity
 import com.agoria.app.data.SettingsEntity
+import com.agoria.app.data.TaskEntity
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
@@ -17,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,6 +132,85 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     val runtimeState = runtime.state
 
+    // Build progress from AgentRuntime
+    val buildProgress = runtime.buildProgress
+        .map { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // --- Combined state flows for screen-level optimization ---
+
+    data class HomeScreenState(
+        val agents: List<AgentEntity>,
+        val latestDiary: List<DiaryEntryEntity>,
+        val pendingApprovals: List<ApprovalEntity>,
+        val settings: SettingsEntity?,
+        val runtimeRunning: Boolean,
+        val currentAgentName: String?,
+    )
+
+    val homeScreenState = combine(
+        agents,
+        diary,
+        pendingApprovals,
+        settings,
+        runtimeState
+    ) { agents, diary, pending, settings, runtime ->
+        HomeScreenState(
+            agents = agents,
+            latestDiary = diary.take(5),
+            pendingApprovals = pending,
+            settings = settings,
+            runtimeRunning = runtime.running,
+            currentAgentName = runtime.currentAgentName,
+        )
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeScreenState(emptyList(), emptyList(), emptyList(), null, false, null))
+
+    data class SettingsScreenState(
+        val settings: SettingsEntity?,
+        val providers: List<ProviderEntity>,
+        val revenue: List<RevenueEntity>,
+    )
+
+    val settingsScreenState = combine(
+        settings,
+        providers,
+        revenue
+    ) { settings, providers, revenue ->
+        SettingsScreenState(
+            settings = settings,
+            providers = providers,
+            revenue = revenue,
+        )
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyList()))
+
+    // Per-agent combined state - created on demand via function
+    fun agentScreenState(agentId: String) = combine(
+        repo.messagesFor(agentId),
+        repo.diaryFor(agentId),
+        repo.tasksFor(agentId),
+        repo.buildsFor(agentId),
+        repo.memoriesFor(agentId)
+    ) { messages, diary, tasks, builds, memories ->
+        AgentScreenState(
+            messages = messages,
+            diary = diary,
+            tasks = tasks,
+            builds = builds,
+            memories = memories,
+        )
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentScreenState(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
+
+    data class AgentScreenState(
+        val messages: List<MessageEntity>,
+        val diary: List<DiaryEntryEntity>,
+        val tasks: List<TaskEntity>,
+        val builds: List<BuildEntity>,
+        val memories: List<MemoryEntity>,
+    )
+
     val pendingCount = combine(repo.pendingApprovals, repo.pendingConnectorRequests) { a, c ->
         a.size + c.size
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -139,6 +227,39 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     fun approvalsFor(agentId: String) = repo.approvalsFor(agentId)
     fun buildsFor(agentId: String) = repo.buildsFor(agentId)
     fun memoriesFor(agentId: String) = repo.memoriesFor(agentId)
+
+    // Pagination state for builds
+    data class BuildsPager(
+        val builds: List<BuildEntity> = emptyList(),
+        val currentPage: Int = 0,
+        val hasMore: Boolean = false,
+        val isLoading: Boolean = false,
+    )
+
+    private val _buildsPagers = MutableStateFlow<Map<String, BuildsPager>>(emptyMap())
+    val buildsPagers = _buildsPagers.asStateFlow()
+
+    fun loadMoreBuilds(agentId: String) {
+        val pager = _buildsPagers.value[agentId] ?: BuildsPager()
+        if (pager.isLoading || !pager.hasMore) return
+        _buildsPagers.update { it + (agentId to pager.copy(isLoading = true)) }
+        viewModelScope.launch {
+            val nextPage = pager.currentPage + 1
+            val offset = nextPage * 20
+            val newBuilds = repo.buildsForAgentPaged(agentId, 20, offset).first()
+            val totalCount = repo.buildsCountForAgent(agentId)
+            val combined = pager.builds + newBuilds
+            val hasMore = combined.size < totalCount
+            _buildsPagers.update { it + (agentId to BuildsPager(
+                builds = combined,
+                currentPage = nextPage,
+                hasMore = hasMore,
+                isLoading = false,
+            )) }
+        }
+    }
+
+    fun getBuildsPager(agentId: String): BuildsPager = _buildsPagers.value[agentId] ?: BuildsPager()
 
     fun setAutonomy(enabled: Boolean) {
         viewModelScope.launch {

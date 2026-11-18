@@ -26,8 +26,10 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -36,6 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -60,6 +63,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agoria.app.core.BuildRunner
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.DiaryEntryEntity
@@ -124,6 +128,14 @@ fun AgentScreen(
                 viewModel = viewModel,
                 agent = agent,
                 onShareBuild = { build -> Share.shareZip(context, File(build.zipPath)) },
+                onSaveBuild = { build ->
+                    val ok = Share.saveToDownloads(context, File(build.zipPath), File(build.zipPath).name)
+                    android.widget.Toast.makeText(
+                        context,
+                        if (ok) "Saved to Downloads" else "Failed to save",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                },
             )
         }
     }
@@ -134,12 +146,17 @@ private fun AgentContent(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
     onShareBuild: (BuildEntity) -> Unit,
+    onSaveBuild: (BuildEntity) -> Unit,
 ) {
-    val messages = viewModel.messagesFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val diary = viewModel.diaryFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val tasks = viewModel.tasksFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val builds = viewModel.buildsFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val memories = viewModel.memoriesFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
+    val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
+        AgoriaViewModel.AgentScreenState(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+    ).value
+    val messages = state.messages
+    val diary = state.diary
+    val tasks = state.tasks
+    val memories = state.memories
+    val buildProgress by viewModel.buildProgress.collectAsStateWithLifecycle(null)
+    val buildsPager = viewModel.getBuildsPager(agent.id)
 
     var tab by remember { mutableStateOf(0) }
     var input by remember { mutableStateOf("") }
@@ -192,7 +209,15 @@ private fun AgentContent(
             1 -> DiaryTab(diary = diary)
             2 -> TasksTab(tasks = tasks)
             3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
-            else -> BuildsTab(builds = builds, onShare = onShareBuild)
+            else -> BuildsTab(
+    builds = buildsPager.builds,
+    onShare = onShareBuild,
+    onSave = onSaveBuild,
+    buildProgress = buildProgress,
+    hasMore = buildsPager.hasMore,
+    isLoading = buildsPager.isLoading,
+    onLoadMore = { viewModel.loadMoreBuilds(agent.id) },
+)
         }
     }
 
@@ -461,14 +486,12 @@ private fun DiaryTab(diary: List<DiaryEntryEntity>) {
             body = "Start autonomy or send a message. Every cycle produces a private thought here.",
         )
     } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            diary.forEach { entry ->
+            items(diary, key = { it.id }) { entry ->
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -507,14 +530,12 @@ private fun TasksTab(tasks: List<TaskEntity>) {
             body = "Agents can create tasks when they want to track a plan. They will show up here.",
         )
     } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            tasks.forEach { task ->
+            items(tasks, key = { it.id }) { task ->
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -561,14 +582,13 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
                 body = "Agents store facts, values, and plans here. Add one yourself if you want them to remember something.",
             )
         } else {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                memories.forEach { memory ->
+                items(memories, key = { it.id }) { memory ->
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -612,22 +632,63 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
 private fun BuildsTab(
     builds: List<BuildEntity>,
     onShare: (BuildEntity) -> Unit,
+    onSave: (BuildEntity) -> Unit,
+    buildProgress: com.agoria.app.core.BuildRunner.BuildProgress?,
+    hasMore: Boolean,
+    isLoading: Boolean,
+    onLoadMore: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
+        if (buildProgress != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = when (buildProgress) {
+                                is com.agoria.app.core.BuildRunner.BuildProgress.Generating -> buildProgress.stage
+                                is com.agoria.app.core.BuildRunner.BuildProgress.WritingFiles -> "Writing files... ${buildProgress.written}/${buildProgress.total}"
+                                is com.agoria.app.core.BuildRunner.BuildProgress.Zipping -> "Creating ZIP... ${(buildProgress.progress * 100).roundToInt()}%"
+                                com.agoria.app.core.BuildRunner.BuildProgress.Done -> "Build complete!"
+                                is com.agoria.app.core.BuildRunner.BuildProgress.Error -> "Error: ${buildProgress.message}"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    if (buildProgress is com.agoria.app.core.BuildRunner.BuildProgress.WritingFiles) {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            progress = buildProgress.total.toFloat().takeIf { it > 0 }?.let { buildProgress.written / it } ?: 0f,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+        }
         if (builds.isEmpty()) {
             EmptyState(
                 title = "No builds yet",
                 body = "When an agent proposes a build and you approve it, the generated project appears here as a downloadable ZIP.",
             )
         } else {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                builds.forEach { build ->
+                items(builds, key = { it.id }) { build ->
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -657,6 +718,37 @@ private fun BuildsTab(
                                     Icon(Icons.Default.Share, contentDescription = null)
                                     Spacer(Modifier.width(6.dp))
                                     Text("Share ZIP")
+                                }
+                                OutlinedButton(onClick = { onSave(build) }) {
+                                    Icon(Icons.Default.Download, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Save to Device")
+                                }
+                            }
+                        }
+                    }
+                }
+                if (hasMore) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                OutlinedButton(
+                                    onClick = onLoadMore,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                                ) {
+                                    Icon(Icons.Default.ExpandMore, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Load more")
                                 }
                             }
                         }

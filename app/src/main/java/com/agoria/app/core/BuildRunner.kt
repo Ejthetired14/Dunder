@@ -11,9 +11,19 @@ import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.Notifier
 import com.agoria.app.util.Time
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+
+sealed interface BuildProgress {
+    data class Generating(val stage: String = "Contacting model...") : BuildProgress
+    data class WritingFiles(val written: Int, val total: Int) : BuildProgress
+    data class Zipping(val progress: Float) : BuildProgress
+    object Done : BuildProgress
+    data class Error(val message: String) : BuildProgress
+}
 
 class BuildRunner(
     private val repo: Repository,
@@ -21,7 +31,11 @@ class BuildRunner(
     private val context: android.content.Context,
 ) {
 
-    suspend fun build(agent: AgentEntity, approval: ApprovalEntity): BuildEntity? {
+    suspend fun build(
+        agent: AgentEntity,
+        approval: ApprovalEntity,
+        onProgress: (BuildProgress) -> Unit = {},
+    ): BuildEntity? = withContext(Dispatchers.IO) {
         val details = Json.tryObject(approval.details) ?: JSONObject()
         val requestedName = Json.string(details, "name", approval.title).ifBlank { "untitled-build" }
         val plan = Json.string(details, "plan", approval.summary)
@@ -31,10 +45,14 @@ class BuildRunner(
         Files.clear(root)
         root.mkdirs()
 
+        onProgress(BuildProgress.Generating("Contacting model..."))
+
         val generated = requestProject(agent, requestedName, description, plan)
         val files = generated.files
         val finalName = generated.name.ifBlank { requestedName }
         val finalDescription = generated.description.ifBlank { description }
+
+        onProgress(BuildProgress.Generating("Writing files..."))
 
         var written = 0
         val manifestFiles = JSONArray()
@@ -46,6 +64,7 @@ class BuildRunner(
             Files.writeText(target, file.content.take(30_000))
             written++
             manifestFiles.put(path)
+            onProgress(BuildProgress.WritingFiles(written, files.size))
         }
 
         if (written == 0) {
@@ -69,11 +88,15 @@ class BuildRunner(
             .put("files", manifestFiles)
         Files.writeText(File(root, "manifest.json"), manifest.toString(2))
 
+        onProgress(BuildProgress.Generating("Creating ZIP..."))
+
         val zipFile = File(
             Files.exports(context),
             "agoria-${Files.safeName(finalName)}-${approval.id.take(8)}.zip",
         )
         Files.zipDirectory(root, zipFile)
+
+        onProgress(BuildProgress.Done)
 
         val build = repo.addBuild(
             agentId = agent.id,
@@ -95,7 +118,7 @@ class BuildRunner(
             "Build complete: $finalName ($written files). Download the ZIP from the Builds tab.",
         )
         Notifier.notifyBuild(context, "Build ready: $finalName", "$written files packaged. Open Dunder to download the ZIP.")
-        return build
+        build
     }
 
     private data class GeneratedFile(val path: String, val content: String)
