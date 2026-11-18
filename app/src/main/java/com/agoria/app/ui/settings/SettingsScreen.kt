@@ -158,7 +158,7 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "For reliable background execution, allow notifications and disable battery optimization for Agoria.",
+                    text = "For reliable background execution, allow notifications and disable battery optimization for Dunder.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -221,7 +221,7 @@ fun SettingsScreen(
             }
 
             SectionCard(title = "About") {
-                Text("Agoria 1.0.0", style = MaterialTheme.typography.titleMedium)
+                Text("Dunder 1.0.0", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "A local autonomous office for Android 13+. Agents run on free model APIs and keep their thoughts in a local diary. Builds and outward-facing actions require approval.",
                     style = MaterialTheme.typography.bodySmall,
@@ -255,7 +255,7 @@ fun SettingsScreen(
     if (showReset) {
         AlertDialog(
             onDismissRequest = { showReset = false },
-            title = { Text("Reset Agoria?") },
+            title = { Text("Reset Dunder?") },
             text = { Text("This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {

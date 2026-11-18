@@ -141,7 +141,7 @@ class ConnectorExecutor(
             val builder = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json")
-                .header("User-Agent", "Agoria/1.0 (Android)")
+                .header("User-Agent", "Dunder/1.0 (Android)")
             headers.forEach { (key, value) -> builder.header(key, value) }
             val request = when (method.uppercase()) {
                 "GET" -> builder.get().build()
@@ -415,7 +415,7 @@ class ConnectorExecutor(
                 )
             }
             "notify" -> {
-                val title = args.optString("title", "Agoria").ifBlank { "Agoria" }
+                val title = args.optString("title", "Dunder").ifBlank { "Dunder" }
                 val body = args.optString("body").ifBlank { return ConnectorResult(false, "Missing body") }
                 Notifier.notifyLocal(context, title, body)
                 ConnectorResult(true, "Posted local notification: $title")

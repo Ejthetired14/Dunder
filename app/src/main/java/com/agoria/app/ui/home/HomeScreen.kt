@@ -95,7 +95,7 @@ fun HomeScreen(
     ) { }
 
     val autonomyEnabled = settings?.autonomyEnabled ?: false
-    val officeName = settings?.officeName ?: "Agoria"
+    val officeName = settings?.officeName ?: "Dunder"
     val userName = settings?.userName ?: "Boss"
     val latestDiary = diary.take(5)
 

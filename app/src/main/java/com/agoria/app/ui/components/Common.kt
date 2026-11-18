@@ -54,9 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -352,10 +350,19 @@ fun connectorIcon(iconKey: String): ImageVector {
 
 @Composable
 fun OfficeThumbnail(modifier: Modifier = Modifier) {
-    Image(
-        painter = painterResource(R.drawable.office_thumbnail),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier,
-    )
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = modifier
+            .background(colors.primaryContainer)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Hub,
+            contentDescription = null,
+            tint = colors.onPrimaryContainer.copy(alpha = 0.3f),
+            modifier = Modifier
+                .fillMaxSize()
+                .size(120.dp)
+                .align(Alignment.Center),
+        )
+    }
 }
