@@ -91,7 +91,10 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start,
+                    ) {
                         Text("Connectors", style = MaterialTheme.typography.titleLarge)
                         Text(
                             text = "Give agents access to the outside world, one approval at a time",

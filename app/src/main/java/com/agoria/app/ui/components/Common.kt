@@ -344,7 +344,8 @@ fun connectorIcon(iconKey: String): ImageVector {
         "github" -> Icons.Default.Code
         "slack", "discord", "telegram" -> Icons.Default.Chat
         "notion" -> Icons.Default.Description
-        "paypal" -> Icons.Default.AttachMoney
+        "paypal", "polar" -> Icons.Default.AttachMoney
+        "agentmail" -> Icons.Default.Email
         else -> Icons.Default.Hub
     }
 }
