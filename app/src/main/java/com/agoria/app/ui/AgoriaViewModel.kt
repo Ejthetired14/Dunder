@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mutableStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -179,6 +178,12 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         HomeScreenState(a, d, p, s, r)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeScreenState(emptyList(), emptyList(), emptyList(), null, com.agoria.app.core.RuntimeState()))
 
+    private val _providerTests = MutableStateFlow<Map<String, ProviderTest>>(emptyMap())
+    val providerTests = _providerTests.asStateFlow()
+
+    private val _setupConnectorId = MutableStateFlow<String?>(null)
+    val setupConnectorId = _setupConnectorId.asStateFlow()
+
     val settingsScreenState = combine(
         settings,
         providers,
@@ -189,7 +194,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList()))
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
-    private val agentScreenStates = mutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
+    private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
             val flow = combine(
@@ -214,7 +219,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val _diaryPagination = MutableStateFlow(PaginationState())
     val diaryPagination = _diaryPagination.asStateFlow()
 
-    private val _messagesPagination = mutableStateOf<Map<String, PaginationState>>(emptyMap())
+    private val _messagesPagination = MutableStateFlow<Map<String, PaginationState>>(emptyMap())
     fun messagesPagination(agentId: String): PaginationState = _messagesPagination.value[agentId] ?: PaginationState()
     fun setMessagesPagination(agentId: String, state: PaginationState) {
         _messagesPagination.value = _messagesPagination.value + (agentId to state)
@@ -222,12 +227,6 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     // Build progress flow (exposed from AgentRuntime)
     val buildProgress = runtime.buildProgress
-
-    private val _providerTests = MutableStateFlow<Map<String, ProviderTest>>(emptyMap())
-    val providerTests = _providerTests.asStateFlow()
-
-    private val _setupConnectorId = MutableStateFlow<String?>(null)
-    val setupConnectorId = _setupConnectorId.asStateFlow()
 
     fun messagesFor(agentId: String) = repo.messagesFor(agentId)
     fun diaryFor(agentId: String) = repo.diaryFor(agentId)

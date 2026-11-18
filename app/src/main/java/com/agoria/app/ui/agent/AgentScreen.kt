@@ -34,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -845,14 +846,14 @@ private fun ProgressBanner(
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (progress >= 0f) {
-                    androidx.compose.material3.CircularProgressIndicator(
+                    CircularProgressIndicator(
                         progress = progress,
                         color = color,
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(12.dp))
                 } else {
-                    androidx.compose.material3.CircularProgressIndicator(
+                    CircularProgressIndicator(
                         color = color,
                         modifier = Modifier.size(20.dp),
                     )
@@ -867,7 +868,7 @@ private fun ProgressBanner(
             }
             if (progress >= 0f && progress < 1f) {
                 Spacer(Modifier.height(8.dp))
-                androidx.compose.material3.LinearProgressIndicator(
+                LinearProgressIndicator(
                     progress = progress,
                     color = color,
                     trackColor = color.copy(alpha = 0.2f),
