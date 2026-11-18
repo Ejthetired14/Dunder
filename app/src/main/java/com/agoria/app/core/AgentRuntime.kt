@@ -260,14 +260,12 @@ class AgentRuntime(
         val settings = repo.settings()
         if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
 
-        val allApprovals = repo.approvals.first()
         val autoApproveTypes = settings.autoApproveTypes.split(",").map { it.trim() }.toSet()
+        val autoPending = repo.approvals.first()
+            .filter { it.status == "auto_pending" && it.type in autoApproveTypes }
 
-        allApprovals.forEach { approval ->
-            if (approval.status == "executed" && approval.result == "Auto-approved" && approval.type in autoApproveTypes) {
-                // This approval was auto-approved but not yet executed
-                executeApproval(approval)
-            }
+        autoPending.forEach { approval ->
+            executeApproval(approval)
         }
     }
 

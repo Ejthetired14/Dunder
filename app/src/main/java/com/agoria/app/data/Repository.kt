@@ -224,9 +224,9 @@ class Repository(
             summary = summary,
             details = details,
             risk = risk,
-            status = if (autoApprove) "executed" else "pending",
+            status = if (autoApprove) "auto_pending" else "pending",
             createdAt = Time.now(),
-            decidedAt = if (autoApprove) Time.now() else null,
+            decidedAt = null,
             result = if (autoApprove) "Auto-approved" else null,
         )
         db.approvalDao().insert(approval)
