@@ -224,6 +224,9 @@ class AgentRuntime(
         val settings = repo.settings()
         val cooldown = settings.agentCooldownSeconds.coerceIn(15, 3600) * 1000L
 
+        // Process auto-approved approvals that haven't been executed yet
+        processAutoApprovedApprovals()
+
         val agents = repo.allAgents()
         for (agent in agents) {
             if (!agent.autonomy || agent.status == "paused") continue
@@ -250,6 +253,21 @@ class AgentRuntime(
                 currentAgentId = null,
                 currentAgentName = null,
             )
+        }
+    }
+
+    private suspend fun processAutoApprovedApprovals() {
+        val settings = repo.settings()
+        if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
+
+        val allApprovals = repo.approvals.first()
+        val autoApproveTypes = settings.autoApproveTypes.split(",").map { it.trim() }.toSet()
+
+        allApprovals.forEach { approval ->
+            if (approval.status == "executed" && approval.result == "Auto-approved" && approval.type in autoApproveTypes) {
+                // This approval was auto-approved but not yet executed
+                executeApproval(approval)
+            }
         }
     }
 

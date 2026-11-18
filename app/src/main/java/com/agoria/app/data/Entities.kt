@@ -245,6 +245,9 @@ data class SettingsEntity(
     val infrastructureFundCents: Long = 0,
     val stripeAccountId: String? = null,
     val stripePublishableKey: String? = null,
+    // Auto-approval settings
+    val autoApproveEnabled: Boolean = false,
+    val autoApproveTypes: String = "", // comma-separated: build_project,connector_action,send_email,etc.
     val createdAt: Long,
 )
 

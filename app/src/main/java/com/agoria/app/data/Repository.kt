@@ -213,6 +213,9 @@ class Repository(
         details: String,
         risk: String,
     ): ApprovalEntity {
+        val s = settings()
+        val autoApprove = s.autoApproveEnabled && s.autoApproveTypes.isNotBlank() && type in s.autoApproveTypes.split(",").map { it.trim() }
+        
         val approval = ApprovalEntity(
             id = UUID.randomUUID().toString(),
             agentId = agentId,
@@ -221,10 +224,10 @@ class Repository(
             summary = summary,
             details = details,
             risk = risk,
-            status = "pending",
+            status = if (autoApprove) "executed" else "pending",
             createdAt = Time.now(),
-            decidedAt = null,
-            result = null,
+            decidedAt = if (autoApprove) Time.now() else null,
+            result = if (autoApprove) "Auto-approved" else null,
         )
         db.approvalDao().insert(approval)
         return approval

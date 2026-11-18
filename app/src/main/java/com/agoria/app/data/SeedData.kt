@@ -16,6 +16,8 @@ object SeedData {
         theme = "system",
         maxTokens = 1600,
         seedVersion = 0,
+        autoApproveEnabled = false,
+        autoApproveTypes = "",
         createdAt = now,
     )
 

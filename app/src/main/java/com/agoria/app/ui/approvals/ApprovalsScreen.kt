@@ -13,16 +13,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -64,9 +68,12 @@ fun ApprovalsScreen(
     val connectorRequests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val setupConnectorId by viewModel.setupConnectorId.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<ApprovalEntity?>(null) }
     var denyNote by remember { mutableStateOf("") }
+    var showAutoApproveDialog by remember { mutableStateOf(false) }
+    var autoApproveTypes by remember { mutableStateOf("") }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -75,6 +82,12 @@ fun ApprovalsScreen(
             onOpenConnectors()
             viewModel.clearSetupConnector()
             snackbar.showSnackbar("Connector approved. Configure it in the Connectors screen.")
+        }
+    }
+
+    LaunchedEffect(settings) {
+        settings?.let { s ->
+            autoApproveTypes = s.autoApproveTypes ?: ""
         }
     }
 
@@ -89,6 +102,11 @@ fun ApprovalsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showAutoApproveDialog = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Auto-approve settings")
                     }
                 },
             )
@@ -154,6 +172,27 @@ fun ApprovalsScreen(
             },
             note = denyNote,
             onNote = { denyNote = it },
+        )
+    }
+
+    if (showAutoApproveDialog) {
+        AutoApproveDialog(
+            enabled = settings?.autoApproveEnabled ?: false,
+            types = autoApproveTypes,
+            onEnabledChange = { enabled ->
+                viewModel.updateSettings { s ->
+                    s.copy(autoApproveEnabled = enabled)
+                }
+            },
+            onTypesChange = { types ->
+                autoApproveTypes = types
+            },
+            onSave = {
+                viewModel.updateSettings { s ->
+                    s.copy(autoApproveTypes = autoApproveTypes)
+                }
+            },
+            onDismiss = { showAutoApproveDialog = false },
         )
     }
 }
@@ -480,4 +519,67 @@ private fun statusTint(status: String): Color = when (status) {
     "failed" -> MaterialTheme.colorScheme.error
     "denied" -> MaterialTheme.colorScheme.error
     else -> MaterialTheme.colorScheme.tertiary
+}
+
+@Composable
+private fun AutoApproveDialog(
+    enabled: Boolean,
+    types: String,
+    onEnabledChange: (Boolean) -> Unit,
+    onTypesChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val allTypes = listOf(
+        "build_project" to "Build projects",
+        "connector_action" to "Connector actions",
+        "send_email" to "Send emails",
+        "publish" to "Publish content",
+        "delete" to "Delete resources",
+        "spend_api" to "Spend API credits",
+        "connector_install" to "Install connectors",
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Auto-approve Settings") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 500.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Enable auto-approve", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.weight(1f))
+                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                }
+                Text(
+                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Auto-approve these types:", style = MaterialTheme.typography.labelLarge)
+                allTypes.forEach { (typeId, typeLabel) ->
+                    val isChecked = types.split(",").map { it.trim() }.contains(typeId)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = isChecked, onCheckedChange = { checked ->
+                            val current = types.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                            if (checked) current.add(typeId) else current.remove(typeId)
+                            onTypesChange(current.joinToString(","))
+                        })
+                        Spacer(Modifier.width(12.dp))
+                        Text(typeLabel, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(); onDismiss() }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
