@@ -1,6 +1,8 @@
 package com.agoria.app.ui
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.agoria.app.AgoriaApplication
@@ -16,6 +18,7 @@ import com.agoria.app.data.SettingsEntity
 import com.agoria.app.data.TaskEntity
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
+import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
