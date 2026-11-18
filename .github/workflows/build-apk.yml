@@ -28,13 +28,9 @@ jobs:
           cache: 'gradle'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: latest
-          accept-android-sdk-licenses: true
-
-      - name: Install required SDK packages
         run: |
+          # Install required SDK packages using sdkmanager
+          yes | sdkmanager --licenses
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "ndk;27.2.12479018" "cmake;3.22.1"
 
       - name: Cache Gradle wrapper
