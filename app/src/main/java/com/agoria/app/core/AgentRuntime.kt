@@ -42,6 +42,9 @@ class AgentRuntime(
     // Expose build progress from BuildRunner
     val buildProgress = buildRunner.buildProgress
 
+    // Expose connector executor for direct connector calls (e.g., backup/restore)
+    val connectorExecutor: ConnectorExecutor = connectorExecutor
+
     private var loopJob: Job? = null
 
     @Volatile

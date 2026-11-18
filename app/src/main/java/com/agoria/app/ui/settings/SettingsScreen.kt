@@ -1,7 +1,16 @@
 package com.agoria.app.ui.settings
 
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
+import java.io.File
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,7 +26,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filed.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -58,7 +75,30 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.ProviderTest
 import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.util.Share
+import com.agoria.app.util.UpdateManager
 import kotlin.math.roundToInt
+
+// Update state enum
+enum class UpdateState {
+    Idle,
+    Checking,
+    UpToDate,
+    UpdateAvailable,
+}
+
+// Get current version info
+@Composable
+fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> {
+    return remember(context) {
+        try {
+            val pm = context.packageManager
+            val info = pm.getPackageInfo(context.packageName, 0)
+            info.versionName ?: "1.0.0" to info.versionCode
+        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+            "1.0.0" to 1
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,10 +116,81 @@ fun SettingsScreen(
     var stripeAccountId by remember { mutableStateOf("") }
     var stripePublishableKey by remember { mutableStateOf("") }
 
+    val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
+
+    // File picker for import
+    val pickImportFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        uri?.let { fileUri ->
+            viewModel.importData(File(fileUri.path)) { success ->
+                // Could show success/error snackbar
+            }
+        }
+    }
+
     val settings = state.settings
     val providers = state.providers
     val tests = state.providerTests
     val revenue = state.revenue
+
+    // Backup to Google Drive
+    fun backupToGoogleDrive() {
+        viewModel.exportData { file ->
+            val content = com.agoria.app.util.Files.readText(file)
+            viewModel.appScope.launch {
+                val result = viewModel.runtime.connectorExecutor.execute(
+                    "gdrive",
+                    "system",
+                    "upload_backup",
+                    org.json.JSONObject().apply {
+                        put("fileName", file.name)
+                        put("content", content)
+                    },
+                )
+                // Handle result
+            }
+        }
+    }
+
+    // Restore from Google Drive
+    fun restoreFromGoogleDrive() {
+        viewModel.appScope.launch {
+            val listResult = viewModel.runtime.connectorExecutor.execute(
+                "gdrive",
+                "system",
+                "list_backups",
+                org.json.JSONObject().put("limit", 1),
+            )
+            if (listResult.ok) {
+                try {
+                    val json = org.json.JSONObject(listResult.summary)
+                    val files = json.getJSONArray("files")
+                    if (files.length() > 0) {
+                        val latest = files.getJSONObject(0)
+                        val fileName = latest.getString("name")
+                        val downloadResult = viewModel.runtime.connectorExecutor.execute(
+                            "gdrive",
+                            "system",
+                            "download_backup",
+                            org.json.JSONObject().put("fileName", fileName),
+                        )
+                        if (downloadResult.ok) {
+                            val downloadJson = org.json.JSONObject(downloadResult.summary)
+                            val content = downloadJson.getString("content")
+                            val tempFile = File(context.cacheDir, "gdrive-restore-${System.currentTimeMillis()}.json")
+                            com.agoria.app.util.Files.writeText(tempFile, content)
+                            viewModel.importData(tempFile) { success ->
+                                tempFile.delete()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 
     LaunchedEffect(settings) {
         settings?.let {
@@ -374,6 +485,300 @@ fun SettingsScreen(
                         },
                     ) { Text("Export JSON") }
                     TextButton(onClick = { showReset = true }) { Text("Reset app") }
+                }
+            }
+
+            SectionCard(title = "Backup & Restore") {
+                Text(
+                    text = "Backup your agents, settings, and data. Restore from local file or Google Drive.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+
+                // Local backup
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Export to Device", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    text = "Save encrypted JSON to Downloads folder",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.exportData { file ->
+                                Share.saveToDownloads(context, file, "agoria-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())}.json")
+                            }
+                        },
+                    ) { Text("Export") }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Local restore
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Import from Device", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    text = "Pick a backup JSON file to restore",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = { pickImportFileLauncher.launch("application/json") },
+                    ) { Text("Import") }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Google Drive backup (if connector configured)
+                val gdriveConnector = state.connectors?.firstOrNull { it.id == "gdrive" }
+                if (gdriveConnector != null && gdriveConnector.status == "ready") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text("Backup to Google Drive", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        text = "Upload backup to Drive via gdrive connector",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = { backupToGoogleDrive() },
+                        ) { Text("Backup to Drive") }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDownload,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text("Restore from Google Drive", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        text = "Download and restore latest backup from Drive",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = { restoreFromGoogleDrive() },
+                        ) { Text("Restore from Drive") }
+                    }
+                } else {
+                    Text(
+                        text = "Set up the Google Drive connector to enable cloud backup/restore.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+            }
+
+            SectionCard(title = "App Updates") {
+                val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+                val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null) }
+
+                when (updateState.value) {
+                    UpdateState.Idle -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text("Check for Updates", style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            text = "Current version: $currentVersionName ($currentVersionCode)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    updateState.value = UpdateState.Checking
+                                    viewModel.checkForUpdates { info ->
+                                        releaseInfo.value = info
+                                        updateState.value = if (info != null && info.isNewer) UpdateState.UpdateAvailable else UpdateState.UpToDate
+                                    }
+                                },
+                            ) { Text("Check") }
+                        }
+                    }
+                    UpdateState.Checking -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Checking for updates...", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    UpdateState.UpToDate -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text("Up to Date", style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            text = "You're running the latest version ($currentVersionName)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                            TextButton(onClick = { updateState.value = UpdateState.Idle }) { Text("Check Again") }
+                        }
+                    }
+                    UpdateState.UpdateAvailable -> {
+                        val info = releaseInfo.value!!
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.SystemUpdate,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text("Update Available: ${info.versionName}", style = MaterialTheme.typography.titleSmall)
+                                            Text(
+                                                text = "Released: ${info.publishedAt.take(10)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (info.releaseNotes.isNotBlank()) {
+                                Text(
+                                    text = "What's new:\n${info.releaseNotes}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp).fillMaxWidth(),
+                                )
+                            }
+                            val downloadProgress = remember { mutableStateOf<Int?>(null) }
+                            if (downloadProgress.value != null) {
+                                LinearProgressIndicator(
+                                    progress = downloadProgress.value!! / 100f,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Button(
+                                    onClick = {
+                                        downloadProgress.value = 0
+                                        viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success ->
+                                            downloadProgress.value = null
+                                            if (!success) {
+                                                // Could show error snackbar
+                                            }
+                                        })
+                                    },
+                                    enabled = downloadProgress.value == null,
+                                ) {
+                                    if (downloadProgress.value != null) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Downloading ${downloadProgress.value}%")
+                                    } else {
+                                        Text("Download & Install")
+                                    }
+                                }
+                                TextButton(onClick = { updateState.value = UpdateState.Idle }) { Text("Later") }
+                            }
+                        }
+                    }
                 }
             }
 

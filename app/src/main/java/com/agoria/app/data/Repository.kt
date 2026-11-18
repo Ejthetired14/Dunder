@@ -552,6 +552,51 @@ class Repository(
         return root
     }
 
+    suspend fun importSnapshot(json: JSONObject): Boolean {
+        try {
+            // Import settings
+            if (json.has("settings")) {
+                val settingsJson = json.getJSONObject("settings")
+                val s = settings()
+                val updated = s.copy(
+                    officeName = settingsJson.optString("officeName", s.officeName),
+                    userName = settingsJson.optString("userName", s.userName),
+                    autonomyEnabled = settingsJson.optBoolean("autonomyEnabled", s.autonomyEnabled),
+                    tickIntervalSeconds = settingsJson.optInt("tickIntervalSeconds", s.tickIntervalSeconds),
+                    agentCooldownSeconds = settingsJson.optInt("agentCooldownSeconds", s.agentCooldownSeconds),
+                )
+                updateSettings(updated)
+            }
+
+            // Import agents
+            if (json.has("agents")) {
+                val agentsArray = json.getJSONArray("agents")
+                for (i in 0 until agentsArray.length()) {
+                    val a = agentsArray.getJSONObject(i)
+                    val existing = agent(a.getString("id"))
+                    val agentEntity = com.agoria.app.data.AgentEntity(
+                        id = a.getString("id"),
+                        name = a.getString("name"),
+                        role = a.getString("role"),
+                        persona = a.optString("persona", ""),
+                        goal = a.optString("goal", ""),
+                        status = a.optString("status", "idle"),
+                        autonomy = a.optBoolean("autonomy", true),
+                        memory = a.optString("memory", ""),
+                        createdAt = a.optLong("createdAt", Time.now()),
+                        avatarIndex = existing?.avatarIndex ?: 0,
+                    )
+                    upsertAgent(agentEntity)
+                }
+            }
+
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+
     // ------------------------------------------------------------------ revenue
 
     val revenue = db.revenueDao().observeAll()

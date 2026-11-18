@@ -81,6 +81,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val app = application as AgoriaApplication
     private val repo = app.repository
     private val runtime = app.runtime
+    val appScope = app.appScope
 
     val agents = repo.agents.stateIn(
         viewModelScope,
@@ -595,6 +596,17 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun importData(file: File, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val content = withContext(Dispatchers.IO) { Files.readText(file) }
+            val json = try { JSONObject(content) } catch (e: Exception) { JSONObject() }
+            val success = repo.importSnapshot(json)
+            withContext(Dispatchers.Main) {
+                onResult(success)
+            }
+        }
+    }
+
     // Revenue methods
     fun setProfitSplit(agentPercent: Int, userPercent: Int) {
         viewModelScope.launch { repo.setProfitSplit(agentPercent, userPercent) }
@@ -626,5 +638,17 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 onResult(uri)
             }
         }
+    }
+
+    fun checkForUpdates(onResult: (com.agoria.app.util.UpdateManager.ReleaseInfo?) -> Unit) {
+        app.updateManager.checkForUpdates(onResult)
+    }
+
+    fun downloadAndInstallUpdate(
+        release: com.agoria.app.util.UpdateManager.ReleaseInfo,
+        onProgress: (Int) -> Unit,
+        onComplete: (Boolean) -> Unit,
+    ) {
+        app.updateManager.downloadAndInstall(release, onProgress, onComplete)
     }
 }

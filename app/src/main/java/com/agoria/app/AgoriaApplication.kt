@@ -8,6 +8,7 @@ import com.agoria.app.core.llm.LlmClient
 import com.agoria.app.data.AppDatabase
 import com.agoria.app.data.Repository
 import com.agoria.app.util.Notifier
+import com.agoria.app.util.UpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,9 @@ class AgoriaApplication : Application() {
         private set
 
     lateinit var appScope: CoroutineScope
+        private set
+
+    lateinit var updateManager: UpdateManager
         private set
 
     override fun onCreate() {
@@ -53,5 +57,7 @@ class AgoriaApplication : Application() {
         appScope.launch {
             repository.seedIfNeeded()
         }
+
+        updateManager = UpdateManager(this, appScope)
     }
 }

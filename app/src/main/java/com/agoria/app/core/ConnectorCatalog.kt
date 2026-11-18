@@ -429,6 +429,27 @@ object ConnectorCatalog {
             risk = "high",
             iconKey = "agentmail",
         ),
+        ConnectorDef(
+            id = "gdrive",
+            name = "Google Drive",
+            category = "Storage",
+            description = "Backup and restore app data to Google Drive. Upload JSON snapshots and download for restore.",
+            auth = ConnectorAuth.OAUTH_TOKEN,
+            fields = listOf(
+                ConnectorField("accessToken", "OAuth Access Token", "Paste a token with drive.file scope.", true, true, "ya29...."),
+                ConnectorField("folderId", "Folder ID (optional)", "Specific folder ID for backups. Leave empty for app root.", false, false, "1ABC...xyz"),
+            ),
+            actions = listOf(
+                ConnectorActionDef("upload_backup", "Upload Backup", "Upload a JSON backup file to Drive.", true, "{\"fileName\": \"agoria-backup-2026-01-15.json\", \"content\": \"{...}\"}"),
+                ConnectorActionDef("download_backup", "Download Backup", "Download a backup file by name.", false, "{\"fileName\": \"agoria-backup-2026-01-15.json\"}"),
+                ConnectorActionDef("list_backups", "List Backups", "List backup files in the Drive folder.", false, "{\"limit\": 20}"),
+                ConnectorActionDef("delete_backup", "Delete Backup", "Delete a backup file by ID. Requires approval.", true, "{\"fileId\": \"...\"}"),
+            ),
+            setupHelp = "Create OAuth token with Google Drive API v3 and scope drive.file in OAuth Playground. Paste the access token below. For a dedicated folder, create a folder in Drive and paste its ID from the URL.",
+            docsUrl = "https://developers.google.com/drive/api",
+            risk = "high",
+            iconKey = "gdrive",
+        ),
     )
 
     val byId: Map<String, ConnectorDef> = all.associateBy { it.id }
