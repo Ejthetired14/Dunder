@@ -1024,7 +1024,7 @@ class ConnectorExecutor(
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
                     val errorsArray = root.optJSONArray("errors")
-                    val errors = errorsArray?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    val errors = errorsArray?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Cloudflare deploy failed: $errors")
                 }
                 val result = root.optJSONObject("result")
@@ -1041,7 +1041,7 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    val errors = root.optJSONArray("errors")?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Worker not found or error: $errors")
                 }
                 ConnectorResult(true, root.optString("result"))
@@ -1053,7 +1053,7 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    val errors = root.optJSONArray("errors")?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Delete failed: $errors")
                 }
                 ConnectorResult(true, "Deleted worker '$name'.")
@@ -1064,7 +1064,7 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errors = root.optJSONArray("errors")?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    val errors = root.optJSONArray("errors")?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "List failed: $errors")
                 }
                 val result = root.optJSONObject("result") ?: return ConnectorResult(true, "No workers found.")
@@ -1094,7 +1094,7 @@ class ConnectorExecutor(
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
                     val errorsArray = root.optJSONArray("errors")
-                    val errors = errorsArray?.let { (0 until it.length()).map { it.getString(it) }.joinToString(", ") } ?: "Unknown error"
+                    val errors = errorsArray?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "Cloudflare deploy failed: $errors")
                 }
                 val result = root.optJSONObject("result")
@@ -1109,6 +1109,7 @@ class ConnectorExecutor(
     }
 
     private fun stripeWebhookWorkerCode(name: String, webhookSecret: String, callbackUrl: String): String {
+        val dollar = "\$"
         return """
             // Stripe Webhook Handler for $name
             // Receives Stripe events, verifies signature, forwards to app
@@ -1138,7 +1139,7 @@ class ConnectorExecutor(
                 const now = Math.floor(Date.now() / 1000);
                 if (Math.abs(now - parseInt(timestamp)) > 300) return false;
                 
-                const signedPayload = encoder.encode("\${timestamp}.\${payload}");
+                const signedPayload = encoder.encode("${dollar}{timestamp}.${dollar}{payload}");
                 const expectedSig = await crypto.subtle.sign("HMAC", key, signedPayload);
                 const expectedHex = Array.from(new Uint8Array(expectedSig))
                     .map(b => b.toString(16).padStart(2, "0"))

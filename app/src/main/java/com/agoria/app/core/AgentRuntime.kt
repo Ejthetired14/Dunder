@@ -21,6 +21,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
 import java.util.concurrent.ConcurrentHashMap
@@ -491,7 +492,7 @@ class AgentRuntime(
                 val productName = Json.string(input, "product_name")
                 val amountCents = Json.long(input, "amount_cents", 0L)
                 val interval = Json.string(input, "interval", "month")
-                val deployWebhook = Json.boolean(input, "deploy_webhook", true)
+                val deployWebhook = Json.bool(input, "deploy_webhook", true)
                 val webhookCallbackUrl = Json.string(input, "webhook_callback_url", "")
                 if (productName.isBlank() || amountCents <= 0) {
                     log("${agent.name} tried to setup billing without product name or amount.", "error")

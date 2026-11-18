@@ -77,10 +77,8 @@ class BuildRunner(
 
         val build = repo.addBuild(
             agentId = agent.id,
-            approvalId = approval.id,
             name = finalName,
             description = finalDescription,
-            relativePath = root.absolutePath,
             zipPath = zipFile.absolutePath,
             fileCount = written,
         )

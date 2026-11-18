@@ -70,6 +70,28 @@ object Json {
         return obj.optJSONArray(key)
     }
 
+    fun long(obj: JSONObject?, key: String, default: Long = 0L): Long {
+        if (obj == null) return default
+        val value = obj.opt(key)
+        return when (value) {
+            is Long -> value
+            is Int -> value.toLong()
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull() ?: default
+            else -> default
+        }
+    }
+
+    fun boolean(obj: JSONObject?, key: String, default: Boolean = false): Boolean {
+        if (obj == null) return default
+        val value = obj.opt(key)
+        return when (value) {
+            is Boolean -> value
+            is String -> value.toBoolean()
+            else -> default
+        }
+    }
+
     fun pretty(obj: JSONObject?): String {
         if (obj == null) return ""
         return try {
