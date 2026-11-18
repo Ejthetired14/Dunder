@@ -1,14 +1,8 @@
 package com.agoria.app.ui.settings
 
-import android.app.Activity
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import android.provider.Settings
 import java.io.File
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +62,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity

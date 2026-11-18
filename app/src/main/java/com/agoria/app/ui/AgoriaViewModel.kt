@@ -663,7 +663,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         agentId: String?,
         action: String,
         args: org.json.JSONObject,
-    ): com.agoria.app.core.ConnectorExecutor.ConnectorResult {
+    ): com.agoria.app.core.ConnectorResult {
         return app.runtime.connectorExecutor.execute(connectorId, agentId, action, args)
     }
 }
