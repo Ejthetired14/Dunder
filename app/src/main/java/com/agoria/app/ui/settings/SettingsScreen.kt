@@ -623,8 +623,7 @@ private fun SummaryCard(
 ) {
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight(),
+            .fillMaxSize(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.15f),
