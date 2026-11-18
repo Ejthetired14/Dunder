@@ -124,6 +124,8 @@ class ConnectorExecutor(
         "discord" -> discord(config, action, args)
         "notion" -> notion(config, action, args)
         "telegram" -> telegram(config, action, args)
+        "stripe" -> stripe(config, action, args)
+        "cloudflare_workers" -> cloudflareWorkers(config, action, args)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -860,5 +862,339 @@ class ConnectorExecutor(
             }
             else -> ConnectorResult(false, "Unknown Telegram action '$action'")
         }
+    }
+
+    // ---------------------------------------------------------------- stripe
+
+    private fun stripe(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val secretKey = cfg(config, "secretKey") ?: return ConnectorResult(false, "Missing Stripe secret key")
+        val auth = mapOf("Authorization" to "Bearer $secretKey")
+        return when (action) {
+            "create_product" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing product name") }
+                val description = args.optString("description", "")
+                val payload = JSONObject().put("name", name).put("description", description)
+                val response = http("POST", "https://api.stripe.com/v1/products", auth, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created product: ${root.optString("id")} — ${root.optString("name")}\n${root.optString("description")}",
+                )
+            }
+            "create_price" -> {
+                val productId = args.optString("productId").ifBlank { return ConnectorResult(false, "Missing productId") }
+                val amountCents = args.optLong("amountCents", 0L)
+                if (amountCents <= 0) return ConnectorResult(false, "amountCents must be > 0")
+                val currency = args.optString("currency", "usd").lowercase()
+                val interval = args.optString("interval", "month").lowercase()
+                if (!listOf("day", "week", "month", "year").contains(interval)) {
+                    return ConnectorResult(false, "interval must be day, week, month, or year")
+                }
+                val payload = JSONObject()
+                    .put("product", productId)
+                    .put("unit_amount", amountCents)
+                    .put("currency", currency)
+                    .put("recurring", JSONObject().put("interval", interval))
+                val response = http("POST", "https://api.stripe.com/v1/prices", auth, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created price: ${root.optString("id")} — ${root.optLong("unit_amount")} ${root.optString("currency")}/${root.optJSONObject("recurring")?.optString("interval")}",
+                )
+            }
+            "create_customer" -> {
+                val email = args.optString("email").ifBlank { return ConnectorResult(false, "Missing email") }
+                val name = args.optString("name", "")
+                val payload = JSONObject().put("email", email).put("name", name)
+                val response = http("POST", "https://api.stripe.com/v1/customers", auth, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created customer: ${root.optString("id")} — ${root.optString("email")} (${root.optString("name")})",
+                )
+            }
+            "create_subscription" -> {
+                val customerId = args.optString("customerId").ifBlank { return ConnectorResult(false, "Missing customerId") }
+                val priceId = args.optString("priceId").ifBlank { return ConnectorResult(false, "Missing priceId") }
+                val payload = JSONObject().put("customer", customerId).put("items", JSONArray().put(JSONObject().put("price", priceId)))
+                val response = http("POST", "https://api.stripe.com/v1/subscriptions", auth, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created subscription: ${root.optString("id")} for customer ${root.optString("customer")}, status: ${root.optString("status")}",
+                )
+            }
+            "verify_key" -> {
+                val apiKey = args.optString("apiKey").ifBlank { return ConnectorResult(false, "Missing apiKey") }
+                // Check if it's a valid Stripe secret key by trying to list products (limited)
+                val testAuth = mapOf("Authorization" to "Bearer $apiKey")
+                val response = http("GET", "https://api.stripe.com/v1/products?limit=1", testAuth)
+                if (!response.ok) {
+                    return ConnectorResult(false, "Invalid API key or key has no access: ${text(response.body, 300)}")
+                }
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "API key is valid. Account has access to products.",
+                )
+            }
+            "usage_record" -> {
+                val subscriptionItemId = args.optString("subscriptionItemId").ifBlank { return ConnectorResult(false, "Missing subscriptionItemId") }
+                val quantity = args.optInt("quantity", 1).coerceAtLeast(1)
+                val payload = JSONObject().put("quantity", quantity)
+                val response = http("POST", "https://api.stripe.com/v1/subscription_items/$subscriptionItemId/usage_records", auth, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Recorded usage: ${root.optInt("quantity")} units for ${root.optString("subscription_item")}",
+                )
+            }
+            "list_products" -> {
+                val limit = args.optInt("limit", 10).coerceIn(1, 25)
+                val response = http("GET", "https://api.stripe.com/v1/products?limit=$limit", auth)
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                val data = root.optJSONArray("data") ?: return ConnectorResult(true, "No products found.")
+                val sb = StringBuilder("Stripe products:\n")
+                for (i in 0 until data.length()) {
+                    val p = data.getJSONObject(i)
+                    sb.append("- ").append(p.optString("id")).append(": ").append(p.optString("name")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "get_product" -> {
+                val productId = args.optString("productId").ifBlank { return ConnectorResult(false, "Missing productId") }
+                val response = http("GET", "https://api.stripe.com/v1/products/$productId", auth)
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Product: ${root.optString("id")} — ${root.optString("name")}\n${root.optString("description")}\nActive: ${root.optBoolean("active")}, Created: ${root.optLong("created")}",
+                )
+            }
+            "list_events" -> {
+                val eventType = args.optString("type", "")
+                val limit = args.optInt("limit", 10).coerceIn(1, 50)
+                val url = "https://api.stripe.com/v1/events?limit=$limit${if (eventType.isNotBlank()) "&type=$eventType" else ""}"
+                val response = http("GET", url, auth)
+                if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
+                val data = root.optJSONArray("data") ?: return ConnectorResult(true, "No events found.")
+                val sb = StringBuilder("Stripe events (type: ${eventType.ifBlank { "all" }}):\n")
+                for (i in 0 until data.length()) {
+                    val e = data.getJSONObject(i)
+                    sb.append("- ${e.optString("id")}: ${e.optString("type")} at ${e.optLong("created")}\n")
+                    if (e.optString("type") == "invoice.payment_succeeded") {
+                        val obj = e.optJSONObject("data")?.optJSONObject("object")
+                        val amount = obj?.optLong("amount_paid", 0L)
+                        val currency = obj?.optString("currency", "usd")
+                        val customer = obj?.optString("customer", "")
+                        val subscription = obj?.optString("subscription", "")
+                        sb.append("  → Payment: $amount $currency for customer $customer, sub: $subscription\n")
+                    }
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            else -> ConnectorResult(false, "Unknown Stripe action '$action'")
+        }
+    }
+
+    // --------------------------------------------------------- cloudflare workers
+
+    private fun cloudflareWorkers(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val apiToken = cfg(config, "apiToken") ?: return ConnectorResult(false, "Missing Cloudflare API token")
+        val accountId = cfg(config, "accountId") ?: return ConnectorResult(false, "Missing Cloudflare account ID")
+        val headers = mapOf(
+            "Authorization" to "Bearer $apiToken",
+            "Content-Type" to "application/json",
+        )
+        val baseUrl = "https://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts"
+        return when (action) {
+            "deploy" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                val code = args.optString("code").ifBlank { return ConnectorResult(false, "Missing worker code") }
+                val url = "$baseUrl/$name"
+                val response = http("PUT", url, headers, code)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
+                if (!root.optBoolean("success")) {
+                    val errors = root.optJSONArray("errors")?.joinToString(", ") { it.toString() } ?: "Unknown error"
+                    return ConnectorResult(false, "Cloudflare deploy failed: $errors")
+                }
+                val result = root.optJSONObject("result")
+                val deployedUrl = result?.optString("url") ?: "https://$name.$accountId.workers.dev"
+                ConnectorResult(
+                    true,
+                    "Deployed worker '$name' successfully.\nURL: $deployedUrl",
+                )
+            }
+            "get_script" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                val url = "$baseUrl/$name"
+                val response = http("GET", url, headers)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
+                if (!root.optBoolean("success")) {
+                    return ConnectorResult(false, "Worker not found or error: ${root.optJSONArray("errors")?.joinToString()}")
+                }
+                ConnectorResult(true, root.optString("result"))
+            }
+            "delete" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                val url = "$baseUrl/$name"
+                val response = http("DELETE", url, headers)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
+                if (!root.optBoolean("success")) {
+                    return ConnectorResult(false, "Delete failed: ${root.optJSONArray("errors")?.joinToString()}")
+                }
+                ConnectorResult(true, "Deleted worker '$name'.")
+            }
+            "list" -> {
+                val url = baseUrl
+                val response = http("GET", url, headers)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
+                if (!root.optBoolean("success")) {
+                    return ConnectorResult(false, "List failed: ${root.optJSONArray("errors")?.joinToString()}")
+                }
+                val result = root.optJSONObject("result") ?: return ConnectorResult(true, "No workers found.")
+                val sb = StringBuilder("Cloudflare Workers:\n")
+                result.keys().forEachRemaining { name ->
+                    sb.append("- $name\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "tail_logs" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                // Note: Log streaming requires WebSocket. This just returns the tail URL.
+                val tailUrl = "wss://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts/$name/tail"
+                ConnectorResult(
+                    true,
+                    "Log streaming URL (WebSocket): $tailUrl\nConnect with a WebSocket client to stream live logs.",
+                )
+            }
+            "deploy_webhook_handler" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                val webhookSecret = args.optString("stripeWebhookSecret").ifBlank { return ConnectorResult(false, "Missing stripeWebhookSecret") }
+                val callbackUrl = args.optString("appCallbackUrl").ifBlank { return ConnectorResult(false, "Missing appCallbackUrl") }
+                val code = stripeWebhookWorkerCode(name, webhookSecret, callbackUrl)
+                val url = "$baseUrl/$name"
+                val response = http("PUT", url, headers, code)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
+                if (!root.optBoolean("success")) {
+                    val errors = root.optJSONArray("errors")?.joinToString(", ") { it.toString() } ?: "Unknown error"
+                    return ConnectorResult(false, "Cloudflare deploy failed: $errors")
+                }
+                val result = root.optJSONObject("result")
+                val deployedUrl = result?.optString("url") ?: "https://$name.$accountId.workers.dev"
+                ConnectorResult(
+                    true,
+                    "Deployed Stripe webhook handler '$name' successfully.\nURL: $deployedUrl\n\nConfigure this URL in Stripe Dashboard → Developers → Webhooks → Add endpoint.\nEvents to select: invoice.payment_succeeded, checkout.session.completed, customer.subscription.created, customer.subscription.updated",
+                )
+            }
+            else -> ConnectorResult(false, "Unknown Cloudflare Workers action '$action'")
+        }
+    }
+
+    private fun stripeWebhookWorkerCode(name: String, webhookSecret: String, callbackUrl: String): String {
+        return """
+            // Stripe Webhook Handler for $name
+            // Receives Stripe events, verifies signature, forwards to app
+            
+            const WEBHOOK_SECRET = "$webhookSecret";
+            const CALLBACK_URL = "$callbackUrl";
+            
+            // Minimal crypto for signature verification (Web Crypto API)
+            async function verifySignature(payload, signature, secret) {
+                const encoder = new TextEncoder();
+                const key = await crypto.subtle.importKey(
+                    "raw",
+                    encoder.encode(secret),
+                    { name: "HMAC", hash: "SHA-256" },
+                    false,
+                    ["sign", "verify"]
+                );
+                
+                // Parse Stripe signature header: t=timestamp,v1=signature
+                const elements = signature.split(",").map(s => s.split("="));
+                const timestamp = elements.find(([k]) => k === "t")?.[1];
+                const v1 = elements.find(([k]) => k === "v1")?.[1];
+                
+                if (!timestamp || !v1) return false;
+                
+                // Check timestamp tolerance (5 minutes)
+                const now = Math.floor(Date.now() / 1000);
+                if (Math.abs(now - parseInt(timestamp)) > 300) return false;
+                
+                const signedPayload = encoder.encode("\${timestamp}.\${payload}");
+                const expectedSig = await crypto.subtle.sign("HMAC", key, signedPayload);
+                const expectedHex = Array.from(new Uint8Array(expectedSig))
+                    .map(b => b.toString(16).padStart(2, "0"))
+                    .join("");
+                
+                return expectedHex === v1;
+            }
+            
+            async function forwardToApp(event) {
+                try {
+                    await fetch(CALLBACK_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(event),
+                    });
+                } catch (e) {
+                    console.error("Failed to forward to app:", e);
+                }
+            }
+            
+            export default {
+                async fetch(req) {
+                    if (req.method !== "POST") {
+                        return new Response("Method not allowed", { status: 405 });
+                    }
+                    
+                    const signature = req.headers.get("stripe-signature");
+                    if (!signature) {
+                        return new Response("Missing stripe-signature header", { status: 400 });
+                    }
+                    
+                    const payload = await req.text();
+                    
+                    const valid = await verifySignature(payload, signature, WEBHOOK_SECRET);
+                    if (!valid) {
+                        return new Response("Invalid signature", { status: 400 });
+                    }
+                    
+                    let event;
+                    try {
+                        event = JSON.parse(payload);
+                    } catch {
+                        return new Response("Invalid JSON", { status: 400 });
+                    }
+                    
+                    // Forward relevant events to app
+                    const relevantTypes = [
+                        "invoice.payment_succeeded",
+                        "checkout.session.completed",
+                        "customer.subscription.created",
+                        "customer.subscription.updated",
+                        "customer.subscription.deleted",
+                    ];
+                    
+                    if (relevantTypes.includes(event.type)) {
+                        await forwardToApp(event);
+                    }
+                    
+                    return new Response("OK", { status: 200 });
+                },
+            };
+        """.trimIndent()
     }
 }

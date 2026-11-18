@@ -240,3 +240,30 @@ interface ConnectorLogDao {
     @Query("DELETE FROM connector_logs")
     suspend fun deleteAll()
 }
+
+@Dao
+interface RevenueDao {
+    @Query("SELECT * FROM revenue ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<RevenueEntity>>
+
+    @Query("SELECT * FROM revenue WHERE agentId = :agentId ORDER BY createdAt DESC")
+    fun observeForAgent(agentId: String): Flow<List<RevenueEntity>>
+
+    @Query("SELECT * FROM revenue WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForAgent(agentId: String, limit: Int): List<RevenueEntity>
+
+    @Query("SELECT SUM(amountCents) FROM revenue WHERE agentId = :agentId")
+    suspend fun totalForAgent(agentId: String): Long?
+
+    @Query("SELECT SUM(amountCents) FROM revenue")
+    suspend fun totalAll(): Long?
+
+    @Query("SELECT * FROM revenue WHERE source = :source ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun bySource(source: String, limit: Int): List<RevenueEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(revenue: RevenueEntity)
+
+    @Query("DELETE FROM revenue")
+    suspend fun deleteAll()
+}

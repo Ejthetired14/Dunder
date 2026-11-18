@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -67,14 +68,23 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val providers by viewModel.providers.collectAsStateWithLifecycle()
     val tests by viewModel.providerTests.collectAsStateWithLifecycle()
+    val revenue by viewModel.revenue.collectAsStateWithLifecycle()
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
+    var agentSplit by remember { mutableStateOf(50) }
+    var userSplit by remember { mutableStateOf(50) }
+    var stripeAccountId by remember { mutableStateOf("") }
+    var stripePublishableKey by remember { mutableStateOf("") }
 
     LaunchedEffect(settings) {
         settings?.let {
             tick = it.tickIntervalSeconds
             cooldown = it.agentCooldownSeconds
+            agentSplit = it.agentProfitSharePercent
+            userSplit = it.userProfitSharePercent
+            stripeAccountId = it.stripeAccountId ?: ""
+            stripePublishableKey = it.stripePublishableKey ?: ""
         }
     }
 
@@ -177,6 +187,146 @@ fun SettingsScreen(
                             context.startActivity(intent)
                         },
                     ) { Text("Notification settings") }
+                }
+            }
+
+            SectionCard(title = "Revenue & Monetization") {
+                val totalRevenue = revenue.sumOf { it.amountCents }
+                val totalByAgent = revenue.groupBy { it.agentId }.mapValues { (_, v) -> v.sumOf { it.amountCents } }
+                val infraFund = settings?.infrastructureFundCents ?: 0L
+
+                Text(
+                    text = "Agents build and deploy micro-APIs. Revenue is split between you and the infrastructure fund (used to upgrade models).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+
+                // Summary cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SummaryCard(
+                        title = "Total Revenue",
+                        value = formatCents(totalRevenue),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    SummaryCard(
+                        title = "Infrastructure Fund",
+                        value = formatCents(infraFund),
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                    SummaryCard(
+                        title = "Your Share",
+                        value = formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)),
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Profit split sliders
+                Text("Profit Split", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Agent Fund: ${agentSplit}%", style = MaterialTheme.typography.labelLarge)
+                        Slider(
+                            value = agentSplit.toFloat(),
+                            onValueChange = { agentSplit = it.roundToInt().coerceIn(0, 100); userSplit = 100 - agentSplit },
+                            valueRange = 0f..100f,
+                            steps = 20,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Your Share: ${userSplit}%", style = MaterialTheme.typography.labelLarge)
+                        Slider(
+                            value = userSplit.toFloat(),
+                            onValueChange = { userSplit = it.roundToInt().coerceIn(0, 100); agentSplit = 100 - userSplit },
+                            valueRange = 0f..100f,
+                            steps = 20,
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            viewModel.setProfitSplit(agentSplit, userSplit)
+                        },
+                    ) { Text("Save Split") }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Stripe configuration
+                Text("Stripe Configuration", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = stripeAccountId,
+                    onValueChange = { stripeAccountId = it },
+                    label = { Text("Stripe Account ID (acct_...)") },
+                    supportingText = { Text("From Stripe Dashboard → Settings → Account") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = stripePublishableKey,
+                    onValueChange = { stripePublishableKey = it },
+                    label = { Text("Publishable Key (pk_live_... or pk_test_...)") },
+                    supportingText = { Text("From Stripe Dashboard → Developers → API Keys") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            viewModel.setStripeKeys(
+                                stripeAccountId.ifBlank { null },
+                                stripePublishableKey.ifBlank { null },
+                            )
+                        },
+                    ) { Text("Save Stripe Keys") }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Revenue by agent
+                if (totalByAgent.isNotEmpty()) {
+                    Text("Revenue by Agent", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    totalByAgent.toList().sortedByDescending { it.second }.forEach { (agentId, amount) ->
+                        val agentName = viewModel.agents.value.firstOrNull { it.id == agentId }?.name ?: agentId
+                        RevenueRow(agentName = agentName, amountCents = amount)
+                    }
+                } else {
+                    Text(
+                        text = "No revenue yet. Enable autonomy and let the API Builder agent start building.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Recent revenue events
+                if (revenue.isNotEmpty()) {
+                    Text("Recent Revenue Events", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    revenue.take(10).forEach { rev ->
+                        val agentName = viewModel.agents.value.firstOrNull { it.id == rev.agentId }?.name ?: rev.agentId
+                        RevenueEventRow(
+                            agentName = agentName,
+                            source = rev.source,
+                            amountCents = rev.amountCents,
+                            timestamp = rev.createdAt,
+                        )
+                    }
                 }
             }
 
@@ -453,4 +603,85 @@ private fun ProviderRow(
 
 private fun formatSeconds(seconds: Int): String {
     return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
+}
+
+private fun formatCents(cents: Long): String {
+    val dollars = cents / 100
+    val remainingCents = cents % 100
+    return "\$$dollars.${"%02d".format(remainingCents)}"
+}
+
+@Composable
+private fun SummaryCard(
+    title: String,
+    value: String,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    Card(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.15f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(title, style = MaterialTheme.typography.labelMedium, color = color)
+            Spacer(Modifier.height(4.dp))
+            Text(value, style = MaterialTheme.typography.titleLarge, color = color)
+        }
+    }
+}
+
+@Composable
+private fun RevenueRow(
+    agentName: String,
+    amountCents: Long,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(agentName, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            formatCents(amountCents),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun RevenueEventRow(
+    agentName: String,
+    source: String,
+    amountCents: Long,
+    timestamp: Long,
+) {
+    val time = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+        .format(java.util.Date(timestamp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column {
+            Text("$agentName — $source", style = MaterialTheme.typography.labelMedium)
+            Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            formatCents(amountCents),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }

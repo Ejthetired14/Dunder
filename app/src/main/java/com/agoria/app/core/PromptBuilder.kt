@@ -178,4 +178,133 @@ object PromptBuilder {
         if (def == null) return "unknown"
         return def.name.lowercase(Locale.getDefault()) + ": " + def.actions.joinToString(", ") { it.id }
     }
+
+    // ==================== MONETIZATION PROMPT TEMPLATES ====================
+
+    fun nicheDiscoveryPrompt(context: AgentContext): String {
+        val revenue = context.agentTotalRevenueCents
+        val fund = context.infrastructureFundCents
+        val split = "${context.agentProfitSharePercent}/${context.userProfitSharePercent}"
+        return """
+            ## Monetization Context
+            - Your total revenue: \$${revenue/100} (${split}% split)
+            - Infrastructure fund: \$${fund/100} (your share to reinvest in better models)
+            - Available connectors: ${context.connectors.filter { it.id in listOf("search", "hn", "github") }.joinToString(", ") { it.name }}
+
+            ## Task: Find a profitable micro-API niche
+            
+            Search Hacker News, Reddit (r/programming, r/webdev, r/SideProject), and dev forums for posts asking:
+            - "Is there an API for...?"
+            - "How do I programmatically...?"
+            - "I wish there was a tool that..."
+            - Complaints about existing APIs (pricing, rate limits, complexity)
+            
+            Look for problems that:
+            1. Are specific and well-defined (not "AI for everything")
+            2. Can be solved with a single HTTP endpoint
+            3. Have recurring demand (developers need this regularly)
+            4. Are not well-served by existing free tools
+            5. Could charge $5-50/month per user
+            
+            Use the search/hn connectors to find 3-5 concrete opportunities.
+            Write your findings in a diary entry with kind "plan".
+            Then create a task for the most promising one with title "Build API: <name>".
+        """.trimIndent()
+    }
+
+    fun apiDesignPrompt(context: AgentContext, niche: String): String {
+        return """
+            ## Task: Design a micro-API for: $niche
+            
+            Design a simple HTTP API that solves this niche. Specify:
+            
+            1. **Endpoint**: Single path, e.g., `POST /api/v1/convert`
+            2. **Input**: JSON schema (what the client sends)
+            3. **Output**: JSON schema (what the API returns)
+            4. **Error cases**: What can go wrong, HTTP codes
+            5. **Pricing model**: Per-request (metered) or subscription tier
+            6. **Rate limits**: Free tier vs paid tier
+            
+            Constraints:
+            - Must run on Cloudflare Workers (JavaScript/TypeScript)
+            - No database needed (stateless) or use KV/D1 if essential
+            - Response time < 500ms for simple operations
+            - Code must be < 500 lines
+            
+            Write the design as a diary entry (kind "plan").
+            Then use request_approval with type build_project to build it.
+        """.trimIndent()
+    }
+
+    fun marketingPrompt(context: AgentContext, apiName: String, apiUrl: String, description: String): String {
+        return """
+            ## Task: Market your API: $apiName
+            
+            Live URL: $apiUrl
+            Description: $description
+            
+            Write marketing content for 3 channels:
+            
+            1. **Hacker News Show HN** (title + 2-3 sentence pitch)
+            2. **Twitter/X thread** (5-7 tweets explaining the problem, solution, pricing)
+            3. **Reddit r/SideProject or r/webdev** (post title + body)
+            
+            Guidelines:
+            - Be honest, not hypey. Developers spot BS.
+            - Show code snippets or curl examples.
+            - Mention pricing clearly (e.g., "First 1000 requests free, then $0.001/req")
+            - Link to live demo/docs.
+            - Disclose you built it (authenticity wins).
+            
+            Use the appropriate connectors (if configured) or create tasks to post manually.
+            Write each piece as a diary entry (kind "plan") so you can review before posting.
+        """.trimIndent()
+    }
+
+    fun reinvestmentPrompt(context: AgentContext): String {
+        val fund = context.infrastructureFundCents
+        val providers = context.providers.filter { it.enabled }.joinToString("\n") { "- ${it.name}: model=${it.model}, priority=${it.priority}" }
+        return """
+            ## Task: Decide how to reinvest infrastructure fund
+            
+            Available fund: \$${fund/100}
+            Current providers:
+            $providers
+            
+            Options:
+            1. **Upgrade model** for a provider (e.g., switch to a stronger model)
+            2. **Increase priority** of a provider (lower number = higher priority = used more often)
+            3. **Enable a new provider** that requires payment
+            4. **Save** for larger upgrade
+            
+            Costs (approximate):
+            - Model upgrade: \$5-15
+            - Priority boost (per level): \$2
+            - New paid provider: \$10-30
+            
+            Max single reinvestment: \$50 (hard cap)
+            
+            Write your decision as a diary entry (kind "decision").
+            Then use the 'reinvest' action with provider_id, model, and priority.
+        """.trimIndent()
+    }
+
+    fun checkRevenuePrompt(context: AgentContext): String {
+        val fund = context.infrastructureFundCents
+        val revenue = context.agentTotalRevenueCents
+        return """
+            ## Task: Check for new revenue from Stripe
+            
+            Your total revenue: \$${revenue/100}
+            Infrastructure fund: \$${fund/100}
+            
+            Use the 'check_revenue' action to poll Stripe for recent payment events.
+            This will automatically record any new payments and update the infrastructure fund.
+            
+            Run this periodically (e.g., once per day) to keep revenue tracking up to date.
+            You can also specify a custom event type and limit:
+            - action: "check_revenue"
+            - action_input: { "type": "invoice.payment_succeeded", "limit": 50 }
+        """.trimIndent()
+    }
 }

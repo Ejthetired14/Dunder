@@ -115,6 +115,12 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         emptyList(),
     )
 
+    val revenue = repo.revenue.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
     val runtimeState = runtime.state
 
     val pendingCount = combine(repo.pendingApprovals, repo.pendingConnectorRequests) { a, c ->
@@ -361,6 +367,15 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 onFile(file)
             }
         }
+    }
+
+    // Revenue methods
+    fun setProfitSplit(agentPercent: Int, userPercent: Int) {
+        viewModelScope.launch { repo.setProfitSplit(agentPercent, userPercent) }
+    }
+
+    fun setStripeKeys(accountId: String?, publishableKey: String?) {
+        viewModelScope.launch { repo.setStripeKeys(accountId, publishableKey) }
     }
 
     fun resetData() {

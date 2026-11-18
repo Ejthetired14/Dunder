@@ -19,8 +19,9 @@ import androidx.room.RoomDatabase
         SettingsEntity::class,
         MemoryEntity::class,
         ConnectorLogEntity::class,
+        RevenueEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
     abstract fun memoryDao(): MemoryDao
     abstract fun connectorLogDao(): ConnectorLogDao
+    abstract fun revenueDao(): RevenueDao
 
     companion object {
         const val NAME = "agoria.db"

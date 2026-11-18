@@ -75,7 +75,7 @@ data class MessageEntity(
             onDelete = ForeignKey.CASCADE,
         )
     ],
-    indices = [Index("agentId"), Index("status")],
+    indices = [Index("agentId"), Index("status"), Index("createdAt")],
 )
 data class TaskEntity(
     @PrimaryKey val id: String,
@@ -111,12 +111,10 @@ data class ApprovalEntity(
     val status: String,
     val createdAt: Long,
     val decidedAt: Long?,
-    val decisionNote: String?,
-    val executedAt: Long?,
     val result: String?,
 )
 
-@Entity(tableName = "connectors", indices = [Index("status")])
+@Entity(tableName = "connectors")
 data class ConnectorEntity(
     @PrimaryKey val id: String,
     val name: String,
@@ -152,31 +150,20 @@ data class ConnectorRequestEntity(
     val decidedAt: Long?,
 )
 
-@Entity(
-    tableName = "builds",
-    foreignKeys = [
-        ForeignKey(
-            entity = AgentEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["agentId"],
-            onDelete = ForeignKey.CASCADE,
-        )
-    ],
-    indices = [Index("agentId"), Index("createdAt")],
-)
+@Entity(tableName = "builds")
 data class BuildEntity(
     @PrimaryKey val id: String,
     val agentId: String,
-    val approvalId: String?,
     val name: String,
     val description: String,
-    val relativePath: String,
-    val zipPath: String,
     val fileCount: Int,
+    val zipPath: String,
+    val status: String,
     val createdAt: Long,
+    val completedAt: Long?,
 )
 
-@Entity(tableName = "providers", indices = [Index("priority")])
+@Entity(tableName = "providers")
 data class ProviderEntity(
     @PrimaryKey val id: String,
     val enabled: Boolean,
@@ -188,42 +175,6 @@ data class ProviderEntity(
     val lastLatencyMs: Long?,
     val lastError: String?,
     val updatedAt: Long,
-)
-
-@Entity(tableName = "settings")
-data class SettingsEntity(
-    @PrimaryKey val id: Int = 1,
-    val autonomyEnabled: Boolean,
-    val tickIntervalSeconds: Int,
-    val agentCooldownSeconds: Int,
-    val setupComplete: Boolean,
-    val userName: String,
-    val officeName: String,
-    val theme: String,
-    val maxTokens: Int,
-    val seedVersion: Int,
-    val createdAt: Long,
-)
-
-@Entity(
-    tableName = "memories",
-    foreignKeys = [
-        ForeignKey(
-            entity = AgentEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["agentId"],
-            onDelete = ForeignKey.CASCADE,
-        )
-    ],
-    indices = [Index("agentId"), Index("createdAt")],
-)
-data class MemoryEntity(
-    @PrimaryKey val id: String,
-    val agentId: String,
-    val kind: String,
-    val content: String,
-    val importance: Int,
-    val createdAt: Long,
 )
 
 @Entity(
@@ -251,5 +202,58 @@ data class ConnectorLogEntity(
     val action: String,
     val status: String,
     val summary: String,
+    val createdAt: Long,
+)
+
+@Entity(
+    tableName = "revenue",
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.CASCADE,
+        )
+    ],
+    indices = [Index("agentId"), Index("createdAt"), Index("source")]
+)
+data class RevenueEntity(
+    @PrimaryKey val id: String,
+    val agentId: String,
+    val source: String,           // "api_usage", "subscription", "one_time", "deployment_fee"
+    val amountCents: Long,
+    val currency: String = "USD",
+    val metadata: String,         // JSON: endpoint, customer, stripe_event_id, etc.
+    val createdAt: Long,
+)
+
+@Entity(tableName = "settings")
+data class SettingsEntity(
+    @PrimaryKey val id: Int = 1,
+    val autonomyEnabled: Boolean,
+    val tickIntervalSeconds: Int,
+    val agentCooldownSeconds: Int,
+    val setupComplete: Boolean,
+    val userName: String,
+    val officeName: String,
+    val theme: String,
+    val maxTokens: Int,
+    val seedVersion: Int,
+    // Monetization settings
+    val agentProfitSharePercent: Int = 50,
+    val userProfitSharePercent: Int = 50,
+    val infrastructureFundCents: Long = 0,
+    val stripeAccountId: String? = null,
+    val stripePublishableKey: String? = null,
+    val createdAt: Long,
+)
+
+@Entity(tableName = "memories")
+data class MemoryEntity(
+    @PrimaryKey val id: String,
+    val agentId: String,
+    val kind: String,
+    val content: String,
+    val importance: Int,
     val createdAt: Long,
 )

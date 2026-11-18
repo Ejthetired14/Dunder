@@ -533,4 +533,72 @@ class Repository(
         )
         return root
     }
+
+    // ------------------------------------------------------------------ revenue
+
+    val revenue = db.revenueDao().observeAll()
+
+    suspend fun revenueForAgent(agentId: String) = db.revenueDao().observeForAgent(agentId)
+
+    suspend fun recentRevenueForAgent(agentId: String, limit: Int = 20): List<RevenueEntity> =
+        db.revenueDao().recentForAgent(agentId, limit)
+
+    suspend fun totalRevenueForAgent(agentId: String): Long = db.revenueDao().totalForAgent(agentId) ?: 0L
+
+    suspend fun totalRevenueAll(): Long = db.revenueDao().totalAll() ?: 0L
+
+    suspend fun revenueBySource(source: String, limit: Int = 20): List<RevenueEntity> =
+        db.revenueDao().bySource(source, limit)
+
+    suspend fun recordRevenue(
+        agentId: String,
+        source: String,
+        amountCents: Long,
+        currency: String = "USD",
+        metadata: JSONObject = JSONObject(),
+    ): RevenueEntity {
+        val revenue = RevenueEntity(
+            id = UUID.randomUUID().toString(),
+            agentId = agentId,
+            source = source,
+            amountCents = amountCents,
+            currency = currency,
+            metadata = metadata.toString(),
+            createdAt = Time.now(),
+        )
+        db.revenueDao().insert(revenue)
+        return revenue
+    }
+
+    suspend fun updateInfrastructureFund(deltaCents: Long) {
+        updateSettings { s ->
+            val newFund = (s.infrastructureFundCents + deltaCents).coerceAtLeast(0L)
+            s.copy(infrastructureFundCents = newFund)
+        }
+    }
+
+    suspend fun getInfrastructureFund(): Long = settings().infrastructureFundCents
+
+    suspend fun getProfitSplit(): Pair<Int, Int> = settings().let { s ->
+        s.agentProfitSharePercent to s.userProfitSharePercent
+    }
+
+    suspend fun setProfitSplit(agentPercent: Int, userPercent: Int) {
+        updateSettings { s ->
+            s.copy(
+                agentProfitSharePercent = agentPercent.coerceIn(0, 100),
+                userProfitSharePercent = userPercent.coerceIn(0, 100),
+            )
+        }
+    }
+
+    suspend fun setStripeKeys(accountId: String?, publishableKey: String?) {
+        updateSettings { s ->
+            s.copy(stripeAccountId = accountId, stripePublishableKey = publishableKey)
+        }
+    }
+
+    suspend fun getStripeKeys(): Pair<String?, String?> = settings().let { s ->
+        s.stripeAccountId to s.stripePublishableKey
+    }
 }

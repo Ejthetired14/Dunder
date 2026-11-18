@@ -442,6 +442,153 @@ class AgentRuntime(
                 )
             }
 
+            "record_revenue" -> {
+                val source = Json.string(input, "source", "api_usage")
+                val amountCents = Json.long(input, "amount_cents", 0L)
+                val currency = Json.string(input, "currency", "USD")
+                val metadata = Json.obj(input, "metadata") ?: JSONObject()
+                if (amountCents > 0) {
+                    val revenue = repo.recordRevenue(agentId, source, amountCents, currency, metadata)
+                    val settings = repo.settings()
+                    val agentShare = settings.agentProfitSharePercent
+                    val userShare = settings.userProfitSharePercent
+                    val agentAmount = (amountCents * agentShare / 100).toLong()
+                    val userAmount = amountCents - agentAmount
+                    repo.updateInfrastructureFund(agentAmount)
+                    val fund = repo.getInfrastructureFund()
+                    log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
+                    repo.addDiary(agentId, "revenue", "Earned ${amountCents/100} USD ($source). Agent fund: ${agentAmount/100}, User: ${userAmount/100}. Infrastructure fund: ${fund/100}", 4)
+                } else {
+                    log("${agent.name} tried to record revenue with zero amount.", "error")
+                }
+            }
+
+            "deploy_service" -> {
+                val name = Json.string(input, "name")
+                val code = Json.string(input, "code")
+                val routes = Json.array(input, "routes") ?: JSONArray()
+                if (name.isBlank() || code.isBlank()) {
+                    log("${agent.name} tried to deploy service without name or code.", "error")
+                } else if (AgentPolicy.isAutoAllowed(processed)) {
+                    val summary = useConnector(agent, "cloudflare_workers", "deploy", JSONObject().put("name", name).put("code", code).put("routes", routes))
+                    repo.addMessage(agentId, "tool", summary)
+                } else {
+                    val def = ConnectorCatalog.get("cloudflare_workers")
+                    repo.addApproval(
+                        agentId = agentId,
+                        type = "connector_action",
+                        title = "${agent.name} wants to deploy service '$name'",
+                        summary = "Deploy Cloudflare Worker '$name'. Review the code before approving.",
+                        details = JSONObject().put("name", name).put("code", code.take(2000)).put("routes", routes).toString(2),
+                        risk = "high",
+                    )
+                    nextStatus = "waiting_approval"
+                }
+            }
+
+            "setup_billing" -> {
+                val productName = Json.string(input, "product_name")
+                val amountCents = Json.long(input, "amount_cents", 0L)
+                val interval = Json.string(input, "interval", "month")
+                val deployWebhook = Json.boolean(input, "deploy_webhook", true)
+                val webhookCallbackUrl = Json.string(input, "webhook_callback_url", "")
+                if (productName.isBlank() || amountCents <= 0) {
+                    log("${agent.name} tried to setup billing without product name or amount.", "error")
+                } else if (AgentPolicy.isAutoAllowed(processed)) {
+                    // Create product
+                    val productResult = useConnector(agent, "stripe", "create_product", JSONObject().put("name", productName).put("description", "API access via Dunder agent"))
+                    val productId = extractProductId(productResult)
+                    var priceId: String? = null
+                    if (productId != null) {
+                        val priceResult = useConnector(agent, "stripe", "create_price", JSONObject().put("productId", productId).put("amountCents", amountCents).put("interval", interval))
+                        priceId = extractPriceId(priceResult)
+                        repo.addMessage(agentId, "tool", "$productResult\n$priceResult")
+                    }
+                    // Deploy webhook handler if requested and we have Cloudflare configured
+                    if (deployWebhook && webhookCallbackUrl.isNotBlank()) {
+                        val webhookSecret = generateWebhookSecret()
+                        val webhookResult = useConnector(agent, "cloudflare_workers", "deploy_webhook_handler", JSONObject().put("name", "stripe-webhook-${productName.lowercase().replace(" ", "-")}").put("stripeWebhookSecret", webhookSecret).put("appCallbackUrl", webhookCallbackUrl))
+                        repo.addMessage(agentId, "tool", "Webhook handler deployed:\n$webhookResult\n\nWebhook secret (save this in Stripe Dashboard): $webhookSecret")
+                        repo.addDiary(agentId, "plan", "Stripe webhook handler deployed. Secret: $webhookSecret. Add this to Stripe Dashboard → Webhooks.", 3)
+                    }
+                } else {
+                    val def = ConnectorCatalog.get("stripe")
+                    repo.addApproval(
+                        agentId = agentId,
+                        type = "connector_action",
+                        title = "${agent.name} wants to create Stripe product '$productName'",
+                        summary = "Create Stripe product and price for monetization. Amount: \${amountCents/100}/$interval",
+                        details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
+                        risk = "high",
+                    )
+                    nextStatus = "waiting_approval"
+                }
+            }
+
+            "reinvest" -> {
+                val fund = repo.getInfrastructureFund()
+                val targetProvider = Json.string(input, "provider_id")
+                val targetModel = Json.string(input, "model")
+                val priority = Json.int(input, "priority", 10)
+                if (fund <= 0) {
+                    repo.addDiary(agentId, "error", "Infrastructure fund is empty. Cannot reinvest.", 2)
+                } else if (targetProvider.isBlank()) {
+                    repo.addDiary(agentId, "error", "No provider specified for reinvestment.", 2)
+                } else {
+                    val provider = repo.provider(targetProvider)
+                    if (provider != null) {
+                        val cost = calculateReinvestCost(provider, targetModel, priority)
+                        if (cost <= fund) {
+                            repo.updateProvider(provider.copy(model = targetModel.ifBlank { provider.model }, priority = priority, enabled = true, updatedAt = Time.now()))
+                            repo.updateInfrastructureFund(-cost)
+                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: \${cost/100}. Fund remaining: \${(fund-cost)/100}", 4)
+                            log("${agent.name} reinvested \${cost/100} to upgrade $targetProvider")
+                        } else {
+                            repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need \${cost/100}, have \${fund/100}.", 2)
+                        }
+                    }
+                }
+            }
+
+            "check_revenue" -> {
+                val eventType = Json.string(input, "type", "invoice.payment_succeeded")
+                val limit = Json.int(input, "limit", 20)
+                val result = useConnector(agent, "stripe", "list_events", JSONObject().put("type", eventType).put("limit", limit))
+                val events = parseStripeEvents(result)
+                var recorded = 0
+                for (event in events) {
+                    val eventId = event.optString("id", "")
+                    val amountCents = event.optLong("amount", 0L)
+                    val currency = event.optString("currency", "USD")
+                    val customerId = event.optString("customer", "")
+                    val subscriptionId = event.optString("subscription", "")
+                    val productId = event.optString("product", "")
+                    if (eventId.isNotBlank() && amountCents > 0) {
+                        val metadata = JSONObject().put("stripe_event_id", eventId)
+                            .put("customer_id", customerId)
+                            .put("subscription_id", subscriptionId)
+                            .put("product_id", productId)
+                        val existing = repo.recentRevenueForAgent(agentId, 100).firstOrNull {
+                            it.metadata.contains(eventId)
+                        }
+                        if (existing == null) {
+                            repo.recordRevenue(agentId, "api_usage", amountCents, currency, metadata)
+                            val settings = repo.settings()
+                            val agentShare = settings.agentProfitSharePercent
+                            val agentAmount = (amountCents * agentShare / 100).toLong()
+                            repo.updateInfrastructureFund(agentAmount)
+                            recorded++
+                            log("${agent.name} recorded revenue from Stripe event: $amountCents cents")
+                        }
+                    }
+                }
+                if (recorded > 0) {
+                    val fund = repo.getInfrastructureFund()
+                    repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: \${fund/100}", 4)
+                }
+                repo.addMessage(agentId, "tool", result)
+            }
+
             else -> {
                 repo.addDiary(
                     agentId,
@@ -614,6 +761,9 @@ class AgentRuntime(
             )
         }
 
+        val agentRevenue = repo.totalRevenueForAgent(agent.id)
+        val infraFund = repo.getInfrastructureFund()
+
         return AgentContext(
             agent = agent,
             officeName = settings.officeName,
@@ -628,6 +778,10 @@ class AgentRuntime(
             connectors = connectors,
             providers = providers,
             peers = peers,
+            agentTotalRevenueCents = agentRevenue,
+            infrastructureFundCents = infraFund,
+            agentProfitSharePercent = settings.agentProfitSharePercent,
+            userProfitSharePercent = settings.userProfitSharePercent,
         )
     }
 
@@ -639,5 +793,68 @@ class AgentRuntime(
                 error = if (level == "error") message else it.error,
             )
         }
+    }
+
+    private fun extractProductId(summary: String): String? {
+        val regex = Regex("Created product: (prod_[a-zA-Z0-9]+)")
+        val match = regex.find(summary)
+        return match?.groupValues?.get(1)
+    }
+
+    private fun extractPriceId(summary: String): String? {
+        val regex = Regex("Created price: (price_[a-zA-Z0-9]+)")
+        val match = regex.find(summary)
+        return match?.groupValues?.get(1)
+    }
+
+    private fun calculateReinvestCost(provider: ProviderEntity, model: String, priority: Int): Long {
+        var cost = 1000L // Base cost: $10
+        if (model.isNotBlank() && model != provider.model) cost += 500L // Model change: +$5
+        if (priority < provider.priority) cost += (provider.priority - priority).toLong() * 200L // Priority boost: +$2 per level
+        return cost.coerceAtMost(5000L) // Cap at $50
+    }
+
+    private fun generateWebhookSecret(): String {
+        val bytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(bytes)
+        return "whsec_" + bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun parseStripeEvents(result: String): List<JSONObject> {
+        val events = mutableListOf<JSONObject>()
+        val lines = result.lines()
+        var currentEvent: JSONObject? = null
+        for (line in lines) {
+            if (line.startsWith("- evt_")) {
+                // New event line: "- evt_xxx: type at timestamp"
+                val parts = line.substring(2).split(": ", limit = 2)
+                if (parts.size >= 2) {
+                    val id = parts[0]
+                    val rest = parts[1]
+                    val type = rest.split(" at ")[0]
+                    val timestamp = rest.split(" at ")[1].toLongOrNull() ?: 0L
+                    currentEvent = JSONObject().put("id", id).put("type", type).put("created", timestamp)
+                    events.add(currentEvent!!)
+                }
+            } else if (line.trim().startsWith("→ Payment:") && currentEvent != null) {
+                // Payment detail line
+                val paymentLine = line.trim().substring(10) // remove "→ Payment: "
+                // Format: "1000 usd for customer cus_xxx, sub: sub_xxx"
+                val amountMatch = Regex("^(\\d+) (\\w+)").find(paymentLine)
+                val customerMatch = Regex("customer (cus_[\\w]+)").find(paymentLine)
+                val subMatch = Regex("sub: (sub_[\\w]+)").find(paymentLine)
+                if (amountMatch != null) {
+                    currentEvent.put("amount", amountMatch.groupValues[1].toLong())
+                    currentEvent.put("currency", amountMatch.groupValues[2].uppercase())
+                }
+                if (customerMatch != null) {
+                    currentEvent.put("customer", customerMatch.groupValues[1])
+                }
+                if (subMatch != null) {
+                    currentEvent.put("subscription", subMatch.groupValues[1])
+                }
+            }
+        }
+        return events
     }
 }

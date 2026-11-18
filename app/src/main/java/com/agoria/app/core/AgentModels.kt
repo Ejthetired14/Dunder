@@ -48,6 +48,11 @@ data class AgentContext(
     val connectors: List<ConnectorBrief>,
     val providers: List<ProviderBrief>,
     val peers: List<PeerInfo>,
+    // Monetization
+    val agentTotalRevenueCents: Long = 0,
+    val infrastructureFundCents: Long = 0,
+    val agentProfitSharePercent: Int = 50,
+    val userProfitSharePercent: Int = 50,
 )
 
 data class AgentDecision(

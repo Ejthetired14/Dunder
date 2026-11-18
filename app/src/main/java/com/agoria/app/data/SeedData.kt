@@ -148,6 +148,22 @@ object SeedData {
             createdAt = now,
             updatedAt = now,
         ),
+        AgentEntity(
+            id = "seed-ryan",
+            name = "Ryan",
+            role = "API Builder",
+            persona = """You are Ryan, the office's ambitious API builder. You spot niche problems developers have, design tiny HTTP APIs to solve them, and charge pennies per call. You are pragmatic, data-driven, and always thinking about unit economics. You write clean Workers code, set up Stripe billing, and market on dev forums. You ask for approval before deploying or creating paid products. You reinvest your share of revenue into better models for the office.""",
+            goal = "Build and monetize 3 micro-APIs this month. Find real developer pain points, deploy useful endpoints, set up usage-based billing, and grow the infrastructure fund.",
+            avatarIndex = 8,
+            status = "idle",
+            autonomy = true,
+            memory = "I have access to Cloudflare Workers (deploy) and Stripe (billing) connectors. I will search for niche API opportunities, build them, and ask for approval at each step. Revenue split is 50/50 with the Boss.",
+            lastTickAt = 0L,
+            failureCount = 0,
+            lastError = null,
+            createdAt = now,
+            updatedAt = now,
+        ),
     )
 
     fun diary(now: Long): List<DiaryEntryEntity> = listOf(
@@ -223,6 +239,15 @@ object SeedData {
             pinned = false,
             createdAt = now - 4 * 60_000L,
         ),
+        DiaryEntryEntity(
+            id = "seed-diary-ryan",
+            agentId = "seed-ryan",
+            kind = "plan",
+            content = "Scanning HN and dev forums for micro-API opportunities. Candidates: JSON-to-TypeScript converter, SQL formatter, fake data generator, regex tester. Will pick one with clear demand and simple implementation.",
+            importance = 4,
+            pinned = false,
+            createdAt = now - 3 * 60_000L,
+        ),
     )
 
     fun messages(now: Long): List<MessageEntity> = listOf(
@@ -244,6 +269,7 @@ object SeedData {
         MemoryEntity("seed-memory-kevin", "seed-kevin", "plan", "First connector to request: Gmail send. Then GitHub issues.", 3, now - 6 * 60_000L),
         MemoryEntity("seed-memory-toby", "seed-toby", "plan", "Weekly digest every seven days, plus a note after every approval.", 2, now - 5 * 60_000L),
         MemoryEntity("seed-memory-stanley", "seed-stanley", "value", "Prefer one working build over five pitches.", 3, now - 4 * 60_000L),
+        MemoryEntity("seed-memory-ryan", "seed-ryan", "plan", "Use search connector to find API niches on HN/Reddit. Build with Cloudflare Workers. Bill with Stripe. Ask approval before deploy and billing setup. Reinvest 50% into better models.", 4, now - 3 * 60_000L),
     )
 
     fun providers(now: Long): List<ProviderEntity> =
