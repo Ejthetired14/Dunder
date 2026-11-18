@@ -841,6 +841,7 @@ private fun ProgressBanner(
     color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
 ) {
     val density = LocalDensity.current
+    val strokeWidth = with(density) { 1.dp.toPx() }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -848,7 +849,7 @@ private fun ProgressBanner(
             .animateContentSize(),
         shape = MaterialTheme.shapes.medium,
         color = color.copy(alpha = 0.1f),
-        border = Stroke(with(density) { 1.dp.toPx() }, color.copy(alpha = 0.3f)),
+        border = Stroke(strokeWidth, color.copy(alpha = 0.3f)),
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

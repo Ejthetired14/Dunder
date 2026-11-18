@@ -199,15 +199,8 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
-            val flow = combine<
-                AgentEntity?,
-                List<MessageEntity>,
-                List<DiaryEntryEntity>,
-                List<TaskEntity>,
-                List<BuildEntity>,
-                List<MemoryEntity>
-            >(
-                arrayOf(
+            val flow = combine(
+                arrayOf<kotlinx.coroutines.flow.Flow<*>>(
                     agents.map { it.firstOrNull { it.id == agentId } },
                     messagesFor(agentId),
                     diaryFor(agentId),
@@ -215,8 +208,15 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                     buildsFor(agentId),
                     memoriesFor(agentId),
                 )
-            ) { a, m, d, t, b, mem ->
-                AgentScreenState(a, m, d, t, b, mem)
+            ) { results ->
+                AgentScreenState(
+                    results[0] as AgentEntity?,
+                    results[1] as List<MessageEntity>,
+                    results[2] as List<DiaryEntryEntity>,
+                    results[3] as List<TaskEntity>,
+                    results[4] as List<BuildEntity>,
+                    results[5] as List<MemoryEntity>,
+                )
             }.distinctUntilChanged()
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
             agentScreenStates.value = agentScreenStates.value + (agentId to flow)
@@ -253,7 +253,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val _pagedDiary = MutableStateFlow<List<DiaryEntryEntity>>(emptyList())
     val pagedDiary = _pagedDiary.asStateFlow()
 
-    private val _pagedMessages = mutableStateOf<Map<String, List<MessageEntity>>>(emptyMap())
+    private val _pagedMessages = MutableStateFlow<Map<String, List<MessageEntity>>>(emptyMap())
     fun pagedMessages(agentId: String) = _pagedMessages.value[agentId] ?: emptyList()
 
     // Paged data loading functions
