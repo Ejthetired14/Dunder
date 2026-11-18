@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -212,16 +211,19 @@ fun SettingsScreen(
                         title = "Total Revenue",
                         value = formatCents(totalRevenue),
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f, fill = true),
                     )
                     SummaryCard(
                         title = "Infrastructure Fund",
                         value = formatCents(infraFund),
                         color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f, fill = true),
                     )
                     SummaryCard(
                         title = "Your Share",
                         value = formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)),
                         color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.weight(1f, fill = true),
                     )
                 }
 
@@ -617,11 +619,12 @@ private fun SummaryCard(
     title: String,
     value: String,
     color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.15f),
@@ -629,9 +632,10 @@ private fun SummaryCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(title, style = MaterialTheme.typography.labelMedium, color = color)
             Spacer(Modifier.height(4.dp))
