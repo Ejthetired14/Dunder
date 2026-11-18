@@ -30,7 +30,7 @@ class AgentRuntime(
     private val repo: Repository,
     private val llm: LlmClient,
     private val buildRunner: BuildRunner,
-    private val connectorExecutor: ConnectorExecutor,
+    private val connectorExecutorInstance: ConnectorExecutor,
     private val context: Context,
     private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
@@ -43,7 +43,7 @@ class AgentRuntime(
     val buildProgress = buildRunner.buildProgress
 
     // Expose connector executor for direct connector calls (e.g., backup/restore)
-    val connectorExecutor: ConnectorExecutor = connectorExecutor
+    val connectorExecutor: ConnectorExecutor = connectorExecutorInstance
 
     private var loopJob: Job? = null
 

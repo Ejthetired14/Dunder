@@ -51,10 +51,9 @@ class UpdateManager(
         val releaseNotes: String,
         val apkUrl: String,
         val publishedAt: String,
-    ) {
-        val isNewer: Boolean
-            get() = versionCode > currentVersionCode
-    }
+    )
+
+    fun isNewerRelease(release: ReleaseInfo): Boolean = release.versionCode > currentVersionCode
 
     /**
      * Checks GitHub Releases for a newer version.

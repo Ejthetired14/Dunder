@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,7 +34,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filed.SystemUpdate
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -665,7 +666,7 @@ fun SettingsScreen(
                                     updateState.value = UpdateState.Checking
                                     viewModel.checkForUpdates { info ->
                                         releaseInfo.value = info
-                                        updateState.value = if (info != null && info.isNewer) UpdateState.UpdateAvailable else UpdateState.UpToDate
+                                        updateState.value = if (info != null && viewModel.isNewerRelease(info)) UpdateState.UpdateAvailable else UpdateState.UpToDate
                                     }
                                 },
                             ) { Text("Check") }
@@ -768,9 +769,11 @@ fun SettingsScreen(
                                     enabled = downloadProgress.value == null,
                                 ) {
                                     if (downloadProgress.value != null) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Downloading ${downloadProgress.value}%")
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Downloading ${downloadProgress.value}%")
+                                        }
                                     } else {
                                         Text("Download & Install")
                                     }

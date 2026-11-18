@@ -644,6 +644,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         app.updateManager.checkForUpdates(onResult)
     }
 
+    fun isNewerRelease(release: com.agoria.app.util.UpdateManager.ReleaseInfo): Boolean {
+        return app.updateManager.isNewerRelease(release)
+    }
+
     fun downloadAndInstallUpdate(
         release: com.agoria.app.util.UpdateManager.ReleaseInfo,
         onProgress: (Int) -> Unit,
