@@ -51,7 +51,8 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.BorderStroke
+import androidx.compose.ui.graphics.Color
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -849,7 +850,7 @@ private fun ProgressBanner(
             .animateContentSize(),
         shape = MaterialTheme.shapes.medium,
         color = color.copy(alpha = 0.1f),
-        border = Stroke(strokeWidth, color.copy(alpha = 0.3f)),
+        border = BorderStroke(strokeWidth, color.copy(alpha = 0.3f)),
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
