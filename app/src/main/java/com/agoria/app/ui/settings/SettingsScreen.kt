@@ -53,8 +53,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
+import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.ProviderTest
+import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.util.Share
 import kotlin.math.roundToInt
 
@@ -65,10 +67,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val providers by viewModel.providers.collectAsStateWithLifecycle()
-    val tests by viewModel.providerTests.collectAsStateWithLifecycle()
-    val revenue by viewModel.revenue.collectAsStateWithLifecycle()
+    val state by viewModel.settingsScreenState.collectAsStateWithLifecycle()
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
@@ -76,6 +75,11 @@ fun SettingsScreen(
     var userSplit by remember { mutableStateOf(50) }
     var stripeAccountId by remember { mutableStateOf("") }
     var stripePublishableKey by remember { mutableStateOf("") }
+
+    val settings = state.settings
+    val providers = state.providers
+    val tests = state.providerTests
+    val revenue = state.revenue
 
     LaunchedEffect(settings) {
         settings?.let {

@@ -459,6 +459,27 @@ class Repository(
 
     suspend fun build(id: String): BuildEntity? = db.buildDao().get(id)
 
+    // Paged queries for builds
+    suspend fun pagedBuildsForAgent(agentId: String, limit: Int, offset: Int): List<BuildEntity> =
+        db.buildDao().pagedForAgent(agentId, limit, offset)
+
+    suspend fun countBuildsForAgent(agentId: String): Int =
+        db.buildDao().countForAgent(agentId)
+
+    // Paged queries for diary
+    suspend fun pagedDiaryForAgent(agentId: String, limit: Int, offset: Int): List<DiaryEntryEntity> =
+        db.diaryDao().pagedForAgent(agentId, limit, offset)
+
+    suspend fun countDiaryForAgent(agentId: String): Int =
+        db.diaryDao().countForAgent(agentId)
+
+    // Paged queries for messages
+    suspend fun pagedMessagesForAgent(agentId: String, limit: Int, offset: Int): List<MessageEntity> =
+        db.messageDao().pagedForAgent(agentId, limit, offset)
+
+    suspend fun countMessagesForAgent(agentId: String): Int =
+        db.messageDao().countForAgent(agentId)
+
     // ------------------------------------------------------------------ export
 
     suspend fun exportSnapshot(): JSONObject {

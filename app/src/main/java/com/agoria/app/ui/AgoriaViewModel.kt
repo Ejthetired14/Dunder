@@ -4,10 +4,13 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.agoria.app.AgoriaApplication
+import com.agoria.app.core.BuildProgress
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
+import com.agoria.app.data.DiaryEntryEntity
+import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.SettingsEntity
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
@@ -17,6 +20,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,6 +34,41 @@ data class ProviderTest(
     val testing: Boolean = false,
     val ok: Boolean? = null,
     val message: String = "",
+)
+
+// Combined state for HomeScreen to reduce Flow collections
+data class HomeScreenState(
+    val agents: List<AgentEntity>,
+    val diary: List<DiaryEntryEntity>,
+    val pendingApprovals: List<com.agoria.app.data.ApprovalEntity>,
+    val settings: SettingsEntity?,
+    val runtimeState: com.agoria.app.core.RuntimeState,
+)
+
+// Combined state for SettingsScreen to reduce Flow collections
+data class SettingsScreenState(
+    val settings: SettingsEntity?,
+    val providers: List<com.agoria.app.data.ProviderEntity>,
+    val providerTests: Map<String, ProviderTest>,
+    val revenue: List<com.agoria.app.data.RevenueEntity>,
+)
+
+// Combined state for AgentScreen to reduce Flow collections
+data class AgentScreenState(
+    val agent: AgentEntity?,
+    val messages: List<MessageEntity>,
+    val diary: List<DiaryEntryEntity>,
+    val tasks: List<com.agoria.app.data.TaskEntity>,
+    val builds: List<BuildEntity>,
+    val memories: List<com.agoria.app.data.MemoryEntity>,
+)
+
+// Pagination state for lists
+data class PaginationState(
+    val page: Int = 0,
+    val pageSize: Int = 20,
+    val hasMore: Boolean = true,
+    val isLoading: Boolean = false,
 )
 
 class AgoriaViewModel(application: Application) : AndroidViewModel(application) {
@@ -127,6 +167,61 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         a.size + c.size
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    // Combined state flows to reduce individual Flow collections
+    val homeScreenState = combine(
+        agents,
+        diary,
+        pendingApprovals,
+        settings,
+        runtimeState,
+    ) { a, d, p, s, r ->
+        HomeScreenState(a, d, p, s, r)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeScreenState(emptyList(), emptyList(), emptyList(), null, com.agoria.app.core.RuntimeState()))
+
+    val settingsScreenState = combine(
+        settings,
+        providers,
+        providerTests,
+        revenue,
+    ) { s, p, t, r ->
+        SettingsScreenState(s, p, t, r)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList()))
+
+    // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
+    private val agentScreenStates = mutableStateOf<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
+    fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
+        ?: run {
+            val flow = combine(
+                agents.map { it.firstOrNull { it.id == agentId } },
+                messagesFor(agentId),
+                diaryFor(agentId),
+                tasksFor(agentId),
+                buildsFor(agentId),
+                memoriesFor(agentId),
+            ) { a, m, d, t, b, mem ->
+                AgentScreenState(a, m, d, t, b, mem)
+            }.distinctUntilChanged()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
+            agentScreenStates.value = agentScreenStates.value + (agentId to flow)
+            flow
+        }
+
+    // Pagination states
+    private val _buildsPagination = MutableStateFlow(PaginationState())
+    val buildsPagination = _buildsPagination.asStateFlow()
+
+    private val _diaryPagination = MutableStateFlow(PaginationState())
+    val diaryPagination = _diaryPagination.asStateFlow()
+
+    private val _messagesPagination = mutableStateOf<Map<String, PaginationState>>(emptyMap())
+    fun messagesPagination(agentId: String): PaginationState = _messagesPagination.value[agentId] ?: PaginationState()
+    fun setMessagesPagination(agentId: String, state: PaginationState) {
+        _messagesPagination.value = _messagesPagination.value + (agentId to state)
+    }
+
+    // Build progress flow (exposed from AgentRuntime)
+    val buildProgress = runtime.buildProgress
+
     private val _providerTests = MutableStateFlow<Map<String, ProviderTest>>(emptyMap())
     val providerTests = _providerTests.asStateFlow()
 
@@ -139,6 +234,111 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     fun approvalsFor(agentId: String) = repo.approvalsFor(agentId)
     fun buildsFor(agentId: String) = repo.buildsFor(agentId)
     fun memoriesFor(agentId: String) = repo.memoriesFor(agentId)
+
+    // Paged data holders with loading state
+    private val _pagedBuilds = MutableStateFlow<List<BuildEntity>>(emptyList())
+    val pagedBuilds = _pagedBuilds.asStateFlow()
+
+    private val _pagedDiary = MutableStateFlow<List<DiaryEntryEntity>>(emptyList())
+    val pagedDiary = _pagedDiary.asStateFlow()
+
+    private val _pagedMessages = mutableStateOf<Map<String, List<MessageEntity>>>(emptyMap())
+    fun pagedMessages(agentId: String) = _pagedMessages.value[agentId] ?: emptyList()
+
+    // Paged data loading functions
+    fun loadPagedBuilds(agentId: String, refresh: Boolean = false) {
+        val pagination = if (refresh) PaginationState() else _buildsPagination.value
+        if (pagination.isLoading && !refresh) return
+        
+        val currentPagination = if (refresh) PaginationState() else pagination.copy(isLoading = true)
+        _buildsPagination.value = currentPagination
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val limit = currentPagination.pageSize
+            val offset = currentPagination.page * limit
+            val data = repo.pagedBuildsForAgent(agentId, limit, offset)
+            val totalCount = repo.countBuildsForAgent(agentId)
+            val hasMore = offset + data.size < totalCount
+            
+            withContext(Dispatchers.Main) {
+                if (refresh || currentPagination.page == 0) {
+                    _pagedBuilds.value = data
+                } else {
+                    _pagedBuilds.value = _pagedBuilds.value + data
+                }
+                _buildsPagination.value = currentPagination.copy(isLoading = false, hasMore = hasMore)
+            }
+        }
+    }
+
+    fun loadPagedDiary(agentId: String, refresh: Boolean = false) {
+        val pagination = if (refresh) PaginationState() else _diaryPagination.value
+        if (pagination.isLoading && !refresh) return
+        
+        val currentPagination = if (refresh) PaginationState() else pagination.copy(isLoading = true)
+        _diaryPagination.value = currentPagination
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val limit = currentPagination.pageSize
+            val offset = currentPagination.page * limit
+            val data = repo.pagedDiaryForAgent(agentId, limit, offset)
+            val totalCount = repo.countDiaryForAgent(agentId)
+            val hasMore = offset + data.size < totalCount
+            
+            withContext(Dispatchers.Main) {
+                if (refresh || currentPagination.page == 0) {
+                    _pagedDiary.value = data
+                } else {
+                    _pagedDiary.value = _pagedDiary.value + data
+                }
+                _diaryPagination.value = currentPagination.copy(isLoading = false, hasMore = hasMore)
+            }
+        }
+    }
+
+    fun loadPagedMessages(agentId: String, refresh: Boolean = false) {
+        val pagination = if (refresh) PaginationState() else messagesPagination(agentId)
+        if (pagination.isLoading && !refresh) return
+        
+        val currentPagination = if (refresh) PaginationState() else pagination.copy(isLoading = true)
+        setMessagesPagination(agentId, currentPagination)
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val limit = currentPagination.pageSize
+            val offset = currentPagination.page * limit
+            val data = repo.pagedMessagesForAgent(agentId, limit, offset)
+            val totalCount = repo.countMessagesForAgent(agentId)
+            val hasMore = offset + data.size < totalCount
+            
+            withContext(Dispatchers.Main) {
+                val currentMessages = _pagedMessages.value[agentId] ?: emptyList()
+                if (refresh || currentPagination.page == 0) {
+                    _pagedMessages.value = _pagedMessages.value + (agentId to data)
+                } else {
+                    _pagedMessages.value = _pagedMessages.value + (agentId to (currentMessages + data))
+                }
+                setMessagesPagination(agentId, currentPagination.copy(isLoading = false, hasMore = hasMore))
+            }
+        }
+    }
+
+    fun resetPagedBuilds(agentId: String) {
+        _buildsPagination.value = PaginationState()
+        _pagedBuilds.value = emptyList()
+        loadPagedBuilds(agentId, refresh = true)
+    }
+
+    fun resetPagedDiary(agentId: String) {
+        _diaryPagination.value = PaginationState()
+        _pagedDiary.value = emptyList()
+        loadPagedDiary(agentId, refresh = true)
+    }
+
+    fun resetPagedMessages(agentId: String) {
+        setMessagesPagination(agentId, PaginationState())
+        _pagedMessages.value = _pagedMessages.value - agentId
+        loadPagedMessages(agentId, refresh = true)
+    }
 
     fun setAutonomy(enabled: Boolean) {
         viewModelScope.launch {
@@ -389,6 +589,16 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         val file = File(build.zipPath)
         if (file.exists()) {
             onReady(file)
+        }
+    }
+
+    fun saveBuildToDownloads(context: Context, build: BuildEntity, onResult: (Uri?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = File(build.zipPath)
+            val uri = Share.saveToDownloads(context, file, "agoria-${build.name}-${build.id.take(8)}.zip")
+            withContext(Dispatchers.Main) {
+                onResult(uri)
+            }
         }
     }
 }

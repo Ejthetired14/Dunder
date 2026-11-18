@@ -276,9 +276,11 @@ private fun ConnectorRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${def?.actions?.size ?: 0} actions · ${def?.category ?: "Custom"}",
+                    text = "${def?.actions?.size ?: 0} actions \u2022 ${def?.category ?: "Custom"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Text(

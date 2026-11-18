@@ -358,6 +358,29 @@ object ConnectorCatalog {
             risk = "high",
             iconKey = "cloudflare",
         ),
+        ConnectorDef(
+            id = "paypal",
+            name = "PayPal",
+            category = "Payments",
+            description = "Create orders, capture payments, and manage subscriptions through PayPal REST API.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("clientId", "Client ID", "PayPal REST API client ID from developer dashboard.", true, true, "Ad...xyz"),
+                ConnectorField("clientSecret", "Client Secret", "PayPal REST API client secret.", true, true, "EF...xyz"),
+                ConnectorField("environment", "Environment", "sandbox or live.", false, false, "sandbox"),
+            ),
+            actions = listOf(
+                ConnectorActionDef("create_order", "Create Order", "Create a PayPal order for a purchase.", true, "{\"amount\": \"10.00\", \"currency\": \"USD\", \"intent\": \"CAPTURE\"}"),
+                ConnectorActionDef("capture_order", "Capture Order", "Capture payment for an approved order.", true, "{\"orderId\": \"...\"}"),
+                ConnectorActionDef("get_order", "Get Order Details", "Retrieve order details by ID.", false, "{\"orderId\": \"...\"}"),
+                ConnectorActionDef("create_subscription", "Create Subscription", "Create a subscription plan.", true, "{\"planId\": \"P-...\", \"subscriberEmail\": \"user@example.com\"}"),
+                ConnectorActionDef("list_transactions", "List Transactions", "List recent transactions.", false, "{\"startDate\": \"2026-01-01\", \"endDate\": \"2026-12-31\"}"),
+            ),
+            setupHelp = "Create a PayPal app at developer.paypal.com, get Client ID and Secret. Use sandbox for testing, live for production. The app will only make API calls you approve.",
+            docsUrl = "https://developer.paypal.com/docs/api/overview/",
+            risk = "high",
+            iconKey = "paypal",
+        ),
     )
 
     val byId: Map<String, ConnectorDef> = all.associateBy { it.id }

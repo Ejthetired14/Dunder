@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.DiaryEntryEntity
@@ -67,6 +68,7 @@ import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.TaskEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.AgentScreenState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
@@ -135,11 +137,15 @@ private fun AgentContent(
     agent: AgentEntity,
     onShareBuild: (BuildEntity) -> Unit,
 ) {
-    val messages = viewModel.messagesFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val diary = viewModel.diaryFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val tasks = viewModel.tasksFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val builds = viewModel.buildsFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
-    val memories = viewModel.memoriesFor(agent.id).collectAsStateWithLifecycle(emptyList()).value
+    val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
+        AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+    ).value
+
+    val messages = state.messages
+    val diary = state.diary
+    val tasks = state.tasks
+    val builds = state.builds
+    val memories = state.memories
 
     var tab by remember { mutableStateOf(0) }
     var input by remember { mutableStateOf("") }
@@ -177,8 +183,8 @@ private fun AgentContent(
 
         when (tab) {
             0 -> ChatTab(
+                viewModel = viewModel,
                 agent = agent,
-                messages = messages,
                 input = input,
                 onInput = { input = it },
                 onSend = {
@@ -189,10 +195,10 @@ private fun AgentContent(
                 },
                 listState = listState,
             )
-            1 -> DiaryTab(diary = diary)
+            1 -> DiaryTab(viewModel = viewModel, agentId = agent.id, diary = diary)
             2 -> TasksTab(tasks = tasks)
             3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
-            else -> BuildsTab(builds = builds, onShare = onShareBuild)
+            else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onShare = onShareBuild)
         }
     }
 
@@ -292,21 +298,61 @@ private fun AgentHeader(
 
 @Composable
 private fun ChatTab(
+    viewModel: AgoriaViewModel,
     agent: AgentEntity,
-    messages: List<MessageEntity>,
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
+    val agentId = agent.id
+    val pagedMessages = viewModel.pagedMessages(agentId)
+    val messagesPagination = viewModel.messagesPagination(agentId)
+
+    // Load initial data (latest messages)
+    LaunchedEffect(Unit) {
+        viewModel.loadPagedMessages(agentId, refresh = true)
+    }
+
+    // Load more when scrolled to top
+    LaunchedEffect(listState.firstVisibleItemIndex) {
+        if (listState.firstVisibleItemIndex == 0 && messagesPagination.hasMore && !messagesPagination.isLoading) {
+            viewModel.loadPagedMessages(agentId)
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            reverseLayout = true, // Show latest messages at bottom
         ) {
-            if (messages.isEmpty()) {
+            // Load more indicator at top (older messages)
+            if (messagesPagination.hasMore) {
+                item {
+                    if (messagesPagination.isLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { viewModel.loadPagedMessages(agentId) },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        ) {
+                            Text("Load older messages")
+                        }
+                    }
+                }
+            }
+
+            if (pagedMessages.isEmpty() && !messagesPagination.isLoading) {
                 item {
                     EmptyState(
                         title = "Say hello",
@@ -314,7 +360,7 @@ private fun ChatTab(
                     )
                 }
             } else {
-                items(messages, key = { it.id }) { message ->
+                items(pagedMessages.reversed(), key = { it.id }) { message ->
                     MessageRow(message = message, agent = agent)
                 }
             }
@@ -454,21 +500,29 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
 }
 
 @Composable
-private fun DiaryTab(diary: List<DiaryEntryEntity>) {
-    if (diary.isEmpty()) {
+private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<DiaryEntryEntity>) {
+    val pagedDiary by viewModel.pagedDiary.collectAsStateWithLifecycle()
+    val diaryPagination by viewModel.diaryPagination.collectAsStateWithLifecycle()
+
+    // Load initial data
+    LaunchedEffect(Unit) {
+        viewModel.loadPagedDiary(agentId, refresh = true)
+    }
+
+    if (pagedDiary.isEmpty() && !diaryPagination.isLoading) {
         EmptyState(
             title = "No diary yet",
             body = "Start autonomy or send a message. Every cycle produces a private thought here.",
         )
     } else {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
+            contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            diary.forEach { entry ->
+            items(pagedDiary, key = { it.id }) { entry ->
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -495,6 +549,29 @@ private fun DiaryTab(diary: List<DiaryEntryEntity>) {
                     }
                 }
             }
+
+            // Load more indicator
+            if (diaryPagination.hasMore) {
+                item {
+                    if (diaryPagination.isLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { viewModel.loadPagedDiary(agentId) },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        ) {
+                            Text("Load more")
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -507,14 +584,14 @@ private fun TasksTab(tasks: List<TaskEntity>) {
             body = "Agents can create tasks when they want to track a plan. They will show up here.",
         )
     } else {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
+            contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            tasks.forEach { task ->
+            items(tasks, key = { it.id }) { task ->
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -562,30 +639,35 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
             )
         } else {
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                memories.forEach { memory ->
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Pill(text = memory.kind)
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    text = Time.relativeTime(memory.createdAt),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(16.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(memories, key = { it.id }) { memory ->
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Pill(text = memory.kind)
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        text = Time.relativeTime(memory.createdAt),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(memory.content, style = MaterialTheme.typography.bodyMedium)
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(memory.content, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -610,24 +692,58 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
 
 @Composable
 private fun BuildsTab(
-    builds: List<BuildEntity>,
+    viewModel: AgoriaViewModel,
+    agentId: String,
     onShare: (BuildEntity) -> Unit,
 ) {
+    val context = LocalContext.current
+    val buildProgress by viewModel.buildProgress.collectAsStateWithLifecycle()
+    val pagedBuilds by viewModel.pagedBuilds.collectAsStateWithLifecycle()
+    val buildsPagination by viewModel.buildsPagination.collectAsStateWithLifecycle()
+    var savingBuildId by remember { mutableStateOf<String?>(null) }
+
+    // Load initial data
+    LaunchedEffect(Unit) {
+        viewModel.loadPagedBuilds(agentId, refresh = true)
+    }
+
     Column(Modifier.fillMaxSize()) {
-        if (builds.isEmpty()) {
+        // Progress banner
+        buildProgress?.let { progress ->
+            when (progress) {
+                is BuildProgress.Started -> ProgressBanner(message = "Starting build...")
+                is BuildProgress.GeneratingFiles -> ProgressBanner(message = "Generating project files...")
+                is BuildProgress.WritingFiles -> ProgressBanner(
+                    message = "Writing files (${progress.written}/${progress.total})",
+                    progress = progress.written / progress.total.toFloat()
+                )
+                is BuildProgress.Zipping -> ProgressBanner(message = "Creating ZIP archive...")
+                is BuildProgress.Completed -> ProgressBanner(
+                    message = "Build complete: ${progress.build.name}",
+                    progress = 1f,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                is BuildProgress.Failed -> ProgressBanner(
+                    message = "Build failed: ${progress.error}",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        if (pagedBuilds.isEmpty() && !buildsPagination.isLoading) {
             EmptyState(
                 title = "No builds yet",
                 body = "When an agent proposes a build and you approve it, the generated project appears here as a downloadable ZIP.",
             )
         } else {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                builds.forEach { build ->
+                items(pagedBuilds, key = { it.id }) { build ->
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -658,10 +774,104 @@ private fun BuildsTab(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Share ZIP")
                                 }
+                                Button(
+                                    onClick = {
+                                        savingBuildId = build.id
+                                        viewModel.saveBuildToDownloads(context, build) { uri ->
+                                            savingBuildId = null
+                                            // Could show a snackbar here
+                                        }
+                                    },
+                                    enabled = savingBuildId != build.id,
+                                ) {
+                                    if (savingBuildId == build.id) {
+                                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Saving...")
+                                    } else {
+                                        Icon(Icons.Default.Download, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Save to Device")
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
+                // Load more indicator
+                if (buildsPagination.hasMore) {
+                    item {
+                        if (buildsPagination.isLoading) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { viewModel.loadPagedBuilds(agentId) },
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            ) {
+                                Text("Load more")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressBanner(
+    message: String,
+    progress: Float = -1f,
+    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .animateContentSize(),
+        shape = MaterialTheme.shapes.medium,
+        color = color.copy(alpha = 0.1f),
+        border = androidx.compose.ui.graphics.drawscope.Stroke(1.dp, color.copy(alpha = 0.3f)),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (progress >= 0f) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        progress = progress,
+                        color = color,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                } else {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = color,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = color,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (progress >= 0f && progress < 1f) {
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = progress,
+                    color = color,
+                    trackColor = color.copy(alpha = 0.2f),
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

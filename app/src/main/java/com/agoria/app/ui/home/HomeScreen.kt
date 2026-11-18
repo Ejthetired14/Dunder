@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.HomeScreenState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.AgentCard
 import com.agoria.app.ui.components.OfficeThumbnail
@@ -83,12 +84,14 @@ fun HomeScreen(
     onOpenOffice: () -> Unit,
 ) {
     val context = LocalContext.current
-    val agents by viewModel.agents.collectAsStateWithLifecycle()
-    val diary by viewModel.diary.collectAsStateWithLifecycle()
-    val pending by viewModel.pendingApprovals.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val runtime by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val state by viewModel.homeScreenState.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+
+    val agents = state.agents
+    val diary = state.diary
+    val pending = state.pendingApprovals
+    val settings = state.settings
+    val runtime = state.runtimeState
 
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),

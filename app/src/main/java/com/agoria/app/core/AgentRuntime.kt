@@ -39,6 +39,9 @@ class AgentRuntime(
     private val _state = MutableStateFlow(RuntimeState())
     val state = _state.asStateFlow()
 
+    // Expose build progress from BuildRunner
+    val buildProgress = buildRunner.buildProgress
+
     private var loopJob: Job? = null
 
     @Volatile

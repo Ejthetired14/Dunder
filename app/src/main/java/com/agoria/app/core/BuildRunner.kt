@@ -11,9 +11,20 @@ import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.Notifier
 import com.agoria.app.util.Time
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+
+sealed interface BuildProgress {
+    data class Started(val approvalId: String) : BuildProgress
+    data class GeneratingFiles(val approvalId: String) : BuildProgress
+    data class WritingFiles(val approvalId: String, val written: Int, val total: Int) : BuildProgress
+    data class Zipping(val approvalId: String) : BuildProgress
+    data class Completed(val approvalId: String, val build: BuildEntity) : BuildProgress
+    data class Failed(val approvalId: String, val error: String) : BuildProgress
+}
 
 class BuildRunner(
     private val repo: Repository,
@@ -21,7 +32,12 @@ class BuildRunner(
     private val context: android.content.Context,
 ) {
 
+    private val _buildProgress = MutableStateFlow<BuildProgress?>(null)
+    val buildProgress = _buildProgress.asStateFlow()
+
     suspend fun build(agent: AgentEntity, approval: ApprovalEntity): BuildEntity? {
+        _buildProgress.value = BuildProgress.Started(approval.id)
+
         val details = Json.tryObject(approval.details) ?: JSONObject()
         val requestedName = Json.string(details, "name", approval.title).ifBlank { "untitled-build" }
         val plan = Json.string(details, "plan", approval.summary)
@@ -31,6 +47,7 @@ class BuildRunner(
         Files.clear(root)
         root.mkdirs()
 
+        _buildProgress.value = BuildProgress.GeneratingFiles(approval.id)
         val generated = requestProject(agent, requestedName, description, plan)
         val files = generated.files
         val finalName = generated.name.ifBlank { requestedName }
@@ -38,7 +55,8 @@ class BuildRunner(
 
         var written = 0
         val manifestFiles = JSONArray()
-        files.forEach { file ->
+        _buildProgress.value = BuildProgress.WritingFiles(approval.id, 0, files.size)
+        files.forEachIndexed { index, file ->
             val path = file.path.replace('\\', '/').trimStart('/')
             if (path.isBlank() || path.contains("..") || path.startsWith("/")) return@forEach
             val target = File(root, path)
@@ -46,6 +64,7 @@ class BuildRunner(
             Files.writeText(target, file.content.take(30_000))
             written++
             manifestFiles.put(path)
+            _buildProgress.value = BuildProgress.WritingFiles(approval.id, written, files.size)
         }
 
         if (written == 0) {
@@ -69,6 +88,7 @@ class BuildRunner(
             .put("files", manifestFiles)
         Files.writeText(File(root, "manifest.json"), manifest.toString(2))
 
+        _buildProgress.value = BuildProgress.Zipping(approval.id)
         val zipFile = File(
             Files.exports(context),
             "agoria-${Files.safeName(finalName)}-${approval.id.take(8)}.zip",
@@ -95,6 +115,8 @@ class BuildRunner(
             "Build complete: $finalName ($written files). Download the ZIP from the Builds tab.",
         )
         Notifier.notifyBuild(context, "Build ready: $finalName", "$written files packaged. Open Dunder to download the ZIP.")
+
+        _buildProgress.value = BuildProgress.Completed(approval.id, build)
         return build
     }
 
