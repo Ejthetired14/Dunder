@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Agoria</string>
+    <string name="app_name">Dunder</string>
     <string name="channel_autonomy">Autonomy</string>
     <string name="channel_approvals">Approvals</string>
-    <string name="autonomy_notification_title">Agoria is awake</string>
+    <string name="autonomy_notification_title">Dunder is awake</string>
     <string name="autonomy_notification_text">Agents are thinking, writing, and building locally.</string>
 </resources>
