@@ -197,28 +197,40 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
+
+    private data class AgentScreenPartialState(
+        val agent: AgentEntity?,
+        val messages: List<MessageEntity>,
+        val diary: List<DiaryEntryEntity>,
+        val tasks: List<TaskEntity>,
+        val builds: List<BuildEntity> = emptyList(),
+    )
+
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
-            val flow = combine<AgentScreenState>(
-                arrayOf<kotlinx.coroutines.flow.Flow<*>>(
-                    agents.map { it.firstOrNull { it.id == agentId } },
-                    messagesFor(agentId),
-                    diaryFor(agentId),
-                    tasksFor(agentId),
-                    buildsFor(agentId),
-                    memoriesFor(agentId),
-                )
-            ) { results: Array<Any> ->
+            val agentFlow = agents.map { list ->
+                list.firstOrNull { it.id == agentId }
+            }
+            val flow = combine(
+                agentFlow,
+                messagesFor(agentId),
+                diaryFor(agentId),
+                tasksFor(agentId),
+            ) { agent, messages, diary, tasks ->
+                AgentScreenPartialState(agent, messages, diary, tasks)
+            }.combine(buildsFor(agentId)) { state, builds ->
+                state.copy(builds = builds)
+            }.combine(memoriesFor(agentId)) { state, memories ->
                 AgentScreenState(
-                    results[0] as AgentEntity?,
-                    results[1] as List<MessageEntity>,
-                    results[2] as List<DiaryEntryEntity>,
-                    results[3] as List<TaskEntity>,
-                    results[4] as List<BuildEntity>,
-                    results[5] as List<MemoryEntity>,
+                    state.agent, state.messages, state.diary,
+                    state.tasks, state.builds, memories,
                 )
             }.distinctUntilChanged()
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
+                .stateIn(
+                    viewModelScope,
+                    SharingStarted.WhileSubscribed(5_000),
+                    AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
+                )
             agentScreenStates.value = agentScreenStates.value + (agentId to flow)
             flow
         }
