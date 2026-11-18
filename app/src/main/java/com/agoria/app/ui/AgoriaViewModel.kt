@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mutableStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -188,7 +189,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList()))
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
-    private val agentScreenStates = mutableStateOf<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
+    private val agentScreenStates = mutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
             val flow = combine(

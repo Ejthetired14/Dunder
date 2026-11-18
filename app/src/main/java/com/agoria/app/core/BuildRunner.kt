@@ -56,11 +56,11 @@ class BuildRunner(
         var written = 0
         val manifestFiles = JSONArray()
         _buildProgress.value = BuildProgress.WritingFiles(approval.id, 0, files.size)
-        files.forEachIndexed { index, file ->
+        for ((index, file) in files.withIndex()) {
             val path = file.path.replace('\\', '/').trimStart('/')
-            if (path.isBlank() || path.contains("..") || path.startsWith("/")) return@forEach
+            if (path.isBlank() || path.contains("..") || path.startsWith("/")) continue
             val target = File(root, path)
-            if (!target.canonicalPath.startsWith(root.canonicalPath)) return@forEach
+            if (!target.canonicalPath.startsWith(root.canonicalPath)) continue
             Files.writeText(target, file.content.take(30_000))
             written++
             manifestFiles.put(path)
