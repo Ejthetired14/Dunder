@@ -63,7 +63,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -840,8 +839,6 @@ private fun ProgressBanner(
     progress: Float = -1f,
     color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
 ) {
-    val density = LocalDensity.current
-    val strokeWidth = with(density) { 1.dp.toPx() }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -849,7 +846,7 @@ private fun ProgressBanner(
             .animateContentSize(),
         shape = MaterialTheme.shapes.medium,
         color = color.copy(alpha = 0.1f),
-        border = BorderStroke(strokeWidth, color.copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
