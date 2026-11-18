@@ -56,6 +56,7 @@ data class SettingsScreenState(
     val providers: List<com.agoria.app.data.ProviderEntity>,
     val providerTests: Map<String, ProviderTest>,
     val revenue: List<com.agoria.app.data.RevenueEntity>,
+    val connectors: List<com.agoria.app.data.ConnectorEntity>,
 )
 
 // Combined state for AgentScreen to reduce Flow collections
@@ -195,9 +196,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         providers,
         providerTests,
         revenue,
-    ) { s, p, t, r ->
-        SettingsScreenState(s, p, t, r)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList()))
+        connectors,
+    ) { s, p, t, r, c ->
+        SettingsScreenState(s, p, t, r, c)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList(), emptyList()))
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())

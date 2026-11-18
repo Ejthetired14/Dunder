@@ -557,15 +557,15 @@ class Repository(
             // Import settings
             if (json.has("settings")) {
                 val settingsJson = json.getJSONObject("settings")
-                val s = settings()
-                val updated = s.copy(
-                    officeName = settingsJson.optString("officeName", s.officeName),
-                    userName = settingsJson.optString("userName", s.userName),
-                    autonomyEnabled = settingsJson.optBoolean("autonomyEnabled", s.autonomyEnabled),
-                    tickIntervalSeconds = settingsJson.optInt("tickIntervalSeconds", s.tickIntervalSeconds),
-                    agentCooldownSeconds = settingsJson.optInt("agentCooldownSeconds", s.agentCooldownSeconds),
-                )
-                updateSettings(updated)
+                updateSettings { s ->
+                    s.copy(
+                        officeName = settingsJson.optString("officeName", s.officeName),
+                        userName = settingsJson.optString("userName", s.userName),
+                        autonomyEnabled = settingsJson.optBoolean("autonomyEnabled", s.autonomyEnabled),
+                        tickIntervalSeconds = settingsJson.optInt("tickIntervalSeconds", s.tickIntervalSeconds),
+                        agentCooldownSeconds = settingsJson.optInt("agentCooldownSeconds", s.agentCooldownSeconds),
+                    )
+                }
             }
 
             // Import agents

@@ -49,7 +49,7 @@ class AgoriaApplication : Application() {
             repo = repository,
             llm = llm,
             buildRunner = buildRunner,
-            connectorExecutor = connectorExecutor,
+            connectorExecutorInstance = connectorExecutor,
             context = this,
             scope = appScope,
         )
