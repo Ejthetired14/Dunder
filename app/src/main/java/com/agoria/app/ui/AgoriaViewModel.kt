@@ -11,7 +11,9 @@ import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.data.MessageEntity
+import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.SettingsEntity
+import com.agoria.app.data.TaskEntity
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
