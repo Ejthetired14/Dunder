@@ -25,7 +25,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -145,7 +148,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         val pendingApprovals: List<ApprovalEntity>,
         val settings: SettingsEntity?,
         val runtimeRunning: Boolean,
+        val runtimeTicking: Boolean,
         val currentAgentName: String?,
+        val lastSummary: String?,
+        val lastLog: String?,
     )
 
     val homeScreenState = combine(
@@ -161,10 +167,13 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
             pendingApprovals = pending,
             settings = settings,
             runtimeRunning = runtime.running,
+            runtimeTicking = runtime.ticking,
             currentAgentName = runtime.currentAgentName,
+            lastSummary = runtime.lastSummary,
+            lastLog = runtime.log.lastOrNull()?.message,
         )
     }.distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeScreenState(emptyList(), emptyList(), emptyList(), null, false, null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeScreenState(emptyList(), emptyList(), emptyList(), null, false, false, null, null, null))
 
     data class SettingsScreenState(
         val settings: SettingsEntity?,

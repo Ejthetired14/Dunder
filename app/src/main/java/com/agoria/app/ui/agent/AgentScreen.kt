@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -63,7 +64,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agoria.app.core.BuildRunner
+import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.DiaryEntryEntity
@@ -633,7 +634,7 @@ private fun BuildsTab(
     builds: List<BuildEntity>,
     onShare: (BuildEntity) -> Unit,
     onSave: (BuildEntity) -> Unit,
-    buildProgress: com.agoria.app.core.BuildRunner.BuildProgress?,
+    buildProgress: BuildProgress?,
     hasMore: Boolean,
     isLoading: Boolean,
     onLoadMore: () -> Unit,
@@ -656,17 +657,17 @@ private fun BuildsTab(
                         Spacer(Modifier.width(12.dp))
                         Text(
                             text = when (buildProgress) {
-                                is com.agoria.app.core.BuildRunner.BuildProgress.Generating -> buildProgress.stage
-                                is com.agoria.app.core.BuildRunner.BuildProgress.WritingFiles -> "Writing files... ${buildProgress.written}/${buildProgress.total}"
-                                is com.agoria.app.core.BuildRunner.BuildProgress.Zipping -> "Creating ZIP... ${(buildProgress.progress * 100).roundToInt()}%"
-                                com.agoria.app.core.BuildRunner.BuildProgress.Done -> "Build complete!"
-                                is com.agoria.app.core.BuildRunner.BuildProgress.Error -> "Error: ${buildProgress.message}"
+                                is BuildProgress.Generating -> buildProgress.stage
+                                is BuildProgress.WritingFiles -> "Writing files... ${buildProgress.written}/${buildProgress.total}"
+                                is BuildProgress.Zipping -> "Creating ZIP... ${(buildProgress.progress * 100).roundToInt()}%"
+                                BuildProgress.Done -> "Build complete!"
+                                is BuildProgress.Error -> "Error: ${buildProgress.message}"
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                     }
-                    if (buildProgress is com.agoria.app.core.BuildRunner.BuildProgress.WritingFiles) {
+                    if (buildProgress is BuildProgress.WritingFiles) {
                         androidx.compose.material3.LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             progress = buildProgress.total.toFloat().takeIf { it > 0 }?.let { buildProgress.written / it } ?: 0f,

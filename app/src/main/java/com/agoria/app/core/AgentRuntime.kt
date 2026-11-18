@@ -21,7 +21,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import com.agoria.app.core.BuildRunner.BuildProgress
+import com.agoria.app.core.BuildProgress
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random

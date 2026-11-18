@@ -96,7 +96,11 @@ fun HomeScreen(
     val latestDiary = state.latestDiary
     val agents = state.agents
     val pending = state.pendingApprovals
-    val runtime = state
+    val runtimeRunning = state.runtimeRunning
+    val runtimeTicking = state.runtimeTicking
+    val currentAgentName = state.currentAgentName
+    val lastSummary = state.lastSummary
+    val lastLog = state.lastLog
 
     Scaffold(
         topBar = {
@@ -105,7 +109,7 @@ fun HomeScreen(
                     Column {
                         Text(officeName, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            text = if (runtime.running) "The office is awake" else "The office is resting",
+                            text = if (runtimeRunning) "The office is awake" else "The office is resting",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -136,8 +140,8 @@ fun HomeScreen(
                     officeName = officeName,
                     userName = userName,
                     autonomyEnabled = autonomyEnabled,
-                    running = runtime.running,
-                    currentAgent = runtime.currentAgentName,
+                    running = runtimeRunning,
+                    currentAgent = currentAgentName,
                     onToggle = { enabled ->
                         viewModel.setAutonomy(enabled)
                         if (enabled && Build.VERSION.SDK_INT >= 33 &&
@@ -199,11 +203,11 @@ fun HomeScreen(
 
             item {
                 RuntimeCard(
-                    running = runtime.running,
-                    ticking = runtime.ticking,
-                    currentAgent = runtime.currentAgentName,
-                    lastSummary = runtime.lastSummary,
-                    lastLog = runtime.log.lastOrNull()?.message,
+                    running = runtimeRunning,
+                    ticking = runtimeTicking,
+                    currentAgent = currentAgentName,
+                    lastSummary = lastSummary,
+                    lastLog = lastLog,
                     onRunNow = { viewModel.runNow() },
                     onNudge = { viewModel.nudgeAll() },
                 )
@@ -240,7 +244,7 @@ fun HomeScreen(
                         items(agents, key = { it.id }) { agent ->
                             AgentCard(
                                 agent = agent,
-                                latestDiary = diary.firstOrNull { it.agentId == agent.id }?.content,
+                                latestDiary = latestDiary.firstOrNull { it.agentId == agent.id }?.content,
                                 onClick = { onOpenAgent(agent.id) },
                                 modifier = Modifier.width(280.dp),
                             )
