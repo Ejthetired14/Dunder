@@ -657,4 +657,13 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         app.updateManager.downloadAndInstall(release, onProgress, onComplete)
     }
+
+    suspend fun executeConnector(
+        connectorId: String,
+        agentId: String?,
+        action: String,
+        args: org.json.JSONObject,
+    ): com.agoria.app.core.ConnectorExecutor.ConnectorResult {
+        return app.runtime.connectorExecutor.execute(connectorId, agentId, action, args)
+    }
 }

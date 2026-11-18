@@ -140,11 +140,11 @@ fun SettingsScreen(
         viewModel.exportData { file ->
             val content = com.agoria.app.util.Files.readText(file)
             viewModel.appScope.launch {
-                val result = viewModel.runtime.connectorExecutor.execute(
-                    "gdrive",
-                    "system",
-                    "upload_backup",
-                    org.json.JSONObject().apply {
+                val result = viewModel.executeConnector(
+                    connectorId = "gdrive",
+                    agentId = "system",
+                    action = "upload_backup",
+                    args = org.json.JSONObject().apply {
                         put("fileName", file.name)
                         put("content", content)
                     },
@@ -157,11 +157,11 @@ fun SettingsScreen(
     // Restore from Google Drive
     fun restoreFromGoogleDrive() {
         viewModel.appScope.launch {
-            val listResult = viewModel.runtime.connectorExecutor.execute(
-                "gdrive",
-                "system",
-                "list_backups",
-                org.json.JSONObject().put("limit", 1),
+            val listResult = viewModel.executeConnector(
+                connectorId = "gdrive",
+                agentId = "system",
+                action = "list_backups",
+                args = org.json.JSONObject().put("limit", 1),
             )
             if (listResult.ok) {
                 try {
@@ -170,11 +170,11 @@ fun SettingsScreen(
                     if (files.length() > 0) {
                         val latest = files.getJSONObject(0)
                         val fileName = latest.getString("name")
-                        val downloadResult = viewModel.runtime.connectorExecutor.execute(
-                            "gdrive",
-                            "system",
-                            "download_backup",
-                            org.json.JSONObject().put("fileName", fileName),
+                        val downloadResult = viewModel.executeConnector(
+                            connectorId = "gdrive",
+                            agentId = "system",
+                            action = "download_backup",
+                            args = org.json.JSONObject().put("fileName", fileName),
                         )
                         if (downloadResult.ok) {
                             val downloadJson = org.json.JSONObject(downloadResult.summary)

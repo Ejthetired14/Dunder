@@ -574,17 +574,22 @@ class Repository(
                 for (i in 0 until agentsArray.length()) {
                     val a = agentsArray.getJSONObject(i)
                     val existing = agent(a.getString("id"))
+                    val now = Time.now()
                     val agentEntity = com.agoria.app.data.AgentEntity(
                         id = a.getString("id"),
                         name = a.getString("name"),
                         role = a.getString("role"),
                         persona = a.optString("persona", ""),
                         goal = a.optString("goal", ""),
+                        avatarIndex = existing?.avatarIndex ?: 0,
                         status = a.optString("status", "idle"),
                         autonomy = a.optBoolean("autonomy", true),
                         memory = a.optString("memory", ""),
-                        createdAt = a.optLong("createdAt", Time.now()),
-                        avatarIndex = existing?.avatarIndex ?: 0,
+                        lastTickAt = 0L,
+                        failureCount = 0,
+                        lastError = null,
+                        createdAt = a.optLong("createdAt", now),
+                        updatedAt = now,
                     )
                     upsertAgent(agentEntity)
                 }
