@@ -199,22 +199,24 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
     fun agentScreenState(agentId: String): kotlinx.coroutines.flow.StateFlow<AgentScreenState> = agentScreenStates.value[agentId]
         ?: run {
-            val flow = combine<
-                AgentEntity?,
-                List<MessageEntity>,
-                List<DiaryEntryEntity>,
-                List<TaskEntity>,
-                List<BuildEntity>,
-                List<MemoryEntity>
-            >(
-                agents.map { it.firstOrNull { it.id == agentId } },
-                messagesFor(agentId),
-                diaryFor(agentId),
-                tasksFor(agentId),
-                buildsFor(agentId),
-                memoriesFor(agentId),
-            ) { a, m, d, t, b, mem ->
-                AgentScreenState(a, m, d, t, b, mem)
+            val flow = combine(
+                arrayOf(
+                    agents.map { it.firstOrNull { it.id == agentId } },
+                    messagesFor(agentId),
+                    diaryFor(agentId),
+                    tasksFor(agentId),
+                    buildsFor(agentId),
+                    memoriesFor(agentId),
+                )
+            ) { results ->
+                AgentScreenState(
+                    results[0] as AgentEntity?,
+                    results[1] as List<MessageEntity>,
+                    results[2] as List<DiaryEntryEntity>,
+                    results[3] as List<TaskEntity>,
+                    results[4] as List<BuildEntity>,
+                    results[5] as List<MemoryEntity>,
+                )
             }.distinctUntilChanged()
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
             agentScreenStates.value = agentScreenStates.value + (agentId to flow)
