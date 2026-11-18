@@ -2,6 +2,7 @@ package com.agoria.app.ui.office
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,20 +24,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.sp
 import com.agoria.app.R
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.components.statusColor
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
 import kotlin.random.Random
 
 private const val WORLD_WIDTH = 1000f
@@ -64,8 +58,8 @@ private class Walker(
 )
 
 /**
- * A live top-down office. Agents walk between waypoints, face the direction they
- * are moving, and animate through the three walk frames from office_sprites.png.
+ * A live top-down office. The background is drawn once; only the agents layer
+ * redraws, at ~30fps, so this stays usable on low-end phones.
  */
 @Composable
 fun OfficeScene(
@@ -75,14 +69,7 @@ fun OfficeScene(
     modifier: Modifier = Modifier,
 ) {
     val sprite = ImageBitmap.imageResource(R.drawable.office_sprites)
-    val thumbnail = ImageBitmap.imageResource(R.drawable.office_thumbnail)
-    val tileset = ImageBitmap.imageResource(R.drawable.office_tileset)
-    val textMeasurer = rememberTextMeasurer()
-
-    val agentsState = rememberUpdatedState(agents)
-    val autonomyState = rememberUpdatedState(autonomyEnabled)
     val walkers = remember { mutableStateMapOf<String, Walker>() }
-    var frame by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(agents.map { it.id }) {
         val ids = agents.map { it.id }.toSet()
@@ -104,8 +91,63 @@ fun OfficeScene(
         }
     }
 
+    Box(modifier) {
+        OfficeBackground(
+            modifier = Modifier.matchParentSize(),
+        )
+        OfficeActors(
+            agents = agents,
+            autonomyEnabled = autonomyEnabled,
+            walkers = walkers,
+            sprite = sprite,
+            onOpenAgent = onOpenAgent,
+            modifier = Modifier.matchParentSize(),
+        )
+    }
+}
+
+/** Static layer: floor, walls, desks, plants, etc. Drawn once. */
+@Composable
+private fun OfficeBackground(
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        val scale = size.width / WORLD_WIDTH
+        val worldHeight = size.height / scale
+        drawRect(color = Color(0xFF0D1117), size = size)
+        withTransform({ scale(scale, scale, pivot = Offset.Zero) }) {
+            safeDraw { drawOffice(worldHeight) }
+        }
+    }
+}
+
+/** A decorative draw failure should not take down the whole app. */
+private inline fun DrawScope.safeDraw(crossinline block: DrawScope.() -> Unit) {
+    try {
+        block()
+    } catch (e: Exception) {
+        android.util.Log.w("OfficeScene", "Office draw failed", e)
+    }
+}
+
+/** Animated layer: only agents and labels. */
+@Composable
+private fun OfficeActors(
+    agents: List<AgentEntity>,
+    autonomyEnabled: Boolean,
+    walkers: Map<String, Walker>,
+    sprite: ImageBitmap,
+    onOpenAgent: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val agentsState = rememberUpdatedState(agents)
+    val autonomyState = rememberUpdatedState(autonomyEnabled)
+    var frame by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(Unit) {
         var last = System.currentTimeMillis()
+        var lastDraw = 0L
         while (true) {
             withFrameMillis { now ->
                 val dt = ((now - last).coerceAtMost(64L)) / 1000f
@@ -169,7 +211,12 @@ fun OfficeScene(
                         0
                     }
                 }
-                frame++
+
+                // 30fps is plenty for pixel-art walking and much lighter on low-end phones.
+                if (now - lastDraw >= 33L) {
+                    lastDraw = now
+                    frame++
+                }
             }
         }
     }
@@ -192,46 +239,21 @@ fun OfficeScene(
             }
         },
     ) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val scale = size.width / WORLD_WIDTH
         val worldHeight = size.height / scale
 
-        drawRect(color = Color(0xFF0D1117), size = size)
-
-        withTransform({ scale(scale, scale, pivot = Offset.Zero) }) {
-            drawOffice(tileset, thumbnail, worldHeight, tick)
-
-            agents.sortedBy { walkers[it.id]?.y ?: 0f }.forEach { agent ->
-                val walker = walkers[agent.id] ?: return@forEach
-                drawAgent(agent, walker, sprite, worldHeight)
-            }
-        }
-
-        // Labels are drawn in screen space so they stay readable at any size.
-        agents.forEach { agent ->
+        agents.sortedBy { walkers[it.id]?.y ?: 0f }.forEach { agent ->
             val walker = walkers[agent.id] ?: return@forEach
-            drawAgentLabel(agent, walker, textMeasurer)
+            safeDraw { drawAgent(agent, walker, sprite, worldHeight, tick) }
         }
     }
 }
 
-private fun DrawScope.drawOffice(
-    tileset: ImageBitmap,
-    thumbnail: ImageBitmap,
-    worldHeight: Float,
-    tick: Int,
-) {
+private fun DrawScope.drawOffice(worldHeight: Float) {
     // Floor
     drawRect(color = Color(0xFF2B2118), size = Size(WORLD_WIDTH, worldHeight))
-    drawImage(
-        image = tileset,
-        srcOffset = IntOffset.Zero,
-        srcSize = IntSize(tileset.width, tileset.height),
-        dstOffset = IntOffset.Zero,
-        dstSize = IntSize(WORLD_WIDTH.roundToInt(), worldHeight.roundToInt()),
-        alpha = 0.13f,
-        filterQuality = FilterQuality.Low,
-    )
-    drawRect(color = Color(0xFF17120E).copy(alpha = 0.48f), size = Size(WORLD_WIDTH, worldHeight))
+    drawRect(color = Color(0xFF17120E).copy(alpha = 0.35f), size = Size(WORLD_WIDTH, worldHeight))
 
     // Floorboards
     var y = 80f
@@ -291,16 +313,13 @@ private fun DrawScope.drawOffice(
         drawRect(color = Color(0xFF2A3647), topLeft = Offset(wx + 98f, 14f), size = Size(4f, 50f))
     }
 
-    // Framed office thumbnail
+    // Framed poster (drawn, not a bitmap)
     drawRect(color = Color(0xFF0A0D13), topLeft = Offset(800f, 10f), size = Size(160f, 70f))
-    drawImage(
-        image = thumbnail,
-        srcOffset = IntOffset.Zero,
-        srcSize = IntSize(thumbnail.width, thumbnail.height),
-        dstOffset = IntOffset(804, 14),
-        dstSize = IntSize(152, 62),
-        filterQuality = FilterQuality.Low,
-    )
+    drawRect(color = Color(0xFF2C3E50), topLeft = Offset(805f, 15f), size = Size(150f, 60f))
+    drawCircle(color = Color(0xFFF2B84B), radius = 9f, center = Offset(925f, 32f))
+    drawRect(color = Color(0xFF1B2838), topLeft = Offset(805f, 52f), size = Size(150f, 23f))
+    drawCircle(color = Color(0xFF3D5A78), radius = 26f, center = Offset(835f, 72f))
+    drawCircle(color = Color(0xFF2F7D4F), radius = 20f, center = Offset(865f, 74f))
     drawRect(
         color = Color(0xFF6B4A2F),
         topLeft = Offset(800f, 10f),
@@ -312,13 +331,7 @@ private fun DrawScope.drawOffice(
     drawCircle(color = Color(0xFFE8E2D4), radius = 18f, center = Offset(500f, 42f))
     drawCircle(color = Color(0xFF1A1A1A), radius = 15f, center = Offset(500f, 42f))
     drawLine(color = Color.White, start = Offset(500f, 42f), end = Offset(500f, 32f), strokeWidth = 2f)
-    val secondAngle = (tick % 60) * (PI.toFloat() / 30f)
-    drawLine(
-        color = Color(0xFFF2B84B),
-        start = Offset(500f, 42f),
-        end = Offset(500f + sin(secondAngle) * 12f, 42f - cos(secondAngle) * 12f),
-        strokeWidth = 1.5f,
-    )
+    drawLine(color = Color.White, start = Offset(500f, 42f), end = Offset(508f, 45f), strokeWidth = 2f)
 
     // Rug
     val rugTop = worldHeight * 0.18f
@@ -461,6 +474,7 @@ private fun DrawScope.drawAgent(
     walker: Walker,
     sprite: ImageBitmap,
     worldHeight: Float,
+    tick: Int,
 ) {
     val px = walker.x * WORLD_WIDTH
     val py = walker.y * worldHeight
@@ -504,35 +518,10 @@ private fun DrawScope.drawAgent(
         drawRect(color = Color(0xFF1A1205), topLeft = Offset(px + 21f, py - 67f), size = Size(2f, 8f))
         drawCircle(color = Color(0xFF1A1205), radius = 1.5f, center = Offset(px + 22f, py - 56f))
     } else if (agent.status == "thinking") {
-        val alpha = 0.45f + 0.35f * (walker.animFrame / 2f)
+        val pulse = ((tick + (walker.phase * 10f).toInt()) % 30) / 30f
+        val alpha = 0.35f + 0.45f * pulse
         drawCircle(color = Color.White.copy(alpha = alpha), radius = 3f, center = Offset(px - 6f, py - 58f))
         drawCircle(color = Color.White.copy(alpha = alpha), radius = 2.3f, center = Offset(px + 2f, py - 62f))
         drawCircle(color = Color.White.copy(alpha = alpha), radius = 1.7f, center = Offset(px + 9f, py - 65f))
     }
-}
-
-private fun DrawScope.drawAgentLabel(
-    agent: AgentEntity,
-    walker: Walker,
-    textMeasurer: androidx.compose.ui.text.TextMeasurer,
-) {
-    val sx = walker.x * size.width
-    val sy = walker.y * size.height
-    val scale = size.width / WORLD_WIDTH
-    val style = TextStyle(color = Color.White, fontSize = 11.sp)
-    val layout = textMeasurer.measure(agent.name, style)
-    val left = sx - layout.size.width / 2f
-    val top = sy - 58f * scale - layout.size.height
-    drawRoundRect(
-        color = Color(0xCC11151D),
-        topLeft = Offset(left - 5f, top - 2f),
-        size = Size(layout.size.width.toFloat() + 10f, layout.size.height.toFloat() + 4f),
-        cornerRadius = CornerRadius(5f, 5f),
-    )
-    drawText(
-        textMeasurer = textMeasurer,
-        text = agent.name,
-        topLeft = Offset(left, top),
-        style = style,
-    )
 }
