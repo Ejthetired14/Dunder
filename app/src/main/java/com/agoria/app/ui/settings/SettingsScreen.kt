@@ -71,7 +71,7 @@ import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.AgoriaViewModel.ProviderTest
+import com.agoria.app.ui.ProviderTest
 import com.agoria.app.util.Files
 import kotlinx.coroutines.launch
 
@@ -296,18 +296,22 @@ fun SettingsScreen(
                 Text("Agent share: ${formatCents(agentRevenueCents)}  |  Your share: ${formatCents(userRevenueCents)}", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(8.dp))
                 Text("Agents", style = MaterialTheme.typography.labelLarge)
-                agentBreakdown.forEach { (agentId, amount) ->
-                    RevenueRow(agentName = agentId, amountCents = amount)
+                Column {
+                    agentBreakdown.entries.forEach { (agentId, amount) ->
+                        RevenueRow(agentName = agentId, amountCents = amount)
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Recent events", style = MaterialTheme.typography.labelLarge)
-                recentEvents.forEach { event ->
-                    RevenueEventRow(
-                        agentName = event.agentId,
-                        source = event.source,
-                        amountCents = event.amountCents,
-                        timestamp = event.createdAt,
-                    )
+                Column {
+                    recentEvents.forEach { event ->
+                        RevenueEventRow(
+                            agentName = event.agentId,
+                            source = event.source,
+                            amountCents = event.amountCents,
+                            timestamp = event.createdAt,
+                        )
+                    }
                 }
             }
 
@@ -828,9 +832,9 @@ internal fun rememberCurrentVersion(context: Context): Pair<String, Int> {
     val info = try {
         pm.getPackageInfo(context.packageName, 0)
     } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-        return "1.0.0" to 1
+        return Pair("1.0.0", 1)
     }
-    return info.versionName ?: "1.0.0" to info.versionCode
+    return Pair(info.versionName ?: "1.0.0", info.versionCode)
 }
 
 enum class UpdateState {
