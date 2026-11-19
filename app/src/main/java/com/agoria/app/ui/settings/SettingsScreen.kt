@@ -297,14 +297,14 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("Agents", style = MaterialTheme.typography.labelLarge)
                 Column {
-                    agentBreakdown.entries.forEach { (agentId, amount) ->
-                        RevenueRow(agentName = agentId, amountCents = amount)
+                    for (entry in agentBreakdown.entries) {
+                        RevenueRow(agentName = entry.key, amountCents = entry.value)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Recent events", style = MaterialTheme.typography.labelLarge)
                 Column {
-                    recentEvents.forEach { event ->
+                    for (event in recentEvents) {
                         RevenueEventRow(
                             agentName = event.agentId,
                             source = event.source,
@@ -765,7 +765,8 @@ internal fun ProviderRow(
                 ) {
                     Button(onClick = onTest) { Text("Test") }
                     if (test != null) {
-                        Text(if (test.ok) "✓ OK" else "✗ ${test.message}", style = MaterialTheme.typography.bodySmall, color = if (test.ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                        val isOk = test.ok == true
+                        Text(if (isOk) "✓ OK" else "✗ ${test.message}", style = MaterialTheme.typography.bodySmall, color = if (isOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                     }
                 }
             }
