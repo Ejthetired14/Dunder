@@ -60,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -267,7 +268,7 @@ fun SettingsScreen(
                         onClick = {
                             val s = state.settings
                             if (s != null) {
-                                viewModel.saveSettings(s.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit))
+                                viewModel.updateSettings { it.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit) }
                             }
                         },
                     ) { Text("Save Autonomy Settings") }
