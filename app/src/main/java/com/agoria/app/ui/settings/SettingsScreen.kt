@@ -56,24 +56,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
 import com.agoria.app.AgoriaApplication
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.ui.ProviderTest
 import com.agoria.app.util.Files
 import kotlinx.coroutines.launch
@@ -85,7 +83,12 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val state: SettingsScreenState by viewModel.settingsScreenState.collectAsState()
+    val settings by viewModel.settings.collectAsState()
+    val providers by viewModel.providers.collectAsState()
+    val providerTests by viewModel.providerTests.collectAsState()
+    val revenueEntities by viewModel.revenue.collectAsState()
+    val connectors by viewModel.connectors.collectAsState()
+
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
@@ -121,10 +124,6 @@ fun SettingsScreen(
         }
     }
 
-    val providers = state.providers
-    val tests: Map<String, ProviderTest> = state.providerTests
-    val revenueEntities = state.revenue
-
     // Compute revenue summary
     val totalRevenueCents = remember(revenueEntities) { revenueEntities.sumOf { it.amountCents } }
     val agentRevenueCents = remember(revenueEntities) { revenueEntities.filter { it.source == "agent_share" }.sumOf { it.amountCents } }
@@ -152,13 +151,12 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(state.settings) {
-        val s = state.settings
-        if (s != null) {
-            tick = s.tickIntervalSeconds
-            cooldown = s.agentCooldownSeconds
-            agentSplit = s.agentProfitSharePercent
-            userSplit = s.userProfitSharePercent
+    LaunchedEffect(settings) {
+        settings?.let {
+            tick = it.tickIntervalSeconds
+            cooldown = it.agentCooldownSeconds
+            agentSplit = it.agentProfitSharePercent
+            userSplit = it.userProfitSharePercent
         }
     }
 
@@ -266,10 +264,7 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            val s = state.settings
-                            if (s != null) {
-                                viewModel.updateSettings { it.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit) }
-                            }
+                            settings?.let { viewModel.updateSettings { it.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit) } }
                         },
                     ) { Text("Save Autonomy Settings") }
                 }
@@ -282,7 +277,7 @@ fun SettingsScreen(
                         keyLabel = "", keyHint = "", docsUrl = "", freeNote = "",
                         models = listOf(), defaultModel = "",
                     )
-                    val test = tests[provider.id]
+                    val test = providerTests[provider.id]
                     ProviderRow(
                         provider = provider,
                         spec = spec,
