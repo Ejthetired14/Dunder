@@ -500,12 +500,10 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            viewModel.exportData { success, message ->
+                            viewModel.exportDataWithResult { success, message ->
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
-                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}",
-                                        actionLabel = if (success) "Share" else null,
-                                        onAction = if (success) { /* could share */ } else null
+                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}"
                                     )
                                 }
                             }
@@ -549,7 +547,7 @@ fun SettingsScreen(
                     }
                     Button(
                         onClick = {
-                            viewModel.exportData { success, message ->
+                            viewModel.exportDataWithResult { success, message ->
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}"
