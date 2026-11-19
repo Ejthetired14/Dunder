@@ -1,5 +1,6 @@
 package com.agoria.app.ui.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Process
@@ -65,10 +66,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agoria.app.AgoriaApplication
+import com.agoria.app.core.ProviderCatalog
+import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
-import com.agoria.app.data.ProviderSpec
-import com.agoria.app.data.ProviderTest
+import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.AgoriaViewModel.ProviderTest
 import com.agoria.app.util.Files
 import kotlinx.coroutines.launch
 
@@ -118,7 +121,18 @@ fun SettingsScreen(
     val settings = state.settings
     val providers = state.providers
     val tests = state.providerTests
-    val revenue = state.revenue
+    val revenueEntities = state.revenue
+
+    // Compute revenue summary
+    val totalRevenueCents = remember(revenueEntities) { revenueEntities.sumOf { it.amountCents } }
+    val agentRevenueCents = remember(revenueEntities) { revenueEntities.filter { it.source == "agent_share" }.sumOf { it.amountCents } }
+    val userRevenueCents = remember(revenueEntities) { revenueEntities.filter { it.source == "user_share" }.sumOf { it.amountCents } }
+    val agentBreakdown = remember(revenueEntities) {
+        revenueEntities
+            .groupBy { it.agentId }
+            .mapValues { (_, list) -> list.sumOf { it.amountCents } }
+    }
+    val recentEvents = remember(revenueEntities) { revenueEntities.sortedByDescending { it.createdAt }.take(20) }
 
     // Backup to Google Drive
     fun backupToGoogleDrive() {
@@ -257,9 +271,10 @@ fun SettingsScreen(
 
             SectionCard(title = "Providers") {
                 providers.forEach { provider ->
-                    val spec = provider.spec ?: ProviderSpec(
-                        id = provider.id, name = provider.id, type = "keyless", models = listOf(),
-                        requiresApiKey = false, requiresModel = false, extraFields = emptyMap(), defaultModel = ""
+                    val spec = provider.spec ?: ProviderCatalog.byId[provider.id] ?: ProviderSpec(
+                        id = provider.id, name = provider.id, baseUrl = "", keyRequired = false,
+                        keyLabel = "", keyHint = "", docsUrl = "", freeNote = "",
+                        models = listOf(), defaultModel = "",
                     )
                     val test = tests[provider.id]
                     ProviderRow(
@@ -277,24 +292,22 @@ fun SettingsScreen(
             }
 
             SectionCard(title = "Revenue") {
-                if (revenue != null) {
-                    Text("Total: ${formatCents(revenue.totalRevenueCents)}", style = MaterialTheme.typography.titleMedium)
-                    Text("Agent share: ${formatCents(revenue.agentRevenueCents)}  |  Your share: ${formatCents(revenue.userRevenueCents)}", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Agents", style = MaterialTheme.typography.labelLarge)
-                    revenue.agentBreakdown.forEach { (agentName, amount) ->
-                        RevenueRow(agentName = agentName, amountCents = amount)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text("Recent events", style = MaterialTheme.typography.labelLarge)
-                    revenue.events.forEach { event ->
-                        RevenueEventRow(
-                            agentName = event.agentName,
-                            source = event.source,
-                            amountCents = event.amountCents,
-                            timestamp = event.timestamp,
-                        )
-                    }
+                Text("Total: ${formatCents(totalRevenueCents)}", style = MaterialTheme.typography.titleMedium)
+                Text("Agent share: ${formatCents(agentRevenueCents)}  |  Your share: ${formatCents(userRevenueCents)}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Agents", style = MaterialTheme.typography.labelLarge)
+                agentBreakdown.forEach { (agentId, amount) ->
+                    RevenueRow(agentName = agentId, amountCents = amount)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Recent events", style = MaterialTheme.typography.labelLarge)
+                recentEvents.forEach { event ->
+                    RevenueEventRow(
+                        agentName = event.agentId,
+                        source = event.source,
+                        amountCents = event.amountCents,
+                        timestamp = event.createdAt,
+                    )
                 }
             }
 
@@ -467,7 +480,7 @@ fun SettingsScreen(
                                 updateState.value = UpdateState.Checking
                                 viewModel.checkForUpdates { info ->
                                     releaseInfo.value = info
-                                    if (info != null && viewModel.app.updateManager.isNewerRelease(info)) {
+                                    if (info != null && viewModel.isNewerRelease(info)) {
                                         updateState.value = UpdateState.UpdateAvailable
                                     } else {
                                         updateState.value = UpdateState.UpToDate
@@ -687,7 +700,7 @@ internal fun SectionCard(
 @Composable
 internal fun ProviderRow(
     provider: ProviderEntity,
-    spec: ProviderSpec?,
+    spec: ProviderSpec,
     test: ProviderTest?,
     onToggle: (Boolean) -> Unit,
     onSaveKey: (String) -> Unit,
@@ -710,34 +723,34 @@ internal fun ProviderRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(provider.name, style = MaterialTheme.typography.titleSmall)
+                Text(spec.name, style = MaterialTheme.typography.titleSmall)
                 Switch(checked = enabled, onCheckedChange = onToggle)
             }
             if (!enabled && !compact) {
                 Text("Disabled", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (enabled && !compact) {
-                if (spec?.keyRequired == true) {
+                if (spec.keyRequired) {
                     OutlinedTextField(
                         value = "",
                         onValueChange = onSaveKey,
-                        label = { Text(spec?.keyLabel ?: "API Key") },
+                        label = { Text(spec.keyLabel) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
                 }
-                if (spec?.models.isNotEmpty() == true) {
+                if (spec.models.isNotEmpty()) {
                     androidx.compose.material3.Text(
                         text = "Model: $model",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                if (spec?.needsExtra == true) {
+                if (spec.needsExtra) {
                     OutlinedTextField(
                         value = "",
                         onValueChange = onSaveExtra,
-                        label = { Text(spec?.extraLabel ?: "Extra") },
-                        placeholder = { Text(spec?.extraPlaceholder ?: "") },
+                        label = { Text(spec.extraLabel) },
+                        placeholder = { Text(spec.extraPlaceholder) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
@@ -810,7 +823,7 @@ internal fun formatCents(cents: Long): String {
 }
 
 @Composable
-internal fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> {
+internal fun rememberCurrentVersion(context: Context): Pair<String, Int> {
     val pm = context.packageManager
     val info = try {
         pm.getPackageInfo(context.packageName, 0)
