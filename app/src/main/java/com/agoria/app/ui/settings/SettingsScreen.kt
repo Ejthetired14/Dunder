@@ -120,6 +120,7 @@ fun SettingsScreen(
     var cooldown by remember { mutableStateOf(90) }
     var agentSplit by remember { mutableStateOf(50) }
     var userSplit by remember { mutableStateOf(50) }
+    var showUnknownAppsDialog by remember { mutableStateOf(false) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
@@ -790,9 +791,15 @@ fun SettingsScreen(
                                         downloadProgress.value = 0
                                         viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success, error ->
                                             downloadProgress.value = null
-                                            scope.launch {
-                                                val msg = if (success) "Install started" else (error ?: "Install failed")
-                                                snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Long)
+                                            if (success) {
+                                                scope.launch { snackbarHostState.showSnackbar("Install started", duration = SnackbarDuration.Long) }
+                                            } else {
+                                                val err = error ?: "Install failed"
+                                                if (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true)) {
+                                                    showUnknownAppsDialog = true
+                                                } else {
+                                                    scope.launch { snackbarHostState.showSnackbar(err, duration = SnackbarDuration.Long) }
+                                                }
                                             }
                                         })
                                     },
@@ -860,6 +867,28 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showReset = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showUnknownAppsDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnknownAppsDialog = false },
+            title = { Text("Permission Required") },
+            text = { Text("To install updates, Dunder needs permission to install apps from unknown sources.\n\nTap 'Open Settings' to enable this permission, then return and try the update again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                    if (intent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(intent)
+                    }
+                    showUnknownAppsDialog = false
+                }) { Text("Open Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnknownAppsDialog = false }) { Text("Cancel") }
             },
         )
     }
