@@ -119,7 +119,6 @@ fun SettingsScreen(
         }
     }
 
-    val settings = state.settings
     val providers = state.providers
     val tests: Map<String, ProviderTest> = state.providerTests
     val revenueEntities = state.revenue
@@ -151,8 +150,8 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(settings) {
-        val s = settings
+    LaunchedEffect(state.settings) {
+        val s = state.settings
         if (s != null) {
             tick = s.tickIntervalSeconds
             cooldown = s.agentCooldownSeconds
@@ -265,7 +264,7 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            val s = settings
+                            val s = state.settings
                             if (s != null) {
                                 viewModel.saveSettings(s.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit))
                             }
