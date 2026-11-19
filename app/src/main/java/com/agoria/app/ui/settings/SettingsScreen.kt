@@ -73,6 +73,7 @@ import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.ui.ProviderTest
 import com.agoria.app.util.Files
 import kotlinx.coroutines.launch
@@ -84,7 +85,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val state by viewModel.settingsScreenState.collectAsState()
+    val state: SettingsScreenState by viewModel.settingsScreenState.collectAsState()
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
