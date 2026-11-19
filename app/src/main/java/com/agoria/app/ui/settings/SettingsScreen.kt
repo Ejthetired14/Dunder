@@ -92,13 +92,13 @@ fun SettingsScreen(
     val revenueEntities: List<RevenueEntity> by viewModel.revenue.collectAsState()
     val connectors: List<ConnectorEntity> by viewModel.connectors.collectAsState()
 
-    var showReset by remember { mutableStateOf(false) }
-    var tick by remember { mutableStateOf(120) }
-    var cooldown by remember { mutableStateOf(90) }
-    var agentSplit by remember { mutableStateOf(50) }
-    var userSplit by remember { mutableStateOf(50) }
-    var showUnknownAppsDialog by remember { mutableStateOf(false) }
-    var showRestartDialog by remember { mutableStateOf(false) }
+    val showReset = remember { mutableStateOf(false) }
+    val tick = remember { mutableStateOf(120) }
+    val cooldown = remember { mutableStateOf(90) }
+    val agentSplit = remember { mutableStateOf(50) }
+    val userSplit = remember { mutableStateOf(50) }
+    val showUnknownAppsDialog = remember { mutableStateOf(false) }
+    val showRestartDialog = remember { mutableStateOf(false) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
@@ -156,10 +156,10 @@ fun SettingsScreen(
 
     LaunchedEffect(settings) {
         settings?.let {
-            tick = it.tickIntervalSeconds
-            cooldown = it.agentCooldownSeconds
-            agentSplit = it.agentProfitSharePercent
-            userSplit = it.userProfitSharePercent
+            tick.value = it.tickIntervalSeconds
+            cooldown.value = it.agentCooldownSeconds
+            agentSplit.value = it.agentProfitSharePercent
+            userSplit.value = it.userProfitSharePercent
         }
     }
 
@@ -197,8 +197,8 @@ fun SettingsScreen(
                         Text(text = "${tick}s", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
                     }
                     Slider(
-                        value = tick.toFloat(),
-                        onValueChange = { tick = it.roundToInt() },
+                        value = tick.value.toFloat(),
+                        onValueChange = { tick.value = it.roundToInt() },
                         valueRange = 10f..600f,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -216,8 +216,8 @@ fun SettingsScreen(
                         Text(text = "${cooldown}s", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
                     }
                     Slider(
-                        value = cooldown.toFloat(),
-                        onValueChange = { cooldown = it.roundToInt() },
+                        value = cooldown.value.toFloat(),
+                        onValueChange = { cooldown.value = it.roundToInt() },
                         valueRange = 5f..300f,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -238,24 +238,24 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("Agent: ${agentSplit}%", style = MaterialTheme.typography.bodyMedium)
+                            Text("Agent: ${agentSplit.value}%", style = MaterialTheme.typography.bodyMedium)
                             Slider(
-                                value = agentSplit.toFloat(),
+                                value = agentSplit.value.toFloat(),
                                 onValueChange = {
-                                    agentSplit = it.roundToInt()
-                                    userSplit = 100 - agentSplit
+                                    agentSplit.value = it.roundToInt()
+                                    userSplit.value = 100 - agentSplit.value
                                 },
                                 valueRange = 0f..100f,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                         Column(Modifier.weight(1f)) {
-                            Text("You: ${userSplit}%", style = MaterialTheme.typography.bodyMedium)
+                            Text("You: ${userSplit.value}%", style = MaterialTheme.typography.bodyMedium)
                             Slider(
-                                value = userSplit.toFloat(),
+                                value = userSplit.value.toFloat(),
                                 onValueChange = {
-                                    userSplit = it.roundToInt()
-                                    agentSplit = 100 - userSplit
+                                    userSplit.value = it.roundToInt()
+                                    agentSplit.value = 100 - userSplit.value
                                 },
                                 valueRange = 0f..100f,
                                 modifier = Modifier.fillMaxWidth(),
@@ -267,7 +267,7 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            settings?.let { viewModel.updateSettings { it.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit) } }
+                            settings?.let { viewModel.updateSettings { it.copy(tickIntervalSeconds = tick.value, agentCooldownSeconds = cooldown.value, agentProfitSharePercent = agentSplit.value, userProfitSharePercent = userSplit.value) } }
                         },
                     ) { Text("Save Autonomy Settings") }
                 }
@@ -332,7 +332,7 @@ fun SettingsScreen(
                             createExportFileLauncher.launch("agoria-export-${System.currentTimeMillis()}.json")
                         },
                     ) { Text("Export to Device") }
-                    TextButton(onClick = { showReset = true }) { Text("Reset app") }
+                    TextButton(onClick = { showReset.value = true }) { Text("Reset app") }
                 }
             }
 
@@ -538,7 +538,7 @@ fun SettingsScreen(
                                             } else {
                                                 val err = error ?: "Install failed"
                                                 if (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true)) {
-                                                    showUnknownAppsDialog = true
+                                                    showUnknownAppsDialog.value = true
                                                 } else {
                                                     scope.launch { snackbarHostState.showSnackbar(err, duration = SnackbarDuration.Long) }
                                                 }
@@ -621,26 +621,26 @@ fun SettingsScreen(
             }
 
             // Dialogs - must be inside the Column (Scaffold content)
-            if (showReset) {
+            if (showReset.value) {
                 AlertDialog(
-                    onDismissRequest = { showReset = false },
+                    onDismissRequest = { showReset.value = false },
                     title = { Text("Reset Dunder?") },
                     text = { Text("This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.") },
                     confirmButton = {
                         TextButton(onClick = {
                             viewModel.resetData()
-                            showReset = false
+                            showReset.value = false
                         }) { Text("Reset everything") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showReset = false }) { Text("Cancel") }
+                        TextButton(onClick = { showReset.value = false }) { Text("Cancel") }
                     },
                 )
             }
 
-            if (showUnknownAppsDialog) {
+            if (showUnknownAppsDialog.value) {
                 AlertDialog(
-                    onDismissRequest = { showUnknownAppsDialog = false },
+                    onDismissRequest = { showUnknownAppsDialog.value = false },
                     title = { Text("Permission Required") },
                     text = { Text("To install updates, Dunder needs permission to install apps from unknown sources.\n\nTap 'Open Settings' to enable this permission. After enabling, you MUST restart the app (swipe away from recent apps and reopen) for the change to take effect.") },
                     confirmButton = {
@@ -651,30 +651,30 @@ fun SettingsScreen(
                             if (intent.resolveActivity(context.packageManager) != null) {
                                 context.startActivity(intent)
                             }
-                            showUnknownAppsDialog = false
-                            showRestartDialog = true
+                            showUnknownAppsDialog.value = false
+                            showRestartDialog.value = true
                         }) { Text("Open Settings") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showUnknownAppsDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showUnknownAppsDialog.value = false }) { Text("Cancel") }
                     },
                 )
             }
 
-            if (showRestartDialog) {
+            if (showRestartDialog.value) {
                 AlertDialog(
-                    onDismissRequest = { showRestartDialog = false },
+                    onDismissRequest = { showRestartDialog.value = false },
                     title = { Text("Restart Required") },
                     text = { Text("Permission granted! Please restart the app now:\n1. Swipe up from bottom and hold (or tap recent apps)\n2. Swipe Dunder away to close it\n3. Reopen Dunder\n4. Try the update again") },
                     confirmButton = {
                         TextButton(onClick = {
-                            showRestartDialog = false
+                            showRestartDialog.value = false
                             Process.killProcess(Process.myPid())
                             System.exit(0)
                         }) { Text("Restart Now") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showRestartDialog = false }) { Text("Later") }
+                        TextButton(onClick = { showRestartDialog.value = false }) { Text("Later") }
                     },
                 )
             }
