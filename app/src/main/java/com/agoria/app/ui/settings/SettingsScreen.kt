@@ -697,9 +697,7 @@ internal fun ProviderRow(
     compact: Boolean = false,
 ) {
     val enabled = provider.enabled
-    val key = provider.apiKey ?: ""
-    val model = provider.selectedModel ?: ""
-    val extra = provider.extraConfig ?: ""
+    val model = provider.model ?: ""
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -719,26 +717,27 @@ internal fun ProviderRow(
                 Text("Disabled", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (enabled && !compact) {
-                if (spec?.requiresApiKey == true) {
+                if (spec?.keyRequired == true) {
                     OutlinedTextField(
-                        value = key,
+                        value = "",
                         onValueChange = onSaveKey,
-                        label = { Text("API Key") },
+                        label = { Text(spec?.keyLabel ?: "API Key") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
                 }
-                if (spec?.requiresModel == true && spec.models.isNotEmpty()) {
+                if (spec?.models.isNotEmpty() == true) {
                     androidx.compose.material3.Text(
                         text = "Model: $model",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                spec?.extraFields?.forEach { (field, hint) ->
+                if (spec?.needsExtra == true) {
                     OutlinedTextField(
-                        value = extra,
+                        value = "",
                         onValueChange = onSaveExtra,
-                        label = { Text(hint) },
+                        label = { Text(spec?.extraLabel ?: "Extra") },
+                        placeholder = { Text(spec?.extraPlaceholder ?: "") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
@@ -818,7 +817,7 @@ internal fun rememberCurrentVersion(context: android.content.Context): Pair<Stri
     } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
         return "1.0.0" to 1
     }
-    info.versionName ?: "1.0.0" to info.versionCode
+    return info.versionName ?: "1.0.0" to info.versionCode
 }
 
 enum class UpdateState {
