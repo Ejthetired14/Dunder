@@ -61,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.agoria.app.AgoriaApplication
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
+import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
@@ -83,11 +85,11 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val settings by viewModel.settings.collectAsState()
-    val providers by viewModel.providers.collectAsState()
-    val providerTests by viewModel.providerTests.collectAsState()
-    val revenueEntities by viewModel.revenue.collectAsState()
-    val connectors by viewModel.connectors.collectAsState()
+    val settings: com.agoria.app.data.SettingsEntity? by viewModel.settings.collectAsState()
+    val providers: List<ProviderEntity> by viewModel.providers.collectAsState()
+    val providerTests: Map<String, ProviderTest> by viewModel.providerTests.collectAsState()
+    val revenueEntities: List<RevenueEntity> by viewModel.revenue.collectAsState()
+    val connectors: List<ConnectorEntity> by viewModel.connectors.collectAsState()
 
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
