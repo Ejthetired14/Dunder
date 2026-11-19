@@ -112,14 +112,9 @@ class UpdateManager(
     }
 
     private fun parseVersionCode(versionName: String): Int {
-        // Convert "1.0.9" -> 1009009 or similar
+        // Convert "1.0.34" -> 34 (patch version matches build.gradle versionCode)
         val parts = versionName.split(".")
-        var code = 0
-        for ((index, part) in parts.withIndex()) {
-            val value = part.toIntOrNull() ?: 0
-            code = code * 1000 + value // 1.0.9 -> 1000009
-        }
-        return code
+        return parts.lastOrNull()?.toIntOrNull() ?: 1
     }
 
     /**
