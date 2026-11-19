@@ -29,7 +29,7 @@ class UpdateManager(
     private val scope: CoroutineScope,
     private val repoOwner: String = "Ejthetired14",
     private val repoName: String = "Dunder",
-) private constructor() {
+) {
 
     private val currentVersionName: String
         get() = try {
