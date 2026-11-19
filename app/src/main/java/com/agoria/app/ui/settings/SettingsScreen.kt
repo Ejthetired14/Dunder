@@ -57,6 +57,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,19 +86,19 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val settings: com.agoria.app.data.SettingsEntity? by viewModel.settings.collectAsState()
+    val settings: com.agoria.app.data.SettingsEntity? by viewModel.settings.collectAsStateWithLifecycle()
     val providers: List<ProviderEntity> by viewModel.providers.collectAsState()
     val providerTests: Map<String, ProviderTest> by viewModel.providerTests.collectAsState()
     val revenueEntities: List<RevenueEntity> by viewModel.revenue.collectAsState()
     val connectors: List<ConnectorEntity> by viewModel.connectors.collectAsState()
 
-    var showReset by remember { mutableStateOf(false) }
-    var tick by remember { mutableStateOf(120) }
-    var cooldown by remember { mutableStateOf(90) }
-    var agentSplit by remember { mutableStateOf(50) }
-    var userSplit by remember { mutableStateOf(50) }
-    var showUnknownAppsDialog by remember { mutableStateOf(false) }
-    var showRestartDialog by remember { mutableStateOf(false) }
+    var showReset by remember { mutableStateOf<Boolean>(false) }
+    var tick by remember { mutableStateOf<Int>(120) }
+    var cooldown by remember { mutableStateOf<Int>(90) }
+    var agentSplit by remember { mutableStateOf<Int>(50) }
+    var userSplit by remember { mutableStateOf<Int>(50) }
+    var showUnknownAppsDialog by remember { mutableStateOf<Boolean>(false) }
+    var showRestartDialog by remember { mutableStateOf<Boolean>(false) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
