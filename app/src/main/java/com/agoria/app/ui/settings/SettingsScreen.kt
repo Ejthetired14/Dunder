@@ -119,6 +119,7 @@ fun SettingsScreen(
     var stripePublishableKey by remember { mutableStateOf("") }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
+    val uiScope = rememberCoroutineScope()
 
     // File picker for import
     val pickImportFileLauncher = rememberLauncherForActivityResult(
@@ -140,7 +141,7 @@ fun SettingsScreen(
     fun backupToGoogleDrive() {
         viewModel.exportData { file ->
             val content = com.agoria.app.util.Files.readText(file)
-            viewModel.appScope.launch {
+            uiScope.launch {
                 val result = viewModel.executeConnector(
                     connectorId = "gdrive",
                     agentId = "system",
@@ -157,7 +158,7 @@ fun SettingsScreen(
 
     // Restore from Google Drive
     fun restoreFromGoogleDrive() {
-        viewModel.appScope.launch {
+        uiScope.launch {
             val listResult = viewModel.executeConnector(
                 connectorId = "gdrive",
                 agentId = "system",
@@ -558,7 +559,7 @@ fun SettingsScreen(
                         }
                     }
                     Button(
-                        onClick = { pickImportFileLauncher.launch(arrayOf("application/json")) },
+                        onClick = { pickImportFileLauncher.launch("application/json") },
                     ) { Text("Import") }
                 }
 
