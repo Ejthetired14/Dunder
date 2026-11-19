@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.suspendCoroutine
+import kotlin.Result
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -673,7 +674,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     suspend fun backupToGoogleDrive(): ConnectorResult {
         val file = suspendCoroutine<File> { cont: Continuation<File> ->
             exportData { file ->
-                cont.resume(file)
+                cont.resumeWith(Result.success(file))
             }
         }
         val content = com.agoria.app.util.Files.readText(file)
@@ -727,7 +728,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         return suspendCoroutine<ConnectorResult> { cont: Continuation<ConnectorResult> ->
             exportData { file ->
                 val result = onExport(file)
-                cont.resume(result)
+                cont.resumeWith(Result.success(result))
             }
         }
     }
@@ -735,7 +736,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun importDataSuspend(file: File) {
         suspendCoroutine<Unit> { cont: Continuation<Unit> ->
             importData(file) { _ ->
-                cont.resume(Unit)
+                cont.resumeWith(Result.success(Unit))
             }
         }
     }
