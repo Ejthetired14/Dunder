@@ -169,11 +169,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout latest-release branch
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
         with:
-          ref: latest-release
-          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create or switch to latest-release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Create branch if it doesn't exist, otherwise switch to it
+          if git show-ref --verify --quiet refs/heads/latest-release; then
+            git checkout latest-release
+          else
+            git checkout --orphan latest-release
+            git rm -rf . 2>/dev/null || true
+          fi
 
       - name: Create latest-release.json
         run: |
@@ -192,12 +203,10 @@ jobs:
 
       - name: Commit and push latest-release.json
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add latest-release.json
           if ! git diff --cached --quiet; then
             git commit -m "Update latest release to ${{ github.ref_name }}"
-            git push origin HEAD:latest-release
+            git push origin latest-release
           else
             echo "No changes to commit"
           fi
