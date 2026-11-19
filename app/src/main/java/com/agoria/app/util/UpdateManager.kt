@@ -93,20 +93,23 @@ class UpdateManager(
         val latestUrl = URL("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
         var connection = latestUrl.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 15_000
         connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
         connection.setRequestProperty("User-Agent", "Dunder-Android")
 
         try {
-            if (connection.responseCode == 200) {
+            val responseCode = connection.responseCode
+            if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
                 val json = JSONObject(response)
                 val parsed = parseReleaseJson(json)
                 if (parsed != null) return parsed
+            } else {
+                Log.w(TAG, "fetchLatestRelease: releases/latest returned $responseCode")
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "fetchLatestRelease error", e)
         } finally {
             connection.disconnect()
         }
@@ -116,16 +119,20 @@ class UpdateManager(
     }
 
     private suspend fun fetchAllReleasesAndPickBest(): ReleaseInfo? {
-        val url = URL("https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=20")
+        val url = URL("https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=30")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 15_000
         connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
         connection.setRequestProperty("User-Agent", "Dunder-Android")
 
         try {
-            if (connection.responseCode != 200) return null
+            val responseCode = connection.responseCode
+            if (responseCode != 200) {
+                Log.w(TAG, "fetchAllReleases: returned $responseCode")
+                return null
+            }
             val response = connection.inputStream.bufferedReader().readText()
             val jsonArray = JSONArray(response)
 
@@ -141,9 +148,10 @@ class UpdateManager(
                 }
             }
 
+            Log.d(TAG, "fetchAllReleasesAndPickBest: bestRelease=${bestRelease?.versionName}")
             return bestRelease
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "fetchAllReleasesAndPickBest error", e)
             return null
         } finally {
             connection.disconnect()
