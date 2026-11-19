@@ -92,13 +92,13 @@ fun SettingsScreen(
     val revenueEntities: List<RevenueEntity> by viewModel.revenue.collectAsState()
     val connectors: List<ConnectorEntity> by viewModel.connectors.collectAsState()
 
-    var showReset by remember { mutableStateOf<Boolean>(false) }
-    var tick by remember { mutableStateOf<Int>(120) }
-    var cooldown by remember { mutableStateOf<Int>(90) }
-    var agentSplit by remember { mutableStateOf<Int>(50) }
-    var userSplit by remember { mutableStateOf<Int>(50) }
-    var showUnknownAppsDialog by remember { mutableStateOf<Boolean>(false) }
-    var showRestartDialog by remember { mutableStateOf<Boolean>(false) }
+    var showReset by remember { mutableStateOf(false) }
+    var tick by remember { mutableStateOf(120) }
+    var cooldown by remember { mutableStateOf(90) }
+    var agentSplit by remember { mutableStateOf(50) }
+    var userSplit by remember { mutableStateOf(50) }
+    var showUnknownAppsDialog by remember { mutableStateOf(false) }
+    var showRestartDialog by remember { mutableStateOf(false) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
