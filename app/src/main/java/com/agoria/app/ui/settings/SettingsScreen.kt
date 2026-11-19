@@ -105,7 +105,6 @@ fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> 
             "1.0.0" to 1
         }
     }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -915,7 +914,6 @@ fun SettingsScreen(
         )
     }
 }
-}
 
 @Composable
 private fun SectionCard(
@@ -935,7 +933,6 @@ private fun SectionCard(
             content()
         }
     }
-}
 
 @Composable
 private fun ProviderRow(
@@ -1100,7 +1097,6 @@ private fun ProviderRow(
             }
         }
     }
-}
 
 private fun formatSeconds(seconds: Int): String {
     return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
@@ -1139,7 +1135,6 @@ private fun SummaryCard(
             Text(value, style = MaterialTheme.typography.titleLarge, color = color)
         }
     }
-}
 
 @Composable
 private fun RevenueRow(
