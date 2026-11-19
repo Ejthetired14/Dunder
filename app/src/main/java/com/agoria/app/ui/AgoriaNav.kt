@@ -44,7 +44,7 @@ private val topDestinations = listOf(
     TopDestination("office", "Office", Icons.Default.Business),
     TopDestination("diary", "Diary", Icons.Default.MenuBook),
     TopDestination("approvals", "Approvals", Icons.Default.FactCheck),
-    TopDestination("connectors", "Connectors", Icons.Default.Hub),
+    TopDestination("connectors", "Connect", Icons.Default.Hub),
 )
 
 @Composable

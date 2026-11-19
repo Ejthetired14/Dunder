@@ -91,7 +91,7 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
         topBar = {
             TopAppBar(
                 title = { 
-                    Text("Connectors", style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                    Text("Connect", style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
                 },
             )
         },
