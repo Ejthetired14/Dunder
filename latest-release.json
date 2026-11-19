@@ -1,0 +1,9 @@
+{
+  "versionName": "1.0.45",
+  "versionCode": 45,
+  "releaseUrl": "https://github.com/Ejthetired14/Dunder/releases/tag/v1.0.46",
+  "releaseNotes": "Debug and release APKs for v1.0.46",
+  "apkUrl": "https://github.com/Ejthetired14/Dunder/releases/download/v1.0.46/app-release-unsigned.apk",
+  "tagName": "v1.0.46",
+  "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+}
