@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -719,7 +720,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun exportDataSuspend(onExport: (File) -> ConnectorResult): ConnectorResult {
-        return suspendCancellableCoroutine { cont ->
+        return suspendCancellableCoroutine<ConnectorResult> { cont ->
             exportData { file ->
                 val result = onExport(file)
                 cont.resume(result)
@@ -729,7 +730,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun importDataSuspend(file: File) {
         suspendCancellableCoroutine<Unit> { cont ->
-            importData(file) { success ->
+            importData(file) { _ ->
                 cont.resume(Unit)
             }
         }
