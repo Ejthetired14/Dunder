@@ -92,7 +92,9 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
             TopAppBar(
                 title = {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 0.dp, end = 16.dp),
                         horizontalAlignment = Alignment.Start,
                     ) {
                         Text("Connectors", style = MaterialTheme.typography.titleLarge)
@@ -103,6 +105,7 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                         )
                     }
                 },
+                centerTitle = false,
             )
         },
     ) { padding ->
