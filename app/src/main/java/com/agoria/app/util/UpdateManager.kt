@@ -204,6 +204,12 @@ class UpdateManager(
 
     private fun installApk(apkFile: File): Boolean {
         return try {
+            Log.d(TAG, "installApk: file=${apkFile.absolutePath}, exists=${apkFile.exists()}, length=${apkFile.length()}")
+            if (!apkFile.exists() || apkFile.length() == 0L) {
+                Log.e(TAG, "installApk: APK file missing or empty")
+                return false
+            }
+
             val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 FileProvider.getUriForFile(
                     context,
@@ -213,6 +219,7 @@ class UpdateManager(
             } else {
                 Uri.fromFile(apkFile)
             }
+            Log.d(TAG, "installApk: uri=$uri")
 
             val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 data = uri
@@ -222,7 +229,9 @@ class UpdateManager(
             }
 
             // Check if we can start the activity
-            if (intent.resolveActivity(context.packageManager) != null) {
+            val resolveInfo = intent.resolveActivity(context.packageManager)
+            Log.d(TAG, "installApk: resolveActivity=$resolveInfo")
+            if (resolveInfo != null) {
                 if (context is Activity) {
                     (context as Activity).startActivity(intent)
                 } else {
@@ -231,10 +240,11 @@ class UpdateManager(
                 }
                 true
             } else {
+                Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "installApk error", e)
             false
         }
     }
