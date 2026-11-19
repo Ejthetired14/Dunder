@@ -45,6 +45,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -789,8 +790,9 @@ fun SettingsScreen(
                                         downloadProgress.value = 0
                                         viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success, error ->
                                             downloadProgress.value = null
-                                            if (!success) {
-                                                scope.launch { snackbarHostState.showSnackbar(error ?: "Install failed") }
+                                            scope.launch {
+                                                val msg = if (success) "Install started" else (error ?: "Install failed")
+                                                snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Long)
                                             }
                                         })
                                     },
