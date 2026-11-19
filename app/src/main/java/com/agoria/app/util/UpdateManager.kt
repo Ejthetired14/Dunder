@@ -67,7 +67,34 @@ class UpdateManager(
     }
 
     private suspend fun fetchLatestRelease(): ReleaseInfo? {
-        val url = URL("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
+        // Try "latest" first, but fallback to fetching all releases and picking highest version
+        val latestUrl = URL("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
+        var connection = latestUrl.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 10_000
+        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+        connection.setRequestProperty("User-Agent", "Dunder-Android")
+
+        try {
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val json = JSONObject(response)
+                val parsed = parseReleaseJson(json)
+                if (parsed != null) return parsed
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            connection.disconnect()
+        }
+
+        // Fallback: fetch all releases and pick the one with highest versionCode that has an APK
+        return fetchAllReleasesAndPickBest()
+    }
+
+    private suspend fun fetchAllReleasesAndPickBest(): ReleaseInfo? {
+        val url = URL("https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=20")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 10_000
@@ -78,19 +105,40 @@ class UpdateManager(
         try {
             if (connection.responseCode != 200) return null
             val response = connection.inputStream.bufferedReader().readText()
-            val json = JSONObject(response)
+            val jsonArray = JSONArray(response)
 
-            val tagName = json.optString("tag_name", "")
-            val releaseNotes = json.optString("body", "No release notes.")
-            val publishedAt = json.optString("published_at", "")
+            var bestRelease: ReleaseInfo? = null
+            var bestVersionCode = currentVersionCode
 
-            // Parse version from tag (e.g., "v1.0.9" -> 1.0.9)
-            val versionName = tagName.removePrefix("v")
-            val versionCode = parseVersionCode(versionName)
+            for (i in 0 until jsonArray.length()) {
+                val json = jsonArray.getJSONObject(i)
+                val parsed = parseReleaseJson(json)
+                if (parsed != null && parsed.versionCode > bestVersionCode) {
+                    bestRelease = parsed
+                    bestVersionCode = parsed.versionCode
+                }
+            }
 
-            // Find APK asset
-            val assets = json.getJSONArray("assets")
-            var apkUrl = ""
+            return bestRelease
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun parseReleaseJson(json: JSONObject): ReleaseInfo? {
+        val tagName = json.optString("tag_name", "")
+        val releaseNotes = json.optString("body", "No release notes.")
+        val publishedAt = json.optString("published_at", "")
+
+        val versionName = tagName.removePrefix("v")
+        val versionCode = parseVersionCode(versionName)
+
+        val assets = json.optJSONArray("assets")
+        var apkUrl = ""
+        if (assets != null) {
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 val name = asset.optString("name", "")
@@ -99,16 +147,11 @@ class UpdateManager(
                     break
                 }
             }
-
-            if (apkUrl.isEmpty()) return null
-
-            return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return null
-        } finally {
-            connection.disconnect()
         }
+
+        if (apkUrl.isEmpty()) return null
+
+        return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt)
     }
 
     private fun parseVersionCode(versionName: String): Int {

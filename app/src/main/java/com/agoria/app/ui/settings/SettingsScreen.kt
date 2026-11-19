@@ -44,6 +44,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -119,6 +122,8 @@ fun SettingsScreen(
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // File picker for import
     val pickImportFileLauncher = rememberLauncherForActivityResult(
@@ -126,7 +131,7 @@ fun SettingsScreen(
     ) { uri: Uri? ->
         uri?.let { fileUri ->
             viewModel.importData(File(fileUri.path)) { success ->
-                // Could show success/error snackbar
+                scope.launch { snackbarHostState.showSnackbar(if (success) "Import successful" else "Import failed") }
             }
         }
     }
@@ -140,7 +145,7 @@ fun SettingsScreen(
     fun backupToGoogleDrive() {
         uiScope.launch {
             val result = viewModel.backupToGoogleDrive()
-            // Handle result
+            scope.launch { snackbarHostState.showSnackbar(if (result.ok) "Backup uploaded" else "Backup failed: ${result.error}") }
         }
     }
 
@@ -148,7 +153,7 @@ fun SettingsScreen(
     fun restoreFromGoogleDrive() {
         uiScope.launch {
             val result = viewModel.restoreFromGoogleDrive()
-            // Handle result
+            scope.launch { snackbarHostState.showSnackbar(if (result.ok) "Restored from Google Drive" else "Restore failed: ${result.error}") }
         }
     }
 
@@ -172,6 +177,7 @@ fun SettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -494,8 +500,14 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            viewModel.exportData { file ->
-                                Share.saveToDownloads(context, file, "agoria-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())}.json")
+                            viewModel.exportData { success, message ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}",
+                                        actionLabel = if (success) "Share" else null,
+                                        onAction = if (success) { /* could share */ } else null
+                                    )
+                                }
                             }
                         },
                     ) { Text("Export to Device") }
@@ -537,8 +549,12 @@ fun SettingsScreen(
                     }
                     Button(
                         onClick = {
-                            viewModel.exportData { file ->
-                                Share.saveToDownloads(context, file, "agoria-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())}.json")
+                            viewModel.exportData { success, message ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}"
+                                    )
+                                }
                             }
                         },
                     ) { Text("Export") }

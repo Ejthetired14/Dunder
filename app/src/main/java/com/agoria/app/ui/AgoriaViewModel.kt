@@ -586,18 +586,24 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun exportData(onFile: (File) -> Unit) {
+    fun exportData(onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            val snapshot = repo.exportSnapshot()
-            val file = File(
-                Files.exports(getApplication()),
-                "agoria-export-${System.currentTimeMillis()}.json",
-            )
-            withContext(Dispatchers.IO) {
-                Files.writeText(file, snapshot.toString(2))
-            }
-            withContext(Dispatchers.Main) {
-                onFile(file)
+            try {
+                val snapshot = repo.exportSnapshot()
+                val file = File(
+                    Files.exports(getApplication()),
+                    "agoria-export-${System.currentTimeMillis()}.json",
+                )
+                withContext(Dispatchers.IO) {
+                    Files.writeText(file, snapshot.toString(2))
+                }
+                withContext(Dispatchers.Main) {
+                    onResult(true, file.absolutePath)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, e.message)
+                }
             }
         }
     }
