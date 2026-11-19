@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.agoria.app.AgoriaApplication
 import com.agoria.app.core.BuildProgress
+import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
 import com.agoria.app.data.AgentEntity
@@ -665,5 +666,72 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         args: org.json.JSONObject,
     ): com.agoria.app.core.ConnectorResult {
         return app.runtime.connectorExecutor.execute(connectorId, agentId, action, args)
+    }
+
+    suspend fun backupToGoogleDrive(): ConnectorResult {
+        return exportDataSuspend { file ->
+            val content = com.agoria.app.util.Files.readText(file)
+            executeConnector(
+                connectorId = "gdrive",
+                agentId = "system",
+                action = "upload_backup",
+                args = org.json.JSONObject().apply {
+                    put("fileName", file.name)
+                    put("content", content)
+                },
+            )
+        }
+    }
+
+    suspend fun restoreFromGoogleDrive(): ConnectorResult {
+        val listResult = executeConnector(
+            connectorId = "gdrive",
+            agentId = "system",
+            action = "list_backups",
+            args = org.json.JSONObject().put("limit", 1),
+        )
+        if (!listResult.ok) return listResult
+        try {
+            val json = org.json.JSONObject(listResult.summary)
+            val files = json.getJSONArray("files")
+            if (files.length() == 0) {
+                return ConnectorResult(false, "No backups found", "No backups available")
+            }
+            val latest = files.getJSONObject(0)
+            val fileName = latest.getString("name")
+            val downloadResult = executeConnector(
+                connectorId = "gdrive",
+                agentId = "system",
+                action = "download_backup",
+                args = org.json.JSONObject().put("fileName", fileName),
+            )
+            if (!downloadResult.ok) return downloadResult
+            val downloadJson = org.json.JSONObject(downloadResult.summary)
+            val content = downloadJson.getString("content")
+            val tempFile = File(app.applicationContext.cacheDir, "gdrive-restore-${System.currentTimeMillis()}.json")
+            com.agoria.app.util.Files.writeText(tempFile, content)
+            importDataSuspend(tempFile)
+            tempFile.delete()
+            return ConnectorResult(true, "Restored from Google Drive")
+        } catch (e: Exception) {
+            return ConnectorResult(false, "Restore failed", e.message)
+        }
+    }
+
+    private suspend fun exportDataSuspend(onExport: (File) -> ConnectorResult): ConnectorResult {
+        return suspendCancellableCoroutine { cont ->
+            exportData { file ->
+                val result = onExport(file)
+                cont.resume(result)
+            }
+        }
+    }
+
+    private suspend fun importDataSuspend(file: File) {
+        suspendCancellableCoroutine<Unit> { cont ->
+            importData(file) { success ->
+                cont.resume(Unit)
+            }
+        }
     }
 }

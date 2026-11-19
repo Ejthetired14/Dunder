@@ -79,6 +79,7 @@ import com.agoria.app.ui.ProviderTest
 import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.util.Share
 import com.agoria.app.util.UpdateManager
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 // Update state enum
@@ -140,59 +141,17 @@ fun SettingsScreen(
 
     // Backup to Google Drive
     fun backupToGoogleDrive() {
-        viewModel.exportData { file ->
-            val content = com.agoria.app.util.Files.readText(file)
-            uiScope.launch {
-                val result = viewModel.executeConnector(
-                    connectorId = "gdrive",
-                    agentId = "system",
-                    action = "upload_backup",
-                    args = org.json.JSONObject().apply {
-                        put("fileName", file.name)
-                        put("content", content)
-                    },
-                )
-                // Handle result
-            }
+        uiScope.launch {
+            val result = viewModel.backupToGoogleDrive()
+            // Handle result
         }
     }
 
     // Restore from Google Drive
     fun restoreFromGoogleDrive() {
         uiScope.launch {
-            val listResult = viewModel.executeConnector(
-                connectorId = "gdrive",
-                agentId = "system",
-                action = "list_backups",
-                args = org.json.JSONObject().put("limit", 1),
-            )
-            if (listResult.ok) {
-                try {
-                    val json = org.json.JSONObject(listResult.summary)
-                    val files = json.getJSONArray("files")
-                    if (files.length() > 0) {
-                        val latest = files.getJSONObject(0)
-                        val fileName = latest.getString("name")
-                        val downloadResult = viewModel.executeConnector(
-                            connectorId = "gdrive",
-                            agentId = "system",
-                            action = "download_backup",
-                            args = org.json.JSONObject().put("fileName", fileName),
-                        )
-                        if (downloadResult.ok) {
-                            val downloadJson = org.json.JSONObject(downloadResult.summary)
-                            val content = downloadJson.getString("content")
-                            val tempFile = File(context.cacheDir, "gdrive-restore-${System.currentTimeMillis()}.json")
-                            com.agoria.app.util.Files.writeText(tempFile, content)
-                            viewModel.importData(tempFile) { success ->
-                                tempFile.delete()
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            val result = viewModel.restoreFromGoogleDrive()
+            // Handle result
         }
     }
 
