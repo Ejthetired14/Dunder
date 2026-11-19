@@ -1,6 +1,12 @@
 package com.agoria.app.ui.settings
 
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.Settings
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -89,7 +95,7 @@ fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> 
         try {
             val pm = context.packageManager
             val info = pm.getPackageInfo(context.packageName, 0)
-            info.versionName ?: "1.0.0" to info.versionCode
+            (info.versionName ?: "1.0.0") to info.versionCode
         } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
             "1.0.0" to 1
         }
@@ -116,7 +122,7 @@ fun SettingsScreen(
 
     // File picker for import
     val pickImportFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
+        contract = ActivityResultContracts.GetContent(),
     ) { uri: Uri? ->
         uri?.let { fileUri ->
             viewModel.importData(File(fileUri.path)) { success ->
@@ -552,7 +558,7 @@ fun SettingsScreen(
                         }
                     }
                     Button(
-                        onClick = { pickImportFileLauncher.launch("application/json") },
+                        onClick = { pickImportFileLauncher.launch(arrayOf("application/json")) },
                     ) { Text("Import") }
                 }
 
