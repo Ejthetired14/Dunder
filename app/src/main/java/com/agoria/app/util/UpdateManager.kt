@@ -165,7 +165,7 @@ class UpdateManager(
         connection.instanceFollowRedirects = true
 
         try {
-            if (connection.responseCode != 200) return false
+            if (connection.responseCode != 200) return DownloadResult(false, "HTTP ${connection.responseCode}")
 
             val totalSize = connection.contentLength
             val input = connection.inputStream
@@ -174,7 +174,7 @@ class UpdateManager(
                 context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             } else {
                 context.getExternalFilesDir(null)
-            } ?: return false
+            } ?: return DownloadResult(false, "Cannot access downloads directory")
 
             val apkFile = File(downloadsDir, "dunder-$tagName.apk")
             val output = FileOutputStream(apkFile)
