@@ -55,7 +55,7 @@ class UpdateManager(
 
     companion object {
         private const val TAG = "UpdateManager"
-        private const val PAGES_URL = "https://ejthetired14.github.io/Dunder/latest-release.json"
+        private const val RAW_URL = "https://raw.githubusercontent.com/Ejthetired14/Dunder/latest-release/latest-release.json"
         
         fun compareVersions(v1: String, v2: String): Int {
             val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
@@ -89,7 +89,7 @@ class UpdateManager(
     }
 
     private suspend fun fetchLatestRelease(): ReleaseInfo? {
-        val url = URL(PAGES_URL)
+        val url = URL(RAW_URL)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 15_000
