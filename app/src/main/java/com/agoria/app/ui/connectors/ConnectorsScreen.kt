@@ -90,22 +90,7 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 0.dp, end = 16.dp),
-                        horizontalAlignment = Alignment.Start,
-                    ) {
-                        Text("Connectors", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "Give agents access to the outside world, one approval at a time",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                centerTitle = false,
+                title = { Text("Connectors", style = MaterialTheme.typography.titleLarge) },
             )
         },
     ) { padding ->
