@@ -136,6 +136,17 @@ fun SettingsScreen(
         }
     }
 
+    // File picker for export (user chooses where to save)
+    val createExportFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri: Uri? ->
+        uri?.let { exportUri ->
+            viewModel.exportDataToUri(context, exportUri) { success, message ->
+                scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+            }
+        }
+    }
+
     val settings = state.settings
     val providers = state.providers
     val tests = state.providerTests
@@ -500,13 +511,7 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            viewModel.exportDataWithResult { success, message ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}"
-                                    )
-                                }
-                            }
+                            createExportFileLauncher.launch("agoria-export-${System.currentTimeMillis()}.json")
                         },
                     ) { Text("Export to Device") }
                     TextButton(onClick = { showReset = true }) { Text("Reset app") }
@@ -547,13 +552,7 @@ fun SettingsScreen(
                     }
                     Button(
                         onClick = {
-                            viewModel.exportDataWithResult { success, message ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (success) "Exported to ${message ?: "Downloads"}" else "Export failed: ${message ?: "unknown"}"
-                                    )
-                                }
-                            }
+                            createExportFileLauncher.launch("agoria-export-${System.currentTimeMillis()}.json")
                         },
                     ) { Text("Export") }
                 }

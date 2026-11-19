@@ -624,6 +624,29 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Exports data to a user-selected location via Storage Access Framework.
+     * Call this after obtaining a URI from ActivityResultContracts.CreateDocument().
+     */
+    fun exportDataToUri(context: Context, uri: Uri, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val snapshot = repo.exportSnapshot()
+                val jsonText = snapshot.toString(2)
+                context.contentResolver.openOutputStream(uri).use { outputStream ->
+                    outputStream?.write(jsonText.toByteArray())
+                }
+                withContext(Dispatchers.Main) {
+                    onResult(true, "Saved to selected location")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Export failed: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun importData(file: File, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             val content = withContext(Dispatchers.IO) { Files.readText(file) }
