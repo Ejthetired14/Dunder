@@ -711,6 +711,7 @@ fun SettingsScreen(
                         }
                     }
                     UpdateState.UpToDate -> {
+                        val remoteVersion = releaseInfo.value?.versionName ?: "unknown"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -727,7 +728,7 @@ fun SettingsScreen(
                                     Column {
                                         Text("Up to Date", style = MaterialTheme.typography.titleSmall)
                                         Text(
-                                            text = "You're running the latest version ($currentVersionName)",
+                                            text = "Installed: $currentVersionName | Latest: $remoteVersion",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )

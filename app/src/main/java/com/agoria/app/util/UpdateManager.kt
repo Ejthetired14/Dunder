@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,7 @@ class UpdateManager(
     private val scope: CoroutineScope,
     private val repoOwner: String = "Ejthetired14",
     private val repoName: String = "Dunder",
-) {
+) private constructor() {
 
     private val currentVersionName: String
         get() = try {
@@ -53,7 +54,27 @@ class UpdateManager(
         val publishedAt: String,
     )
 
-    fun isNewerRelease(release: ReleaseInfo): Boolean = release.versionCode > currentVersionCode
+    companion object {
+        private const val TAG = "UpdateManager"
+        
+        fun compareVersions(v1: String, v2: String): Int {
+            val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
+            val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
+            val maxSize = maxOf(parts1.size, parts2.size)
+            for (i in 0 until maxSize) {
+                val p1 = parts1.getOrElse(i) { 0 }
+                val p2 = parts2.getOrElse(i) { 0 }
+                if (p1 != p2) return p1.compareTo(p2)
+            }
+            return 0
+        }
+    }
+
+    fun isNewerRelease(release: ReleaseInfo): Boolean {
+        val result = compareVersions(release.versionName, currentVersionName) > 0
+        Log.d(TAG, "isNewerRelease: installed=${currentVersionName} (code=$currentVersionCode), remote=${release.versionName} (code=${release.versionCode}), result=$result")
+        return result
+    }
 
     /**
      * Checks GitHub Releases for a newer version.
@@ -62,12 +83,13 @@ class UpdateManager(
     fun checkForUpdates(onResult: (ReleaseInfo?) -> Unit) {
         scope.launch {
             val release = withContext(Dispatchers.IO) { fetchLatestRelease() }
+            Log.d(TAG, "checkForUpdates: remoteRelease=${release?.versionName}, installed=$currentVersionName")
             withContext(Dispatchers.Main) { onResult(release) }
         }
     }
 
     private suspend fun fetchLatestRelease(): ReleaseInfo? {
-        // Try "latest" first, but fallback to fetching all releases and picking highest version
+        // Try "latest" first
         val latestUrl = URL("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
         var connection = latestUrl.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
@@ -89,7 +111,7 @@ class UpdateManager(
             connection.disconnect()
         }
 
-        // Fallback: fetch all releases and pick the one with highest versionCode that has an APK
+        // Fallback: fetch all releases and pick the one with highest version
         return fetchAllReleasesAndPickBest()
     }
 
@@ -108,14 +130,14 @@ class UpdateManager(
             val jsonArray = JSONArray(response)
 
             var bestRelease: ReleaseInfo? = null
-            var bestVersionCode = currentVersionCode
 
             for (i in 0 until jsonArray.length()) {
                 val json = jsonArray.getJSONObject(i)
                 val parsed = parseReleaseJson(json)
-                if (parsed != null && parsed.versionCode > bestVersionCode) {
-                    bestRelease = parsed
-                    bestVersionCode = parsed.versionCode
+                if (parsed != null) {
+                    if (bestRelease == null || compareVersions(parsed.versionName, bestRelease.versionName) > 0) {
+                        bestRelease = parsed
+                    }
                 }
             }
 
@@ -151,11 +173,12 @@ class UpdateManager(
 
         if (apkUrl.isEmpty()) return null
 
+        Log.d(TAG, "parseReleaseJson: tag=$tagName, versionName=$versionName, versionCode=$versionCode, apkUrl=$apkUrl")
         return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt)
     }
 
     private fun parseVersionCode(versionName: String): Int {
-        // Convert "1.0.34" -> 34 (patch version matches build.gradle versionCode)
+        // Keep for ReleaseInfo.versionCode field, but comparison uses compareVersions
         val parts = versionName.split(".")
         return parts.lastOrNull()?.toIntOrNull() ?: 1
     }
