@@ -90,7 +90,9 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Connectors", style = MaterialTheme.typography.titleLarge) },
+                title = { 
+                    Text("Connectors", style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                },
             )
         },
     ) { padding ->

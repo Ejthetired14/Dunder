@@ -495,10 +495,10 @@ fun SettingsScreen(
                     Button(
                         onClick = {
                             viewModel.exportData { file ->
-                                Share.shareJson(context, file)
+                                Share.saveToDownloads(context, file, "agoria-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())}.json")
                             }
                         },
-                    ) { Text("Export JSON") }
+                    ) { Text("Export to Device") }
                     TextButton(onClick = { showReset = true }) { Text("Reset app") }
                 }
             }
