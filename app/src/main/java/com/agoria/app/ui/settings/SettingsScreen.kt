@@ -121,6 +121,7 @@ fun SettingsScreen(
     var agentSplit by remember { mutableStateOf(50) }
     var userSplit by remember { mutableStateOf(50) }
     var showUnknownAppsDialog by remember { mutableStateOf(false) }
+    var showRestartDialog by remember { mutableStateOf(false) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
@@ -875,7 +876,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showUnknownAppsDialog = false },
             title = { Text("Permission Required") },
-            text = { Text("To install updates, Dunder needs permission to install apps from unknown sources.\n\nTap 'Open Settings' to enable this permission, then return and try the update again.") },
+            text = { Text("To install updates, Dunder needs permission to install apps from unknown sources.\n\nTap 'Open Settings' to enable this permission. After enabling, you MUST restart the app (swipe away from recent apps and reopen) for the change to take effect.") },
             confirmButton = {
                 TextButton(onClick = {
                     val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
@@ -885,6 +886,8 @@ fun SettingsScreen(
                         context.startActivity(intent)
                     }
                     showUnknownAppsDialog = false
+                    // Show restart reminder after settings
+                    showRestartDialog = true
                 }) { Text("Open Settings") }
             },
             dismissButton = {
@@ -892,6 +895,26 @@ fun SettingsScreen(
             },
         )
     }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestartDialog = false },
+            title = { Text("Restart Required") },
+            text = { Text("Permission granted! Please restart the app now:\n1. Swipe up from bottom and hold (or tap recent apps)\n2. Swipe Dunder away to close it\n3. Reopen Dunder\n4. Try the update again") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestartDialog = false
+                    // Kill app process to force restart
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    System.exit(0)
+                }) { Text("Restart Now") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestartDialog = false }) { Text("Later") }
+            },
+        )
+    }
+}
 }
 
 @Composable
