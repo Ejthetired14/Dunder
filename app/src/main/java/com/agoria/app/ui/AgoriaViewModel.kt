@@ -674,7 +674,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
             exportData { file ->
                 cont.resume(file)
             }
-        }
+        } onCancellation { }
         val content = com.agoria.app.util.Files.readText(file)
         return executeConnector(
             connectorId = "gdrive",
@@ -723,19 +723,19 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun exportDataSuspend(onExport: (File) -> ConnectorResult): ConnectorResult {
-        return suspendCancellableCoroutine<ConnectorResult> { cont ->
+        return suspendCancellableCoroutine<ConnectorResult>({ cont ->
             exportData { file ->
                 val result = onExport(file)
                 cont.resume(result)
             }
-        } onCancellation { }
+        }, onCancellation = { })
     }
 
     private suspend fun importDataSuspend(file: File) {
-        suspendCancellableCoroutine<Unit> { cont ->
+        suspendCancellableCoroutine<Unit>({ cont ->
             importData(file) { _ ->
                 cont.resume(Unit)
             }
-        } onCancellation { }
+        }, onCancellation = { })
     }
 }
