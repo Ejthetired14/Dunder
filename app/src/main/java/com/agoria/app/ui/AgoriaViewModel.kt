@@ -670,18 +670,21 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     suspend fun backupToGoogleDrive(): ConnectorResult {
-        return exportDataSuspend { file ->
-            val content = com.agoria.app.util.Files.readText(file)
-            executeConnector(
-                connectorId = "gdrive",
-                agentId = "system",
-                action = "upload_backup",
-                args = org.json.JSONObject().apply {
-                    put("fileName", file.name)
-                    put("content", content)
-                },
-            )
+        val file = suspendCancellableCoroutine<File> { cont ->
+            exportData { file ->
+                cont.resume(file)
+            }
         }
+        val content = com.agoria.app.util.Files.readText(file)
+        return executeConnector(
+            connectorId = "gdrive",
+            agentId = "system",
+            action = "upload_backup",
+            args = org.json.JSONObject().apply {
+                put("fileName", file.name)
+                put("content", content)
+            },
+        )
     }
 
     suspend fun restoreFromGoogleDrive(): ConnectorResult {
@@ -725,7 +728,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 val result = onExport(file)
                 cont.resume(result)
             }
-        }
+        } onCancellation { }
     }
 
     private suspend fun importDataSuspend(file: File) {
@@ -733,6 +736,6 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
             importData(file) { _ ->
                 cont.resume(Unit)
             }
-        }
+        } onCancellation { }
     }
 }
