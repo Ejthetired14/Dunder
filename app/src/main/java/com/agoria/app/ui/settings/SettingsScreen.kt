@@ -72,7 +72,7 @@ import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.AgoriaViewModel.SettingsScreenState
+import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.ui.ProviderTest
 import com.agoria.app.util.Files
 import kotlinx.coroutines.launch
