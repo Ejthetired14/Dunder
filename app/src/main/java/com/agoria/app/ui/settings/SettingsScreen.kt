@@ -1156,6 +1156,7 @@ private fun RevenueRow(
     }
 }
 
+}
 @Composable
 private fun RevenueEventRow(
     agentName: String,
