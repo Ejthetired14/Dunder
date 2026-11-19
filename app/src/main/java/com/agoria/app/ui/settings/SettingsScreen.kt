@@ -1156,6 +1156,7 @@ private fun RevenueRow(
     }
 }
 }
+}
 
 @Composable
 private fun RevenueEventRow(
@@ -1182,5 +1183,6 @@ private fun RevenueEventRow(
             color = MaterialTheme.colorScheme.primary,
         )
     }
+}
 }
 }
