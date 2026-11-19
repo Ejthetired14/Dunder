@@ -1155,8 +1155,8 @@ private fun RevenueRow(
         )
     }
 }
-
 }
+
 @Composable
 private fun RevenueEventRow(
     agentName: String,
@@ -1182,4 +1182,5 @@ private fun RevenueEventRow(
             color = MaterialTheme.colorScheme.primary,
         )
     }
+}
 }
