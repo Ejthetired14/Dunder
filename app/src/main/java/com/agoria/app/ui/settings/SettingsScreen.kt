@@ -1,11 +1,7 @@
 package com.agoria.app.ui.settings
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.provider.Settings
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -70,8 +66,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.ConnectorResult
+import com.agoria.app.core.ConnectorCatalog
+import com.agoria.app.core.ConnectorDef
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
+import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ProviderEntity
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
@@ -117,8 +116,6 @@ fun SettingsScreen(
     var cooldown by remember { mutableStateOf(90) }
     var agentSplit by remember { mutableStateOf(50) }
     var userSplit by remember { mutableStateOf(50) }
-    var stripeAccountId by remember { mutableStateOf("") }
-    var stripePublishableKey by remember { mutableStateOf("") }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
     val uiScope = rememberCoroutineScope()
@@ -161,8 +158,6 @@ fun SettingsScreen(
             cooldown = it.agentCooldownSeconds
             agentSplit = it.agentProfitSharePercent
             userSplit = it.userProfitSharePercent
-            stripeAccountId = it.stripeAccountId ?: ""
-            stripePublishableKey = it.stripePublishableKey ?: ""
         }
     }
 
@@ -343,36 +338,64 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Stripe configuration
-                Text("Stripe Configuration", style = MaterialTheme.typography.titleSmall)
+                // Payment connectors
+                Text("Payment Connectors", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = stripeAccountId,
-                    onValueChange = { stripeAccountId = it },
-                    label = { Text("Stripe Account ID (acct_...)") },
-                    supportingText = { Text("From Stripe Dashboard → Settings → Account") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = "Configure payment providers for monetizing agent APIs. Set up connectors in the Connectors screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = stripePublishableKey,
-                    onValueChange = { stripePublishableKey = it },
-                    label = { Text("Publishable Key (pk_live_... or pk_test_...)") },
-                    supportingText = { Text("From Stripe Dashboard → Developers → API Keys") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            viewModel.setStripeKeys(
-                                stripeAccountId.ifBlank { null },
-                                stripePublishableKey.ifBlank { null },
-                            )
-                        },
-                    ) { Text("Save Stripe Keys") }
+                
+                val paymentConnectors = state.connectors?.filter { it.id in setOf("stripe", "paypal", "polar") } ?: emptyList()
+                if (paymentConnectors.isEmpty()) {
+                    Text(
+                        text = "No payment connectors configured. Go to Connectors tab to add Stripe, PayPal, or Polar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    paymentConnectors.forEach { connector ->
+                        val def = ConnectorCatalog.get(connector.id)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(def?.name ?: connector.name, style = MaterialTheme.typography.titleSmall)
+                                    Spacer(Modifier.width(8.dp))
+                                    val color = when (connector.status) {
+                                        "ready", "configured" -> MaterialTheme.colorScheme.secondary
+                                        "needs_setup" -> MaterialTheme.colorScheme.tertiary
+                                        "error" -> MaterialTheme.colorScheme.error
+                                        else -> MaterialTheme.colorScheme.outline
+                                    }
+                                    Surface(
+                                        color = color.copy(alpha = 0.14f),
+                                        shape = MaterialTheme.shapes.small,
+                                    ) {
+                                        Text(
+                                            text = connector.status.replaceFirstChar { it.uppercase() },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = color,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = def?.description ?: "Payment connector",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = { 
+                                // Navigate to connectors screen would need navigation
+                            }) { Text("Configure") }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -418,7 +441,12 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                providers.forEach { provider ->
+                var showAllProviders by remember { mutableStateOf(false) }
+                val keylessProviders = providers.filter { ProviderCatalog.byId[it.id]?.needsKey != true }
+                val keyedProviders = providers.filter { ProviderCatalog.byId[it.id]?.needsKey == true }
+                
+                // Show keyless providers first (always visible, compact)
+                keylessProviders.forEach { provider ->
                     ProviderRow(
                         provider = provider,
                         spec = ProviderCatalog.byId[provider.id],
@@ -428,7 +456,31 @@ fun SettingsScreen(
                         onSaveModel = { model -> viewModel.setProviderModel(provider.id, model) },
                         onSaveExtra = { extra -> viewModel.saveProviderExtra(provider.id, extra) },
                         onTest = { viewModel.testProvider(provider.id) },
+                        compact = true,
                     )
+                }
+                
+                // Keyed providers - show "Show more" if there are any
+                if (keyedProviders.isNotEmpty()) {
+                    TextButton(onClick = { showAllProviders = !showAllProviders }) {
+                        Text(if (showAllProviders) "Show less" else "Show ${keyedProviders.size} providers needing API key")
+                    }
+                    if (showAllProviders) {
+                        Spacer(Modifier.height(4.dp))
+                        keyedProviders.forEach { provider ->
+                            ProviderRow(
+                                provider = provider,
+                                spec = ProviderCatalog.byId[provider.id],
+                                test = tests[provider.id],
+                                onToggle = { viewModel.setProviderEnabled(provider.id, it) },
+                                onSaveKey = { key -> viewModel.saveProviderKey(provider.id, key) },
+                                onSaveModel = { model -> viewModel.setProviderModel(provider.id, model) },
+                                onSaveExtra = { extra -> viewModel.saveProviderExtra(provider.id, extra) },
+                                onTest = { viewModel.testProvider(provider.id) },
+                                compact = true,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -827,23 +879,27 @@ private fun ProviderRow(
     onSaveModel: (String) -> Unit,
     onSaveExtra: (String) -> Unit,
     onTest: () -> Unit,
+    compact: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var key by remember { mutableStateOf("") }
     var model by remember { mutableStateOf(provider.model) }
     var extra by remember { mutableStateOf("") }
 
+    val padding = if (compact) 4.dp else 12.dp
+    val verticalPadding = if (compact) 2.dp else 6.dp
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = verticalPadding),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(padding)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(spec?.name ?: provider.id, style = MaterialTheme.typography.titleMedium)
+                    Text(spec?.name ?: provider.id, style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium)
                     Text(
                         text = buildString {
                             append(provider.model.ifBlank { spec?.defaultModel ?: "default" })
@@ -861,7 +917,7 @@ private fun ProviderRow(
                 Switch(checked = provider.enabled, onCheckedChange = onToggle)
             }
 
-            if (spec != null) {
+            if (spec != null && !compact) {
                 Text(
                     text = spec.freeNote,
                     style = MaterialTheme.typography.bodySmall,
@@ -871,10 +927,10 @@ private fun ProviderRow(
             }
 
             if (test != null) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 if (test.testing) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.width(16.dp).height(16.dp))
+                        CircularProgressIndicator(modifier = Modifier.width(14.dp).height(14.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Testing...", style = MaterialTheme.typography.labelSmall)
                     }
