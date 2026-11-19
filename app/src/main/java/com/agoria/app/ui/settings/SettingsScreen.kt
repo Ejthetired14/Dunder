@@ -127,12 +127,12 @@ fun SettingsScreen(
     val totalRevenueCents = remember(revenueEntities) { revenueEntities.sumOf { it.amountCents } }
     val agentRevenueCents = remember(revenueEntities) { revenueEntities.filter { it.source == "agent_share" }.sumOf { it.amountCents } }
     val userRevenueCents = remember(revenueEntities) { revenueEntities.filter { it.source == "user_share" }.sumOf { it.amountCents } }
-    val agentBreakdown = remember(revenueEntities) {
+    val agentBreakdown: Map<String, Long> = remember(revenueEntities) {
         revenueEntities
             .groupBy { it.agentId }
             .mapValues { (_, list) -> list.sumOf { it.amountCents } }
     }
-    val recentEvents = remember(revenueEntities) { revenueEntities.sortedByDescending { it.createdAt }.take(20) }
+    val recentEvents: List<RevenueEntity> = remember(revenueEntities) { revenueEntities.sortedByDescending { it.createdAt }.take(20) }
 
     // Backup to Google Drive
     fun backupToGoogleDrive() {
@@ -270,7 +270,7 @@ fun SettingsScreen(
             }
 
             SectionCard(title = "Providers") {
-                providers.forEach { provider ->
+                providers.forEach { provider: ProviderEntity ->
                     val spec = provider.spec ?: ProviderCatalog.byId[provider.id] ?: ProviderSpec(
                         id = provider.id, name = provider.id, baseUrl = "", keyRequired = false,
                         keyLabel = "", keyHint = "", docsUrl = "", freeNote = "",
