@@ -65,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.agoria.app.AgoriaApplication
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
@@ -120,7 +121,7 @@ fun SettingsScreen(
 
     val settings = state.settings
     val providers = state.providers
-    val tests = state.providerTests
+    val tests: Map<String, ProviderTest> = state.providerTests
     val revenueEntities = state.revenue
 
     // Compute revenue summary
@@ -151,11 +152,12 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(settings) {
-        settings?.let {
-            tick = it.tickIntervalSeconds
-            cooldown = it.agentCooldownSeconds
-            agentSplit = it.agentProfitSharePercent
-            userSplit = it.userProfitSharePercent
+        val s = settings
+        if (s != null) {
+            tick = s.tickIntervalSeconds
+            cooldown = s.agentCooldownSeconds
+            agentSplit = s.agentProfitSharePercent
+            userSplit = s.userProfitSharePercent
         }
     }
 
@@ -263,7 +265,10 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            settings?.let { viewModel.saveSettings(it.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit)) }
+                            val s = settings
+                            if (s != null) {
+                                viewModel.saveSettings(s.copy(tickIntervalSeconds = tick, agentCooldownSeconds = cooldown, agentProfitSharePercent = agentSplit, userProfitSharePercent = userSplit))
+                            }
                         },
                     ) { Text("Save Autonomy Settings") }
                 }
@@ -271,7 +276,7 @@ fun SettingsScreen(
 
             SectionCard(title = "Providers") {
                 providers.forEach { provider: ProviderEntity ->
-                    val spec = provider.spec ?: ProviderCatalog.byId[provider.id] ?: ProviderSpec(
+                    val spec = ProviderCatalog.byId[provider.id] ?: ProviderSpec(
                         id = provider.id, name = provider.id, baseUrl = "", keyRequired = false,
                         keyLabel = "", keyHint = "", docsUrl = "", freeNote = "",
                         models = listOf(), defaultModel = "",
