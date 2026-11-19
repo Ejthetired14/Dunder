@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -56,6 +55,7 @@ class UpdateManager(
 
     companion object {
         private const val TAG = "UpdateManager"
+        private const val PAGES_URL = "https://ejthetired14.github.io/Dunder/latest-release.json"
         
         fun compareVersions(v1: String, v2: String): Int {
             val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
@@ -77,7 +77,7 @@ class UpdateManager(
     }
 
     /**
-     * Checks GitHub Releases for a newer version.
+     * Checks GitHub Pages for a newer version.
      * Returns ReleaseInfo if a newer version is available, null otherwise.
      */
     fun checkForUpdates(onResult: (ReleaseInfo?) -> Unit) {
@@ -89,13 +89,12 @@ class UpdateManager(
     }
 
     private suspend fun fetchLatestRelease(): ReleaseInfo? {
-        // Try "latest" first
-        val latestUrl = URL("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
-        var connection = latestUrl.openConnection() as HttpURLConnection
+        val url = URL(PAGES_URL)
+        val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 15_000
         connection.readTimeout = 15_000
-        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+        connection.setRequestProperty("Accept", "application/json")
         connection.setRequestProperty("User-Agent", "Dunder-Android")
 
         try {
@@ -103,85 +102,33 @@ class UpdateManager(
             if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
                 val json = JSONObject(response)
-                val parsed = parseReleaseJson(json)
-                if (parsed != null) return parsed
+                return parsePagesJson(json)
             } else {
-                Log.w(TAG, "fetchLatestRelease: releases/latest returned $responseCode")
+                Log.w(TAG, "fetchLatestRelease: Pages returned $responseCode")
+                return null
             }
         } catch (e: Exception) {
             Log.e(TAG, "fetchLatestRelease error", e)
-        } finally {
-            connection.disconnect()
-        }
-
-        // Fallback: fetch all releases and pick the one with highest version
-        return fetchAllReleasesAndPickBest()
-    }
-
-    private suspend fun fetchAllReleasesAndPickBest(): ReleaseInfo? {
-        val url = URL("https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=30")
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 15_000
-        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-        connection.setRequestProperty("User-Agent", "Dunder-Android")
-
-        try {
-            val responseCode = connection.responseCode
-            if (responseCode != 200) {
-                Log.w(TAG, "fetchAllReleases: returned $responseCode")
-                return null
-            }
-            val response = connection.inputStream.bufferedReader().readText()
-            val jsonArray = JSONArray(response)
-
-            var bestRelease: ReleaseInfo? = null
-
-            for (i in 0 until jsonArray.length()) {
-                val json = jsonArray.getJSONObject(i)
-                val parsed = parseReleaseJson(json)
-                if (parsed != null) {
-                    if (bestRelease == null || compareVersions(parsed.versionName, bestRelease.versionName) > 0) {
-                        bestRelease = parsed
-                    }
-                }
-            }
-
-            Log.d(TAG, "fetchAllReleasesAndPickBest: bestRelease=${bestRelease?.versionName}")
-            return bestRelease
-        } catch (e: Exception) {
-            Log.e(TAG, "fetchAllReleasesAndPickBest error", e)
             return null
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun parseReleaseJson(json: JSONObject): ReleaseInfo? {
-        val tagName = json.optString("tag_name", "")
-        val releaseNotes = json.optString("body", "No release notes.")
-        val publishedAt = json.optString("published_at", "")
+    private fun parsePagesJson(json: JSONObject): ReleaseInfo? {
+        val versionName = json.optString("versionName", "")
+        val versionCode = json.optInt("versionCode", 1)
+        val releaseNotes = json.optString("releaseNotes", "No release notes.")
+        val apkUrl = json.optString("apkUrl", "")
+        val tagName = json.optString("tagName", "")
+        val publishedAt = json.optString("publishedAt", "")
 
-        val versionName = tagName.removePrefix("v")
-        val versionCode = parseVersionCode(versionName)
-
-        val assets = json.optJSONArray("assets")
-        var apkUrl = ""
-        if (assets != null) {
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                val name = asset.optString("name", "")
-                if (name.endsWith(".apk")) {
-                    apkUrl = asset.optString("browser_download_url", "")
-                    break
-                }
-            }
+        if (apkUrl.isEmpty()) {
+            Log.w(TAG, "parsePagesJson: apkUrl is empty")
+            return null
         }
 
-        if (apkUrl.isEmpty()) return null
-
-        Log.d(TAG, "parseReleaseJson: tag=$tagName, versionName=$versionName, versionCode=$versionCode, apkUrl=$apkUrl")
+        Log.d(TAG, "parsePagesJson: versionName=$versionName, versionCode=$versionCode, apkUrl=$apkUrl")
         return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt)
     }
 
