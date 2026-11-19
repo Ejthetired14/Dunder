@@ -60,7 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -84,7 +84,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val state by viewModel.settingsScreenState.collectAsStateWithLifecycle()
+    val state by viewModel.settingsScreenState.collectAsState()
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
