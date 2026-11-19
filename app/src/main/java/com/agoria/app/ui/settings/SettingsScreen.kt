@@ -442,8 +442,8 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 var showAllProviders by remember { mutableStateOf(false) }
-                val keylessProviders = providers.filter { ProviderCatalog.byId[it.id]?.needsKey != true }
-                val keyedProviders = providers.filter { ProviderCatalog.byId[it.id]?.needsKey == true }
+                val keylessProviders = providers.filter { ProviderCatalog.byId[it.id]?.keyRequired != true }
+                val keyedProviders = providers.filter { ProviderCatalog.byId[it.id]?.keyRequired == true }
                 
                 // Show keyless providers first (always visible, compact)
                 keylessProviders.forEach { provider ->
