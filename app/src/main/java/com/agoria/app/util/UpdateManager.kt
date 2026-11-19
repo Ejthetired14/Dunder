@@ -142,16 +142,21 @@ class UpdateManager(
      * Downloads and installs the APK.
      * Requires REQUEST_INSTALL_PACKAGES permission.
      */
-    fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (Boolean) -> Unit) {
+    fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (Boolean, String?) -> Unit) {
         scope.launch {
-            val success = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 downloadApk(release.apkUrl, release.tagName, onProgress)
             }
-            withContext(Dispatchers.Main) { onComplete(success) }
+            withContext(Dispatchers.Main) { onComplete(result.success, result.error) }
         }
     }
 
-    private fun downloadApk(urlString: String, tagName: String, onProgress: (Int) -> Unit): Boolean {
+    private data class DownloadResult(
+        val success: Boolean,
+        val error: String? = null
+    )
+
+    private fun downloadApk(urlString: String, tagName: String, onProgress: (Int) -> Unit): DownloadResult {
         val url = URL(urlString)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
@@ -196,18 +201,18 @@ class UpdateManager(
 
         } catch (e: Exception) {
             e.printStackTrace()
-            return false
+            return DownloadResult(false, "Download failed: ${e.message}")
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun installApk(apkFile: File): Boolean {
+    private fun installApk(apkFile: File): DownloadResult {
         return try {
             Log.d(TAG, "installApk: file=${apkFile.absolutePath}, exists=${apkFile.exists()}, length=${apkFile.length()}")
             if (!apkFile.exists() || apkFile.length() == 0L) {
                 Log.e(TAG, "installApk: APK file missing or empty")
-                return false
+                return DownloadResult(false, "APK file missing or empty")
             }
 
             val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -238,14 +243,14 @@ class UpdateManager(
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 }
-                true
+                DownloadResult(true)
             } else {
                 Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
-                false
+                DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app.")
             }
         } catch (e: Exception) {
             Log.e(TAG, "installApk error", e)
-            false
+            DownloadResult(false, "Install error: ${e.message}")
         }
     }
 }

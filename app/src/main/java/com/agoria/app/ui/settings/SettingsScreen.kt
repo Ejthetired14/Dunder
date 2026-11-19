@@ -787,10 +787,10 @@ fun SettingsScreen(
                                 Button(
                                     onClick = {
                                         downloadProgress.value = 0
-                                        viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success ->
+                                        viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success, error ->
                                             downloadProgress.value = null
                                             if (!success) {
-                                                // Could show error snackbar
+                                                scope.launch { snackbarHostState.showSnackbar(error ?: "Install failed") }
                                             }
                                         })
                                     },

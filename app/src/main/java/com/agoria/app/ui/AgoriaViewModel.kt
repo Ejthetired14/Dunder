@@ -702,7 +702,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     fun downloadAndInstallUpdate(
         release: com.agoria.app.util.UpdateManager.ReleaseInfo,
         onProgress: (Int) -> Unit,
-        onComplete: (Boolean) -> Unit,
+        onComplete: (Boolean, String?) -> Unit,
     ) {
         app.updateManager.downloadAndInstall(release, onProgress, onComplete)
     }
