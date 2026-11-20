@@ -70,6 +70,9 @@ jobs:
           java -version
           ./gradlew --version
 
+      - name: List Gradle tasks
+        run: ./gradlew tasks --all 2>&1 | grep -E "(ksp|KSP|room|Room|compile|assemble)" | head -50
+
       - name: Extract version
         id: version
         run: |
@@ -82,13 +85,13 @@ jobs:
         run: |
           ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1 | tee build-debug.log
           echo "=== BUILD DEBUG EXIT CODE: ${PIPESTATUS[0]} ==="
-          tail -100 build-debug.log
+          tail -200 build-debug.log
 
       - name: Build Release APK
         run: |
           ./gradlew assembleRelease --no-daemon -x lint --stacktrace 2>&1 | tee build-release.log
           echo "=== BUILD RELEASE EXIT CODE: ${PIPESTATUS[0]} ==="
-          tail -100 build-release.log
+          tail -200 build-release.log
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
