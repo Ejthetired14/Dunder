@@ -23,6 +23,7 @@ import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -253,6 +254,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     val diaryPagination = _diaryPagination.asStateFlow()
 
     private val _messagesPagination = MutableStateFlow<Map<String, PaginationState>>(emptyMap())
+
+    /** Paging state per agent, so the chat can react when a page finishes loading. */
+    val messagesPaginationByAgent: StateFlow<Map<String, PaginationState>> = _messagesPagination.asStateFlow()
+
     fun messagesPagination(agentId: String): PaginationState = _messagesPagination.value[agentId] ?: PaginationState()
     fun setMessagesPagination(agentId: String, state: PaginationState) {
         _messagesPagination.value = _messagesPagination.value + (agentId to state)
@@ -276,6 +281,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     val pagedDiary = _pagedDiary.asStateFlow()
 
     private val _pagedMessages = MutableStateFlow<Map<String, List<MessageEntity>>>(emptyMap())
+
+    /** Paged message history per agent, newest first. */
+    val pagedMessagesByAgent: StateFlow<Map<String, List<MessageEntity>>> = _pagedMessages.asStateFlow()
+
     fun pagedMessages(agentId: String) = _pagedMessages.value[agentId] ?: emptyList()
 
     // Paged data loading functions
@@ -297,9 +306,13 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 if (refresh || currentPagination.page == 0) {
                     _pagedBuilds.value = data
                 } else {
-                    _pagedBuilds.value = _pagedBuilds.value + data
+                    _pagedBuilds.value = (_pagedBuilds.value + data).distinctBy { it.id }
                 }
-                _buildsPagination.value = currentPagination.copy(isLoading = false, hasMore = hasMore)
+                _buildsPagination.value = currentPagination.copy(
+                    page = currentPagination.page + 1,
+                    isLoading = false,
+                    hasMore = hasMore,
+                )
             }
         }
     }
@@ -322,9 +335,13 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 if (refresh || currentPagination.page == 0) {
                     _pagedDiary.value = data
                 } else {
-                    _pagedDiary.value = _pagedDiary.value + data
+                    _pagedDiary.value = (_pagedDiary.value + data).distinctBy { it.id }
                 }
-                _diaryPagination.value = currentPagination.copy(isLoading = false, hasMore = hasMore)
+                _diaryPagination.value = currentPagination.copy(
+                    page = currentPagination.page + 1,
+                    isLoading = false,
+                    hasMore = hasMore,
+                )
             }
         }
     }
@@ -345,12 +362,21 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
             
             withContext(Dispatchers.Main) {
                 val currentMessages = _pagedMessages.value[agentId] ?: emptyList()
-                if (refresh || currentPagination.page == 0) {
-                    _pagedMessages.value = _pagedMessages.value + (agentId to data)
+                val merged = if (refresh || currentPagination.page == 0) {
+                    data
                 } else {
-                    _pagedMessages.value = _pagedMessages.value + (agentId to (currentMessages + data))
+                    // Pages walk backwards in time, so older messages append after the current ones.
+                    (currentMessages + data).distinctBy { it.id }
                 }
-                setMessagesPagination(agentId, currentPagination.copy(isLoading = false, hasMore = hasMore))
+                _pagedMessages.value = _pagedMessages.value + (agentId to merged)
+                setMessagesPagination(
+                    agentId,
+                    currentPagination.copy(
+                        page = currentPagination.page + 1,
+                        isLoading = false,
+                        hasMore = hasMore,
+                    ),
+                )
             }
         }
     }
@@ -411,7 +437,19 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun sendMessage(agentId: String, text: String) {
-        viewModelScope.launch { runtime.chat(agentId, text) }
+        viewModelScope.launch {
+            try {
+                runtime.chat(agentId, text)
+            } catch (e: Exception) {
+                // A failed cycle used to vanish silently and leave the chat looking stuck.
+                repo.addMessage(
+                    agentId,
+                    "system",
+                    "That message could not be processed: ${e.message ?: e.javaClass.simpleName}",
+                )
+                repo.setAgentStatus(agentId, "idle")
+            }
+        }
     }
 
     fun approve(approvalId: String, note: String = "") {
@@ -716,73 +754,4 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         return app.runtime.connectorExecutor.execute(connectorId, agentId, action, args)
     }
 
-    suspend fun backupToGoogleDrive(): ConnectorResult {
-        val file = suspendCoroutine<File> { cont: Continuation<File> ->
-            exportData { file ->
-                cont.resumeWith(Result.success(file))
-            }
-        }
-        val content = com.agoria.app.util.Files.readText(file)
-        return executeConnector(
-            connectorId = "gdrive",
-            agentId = "system",
-            action = "upload_backup",
-            args = org.json.JSONObject().apply {
-                put("fileName", file.name)
-                put("content", content)
-            },
-        )
-    }
-
-    suspend fun restoreFromGoogleDrive(): ConnectorResult {
-        val listResult = executeConnector(
-            connectorId = "gdrive",
-            agentId = "system",
-            action = "list_backups",
-            args = org.json.JSONObject().put("limit", 1),
-        )
-        if (!listResult.ok) return listResult
-        try {
-            val json = org.json.JSONObject(listResult.summary)
-            val files = json.getJSONArray("files")
-            if (files.length() == 0) {
-                return ConnectorResult(false, "No backups found", "No backups available")
-            }
-            val latest = files.getJSONObject(0)
-            val fileName = latest.getString("name")
-            val downloadResult = executeConnector(
-                connectorId = "gdrive",
-                agentId = "system",
-                action = "download_backup",
-                args = org.json.JSONObject().put("fileName", fileName),
-            )
-            if (!downloadResult.ok) return downloadResult
-            val downloadJson = org.json.JSONObject(downloadResult.summary)
-            val content = downloadJson.getString("content")
-            val tempFile = File(app.applicationContext.cacheDir, "gdrive-restore-${System.currentTimeMillis()}.json")
-            com.agoria.app.util.Files.writeText(tempFile, content)
-            importDataSuspend(tempFile)
-            tempFile.delete()
-            return ConnectorResult(true, "Restored from Google Drive")
-        } catch (e: Exception) {
-            return ConnectorResult(false, "Restore failed", e.message)
-        }
-    }
-
-    private suspend fun exportDataSuspend(onExport: (File) -> ConnectorResult): ConnectorResult {
-        return suspendCoroutine<ConnectorResult> { cont: Continuation<ConnectorResult> ->
-            exportData { file ->
-                val result = onExport(file)
-                cont.resumeWith(Result.success(result))
-            }
-        }
-    }
-
-    private suspend fun importDataSuspend(file: File) {
-        suspendCoroutine<Unit> { cont: Continuation<Unit> ->
-            importData(file) { _ ->
-                cont.resumeWith(Result.success(Unit))
-            }
-        }
-    }
 }
