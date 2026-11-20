@@ -160,8 +160,8 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                         val existing = savedConfig?.optString(field.key) ?: ""
                         when {
                             value.isNotBlank() -> {
-                                // Sanitize secret fields: remove control characters, trim
-                                if (field.secret) value = sanitizeSecret(value)
+                                // Sanitize ALL config values: remove invisible/control characters
+                                value = sanitizeConfigValue(value)
                                 config.put(field.key, value)
                             }
                             field.secret && existing.isNotBlank() -> config.put(field.key, existing)
@@ -426,5 +426,31 @@ private fun ConnectorSetupDialog(
     )
 }
 
-private fun sanitizeSecret(input: String): String =
-    input.trim().filter { it >= ' ' && it <= '~' }
+/**
+ * Removes invisible/control characters that can cause API errors.
+ * Targets: U+0000-U+001F, U+007F-U+009F (control), U+00A0 (NBSP), U+1680, U+2000-U+200A, U+200B-U+200D (zero-width),
+ * U+2028-U+202F (line/para separators), U+205F, U+2060, U+3000 (ideographic space), U+FEFF (BOM).
+ * Keeps ASCII printable (U+0020-U+007E) and other visible Unicode.
+ */
+private fun sanitizeConfigValue(input: String): String {
+    return input.trim().filter { ch ->
+        val cp = ch.codePointAt(0)
+        // Allow ASCII printable range
+        if (cp in 0x20..0x7E) return@filter true
+        // Block known problematic invisible/control characters
+        when (cp) {
+            0x00..0x1F -> false // C0 controls
+            0x7F..0x9F -> false // DEL + C1 controls
+            0x00A0 -> false     // Non-breaking space
+            0x1680 -> false     // Ogham space mark
+            in 0x2000..0x200A -> false // En quad, em quad, en space, em space, etc.
+            in 0x200B..0x200D -> false // Zero-width space, ZWNJ, ZWJ
+            in 0x2028..0x202F -> false // Line/para separators, narrow no-break space
+            0x205F -> false     // Medium mathematical space
+            0x2060 -> false     // Word joiner
+            0x3000 -> false     // Ideographic space
+            0xFEFF -> false     // BOM / zero-width no-break space
+            else -> true
+        }
+    }
+}

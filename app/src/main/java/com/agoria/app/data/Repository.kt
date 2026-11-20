@@ -297,11 +297,52 @@ class Repository(
 
     suspend fun updateConnector(connector: ConnectorEntity) = db.connectorDao().update(connector)
 
-    suspend fun connectorConfig(id: String): JSONObject? {
-        val connector = db.connectorDao().get(id) ?: return null
-        val decrypted = SecretCipher.decrypt(connector.configEnc) ?: return null
-        return Json.tryObject(decrypted)
+    /**
+ * Removes invisible/control characters from all string values in a JSON config.
+ * Targets: U+0000-U+001F, U+007F-U+009F, U+00A0, U+1680, U+2000-U+200A, U+200B-U+200D,
+ * U+2028-U+202F, U+205F, U+2060, U+3000, U+FEFF.
+ */
+private fun sanitizeJsonConfig(json: JSONObject): JSONObject {
+    val sanitized = JSONObject()
+    val keys = json.keys()
+    while (keys.hasNext()) {
+        val key = keys.next() as String
+        val value = json.opt(key)
+        sanitized.put(key, when (value) {
+            is String -> sanitizeConfigValue(value)
+            else -> value
+        })
     }
+    return sanitized
+}
+
+private fun sanitizeConfigValue(input: String): String {
+    return input.trim().filter { ch ->
+        val cp = ch.codePointAt(0)
+        if (cp in 0x20..0x7E) return@filter true
+        when (cp) {
+            0x00..0x1F -> false
+            0x7F..0x9F -> false
+            0x00A0 -> false
+            0x1680 -> false
+            in 0x2000..0x200A -> false
+            in 0x200B..0x200D -> false
+            in 0x2028..0x202F -> false
+            0x205F -> false
+            0x2060 -> false
+            0x3000 -> false
+            0xFEFF -> false
+            else -> true
+        }
+    }
+}
+
+suspend fun connectorConfig(id: String): JSONObject? {
+    val connector = db.connectorDao().get(id) ?: return null
+    val decrypted = SecretCipher.decrypt(connector.configEnc) ?: return null
+    val json = Json.tryObject(decrypted) ?: return null
+    return sanitizeJsonConfig(json)
+}
 
     suspend fun saveConnectorConfig(id: String, config: JSONObject) {
         val connector = db.connectorDao().get(id) ?: return
