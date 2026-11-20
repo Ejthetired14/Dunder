@@ -1,13 +1,10 @@
 package com.agoria.app.util
 
 import android.app.Activity
-import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
@@ -187,11 +184,8 @@ class UpdateManager(
             val totalSize = connection.contentLength
             val input = connection.inputStream
 
-            val downloadsDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            } else {
-                context.getExternalFilesDir(null)
-            } ?: return DownloadResult(false, "Cannot access downloads directory")
+            // Use internal files directory - always accessible via FileProvider
+            val downloadsDir = context.filesDir ?: return DownloadResult(false, "Cannot access files directory")
 
             val apkFile = File(downloadsDir, "dunder-$tagName.apk")
             val output = FileOutputStream(apkFile)
@@ -263,7 +257,11 @@ class UpdateManager(
                 DownloadResult(true)
             } else {
                 Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
-                DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app.")
+                // Provide more specific error
+                val pm = context.packageManager
+                val installers = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                Log.e(TAG, "installApk: Available installers count=${installers.size}")
+                DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app in Settings > Apps > Special access.")
             }
         } catch (e: SecurityException) {
             Log.e(TAG, "installApk: SecurityException - missing install permission", e)

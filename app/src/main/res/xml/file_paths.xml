@@ -3,6 +3,9 @@
     <files-path
         name="agent_workspace"
         path="agent-workspace/" />
+    <files-path
+        name="apks"
+        path="." />
     <external-files-path
         name="exports"
         path="exports/" />
