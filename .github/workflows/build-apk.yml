@@ -102,7 +102,7 @@ jobs:
             exit 1
           fi
           
-          # Use keystore from secrets if available
+          # Use keystore from secrets if available, otherwise sign with generated key
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
             echo "Using keystore from secrets..."
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
@@ -110,8 +110,8 @@ jobs:
             KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
             KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           else
-            echo "::error::KEYSTORE SECRETS NOT CONFIGURED"
-            echo "::error::Add these to Settings → Secrets → Actions for consistent signing:"
+            echo "WARNING: Keystore secrets not configured. Generating temporary key for this build."
+            echo "For consistent updates, add KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD to GitHub Secrets."
             PASS=$(openssl rand -base64 24 | tr -d "=+/")
             KEY_ALIAS="dunder-release"
             KEY_PASSWORD="$PASS"
@@ -125,15 +125,6 @@ jobs:
               -storepass "$PASS" \
               -keypass "$KEY_PASSWORD" \
               -dname "CN=Dunder Release, OU=Dunder, O=Dunder, L=Local, ST=State, C=US"
-            
-            BASE64=$(base64 -w 0 release-key.jks)
-            echo "KEYSTORE_BASE64=$BASE64"
-            echo "KEYSTORE_PASSWORD=$PASS"
-            echo "KEY_ALIAS=$KEY_ALIAS"
-            echo "KEY_PASSWORD=$KEY_PASSWORD"
-            echo "::error::COPY THE ABOVE VALUES AND ADD AS GITHUB SECRETS"
-            echo "::error::Then re-run this workflow"
-            exit 1
           fi
           
           # Sign the APK
