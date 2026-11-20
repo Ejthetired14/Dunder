@@ -2,21 +2,22 @@ package com.agoria.app.util
 
 import android.app.Activity
 import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
@@ -179,8 +180,8 @@ class UpdateManager(
     )
 
     /**
-     * Uses DownloadManager (system service) to download APK.
-     * DownloadManager handles all storage/permission complexities automatically.
+     * Uses DownloadManager (system service) to download APK, then copies to cache dir
+     * and installs via FileProvider so package installer can read it.
      */
     private fun downloadAndInstallViaDownloadManager(urlString: String, tagName: String, onProgress: (Int) -> Unit): DownloadResult {
         return try {
@@ -237,16 +238,33 @@ class UpdateManager(
                 return DownloadResult(false, "Download failed: $reason")
             }
 
-            // Get the downloaded file URI
-            val localUri = dm.getUriForDownloadedFile(downloadId)
-            Log.d(TAG, "DownloadManager completed: uri=$localUri")
+            // Open the downloaded file and copy to our cache dir for FileProvider access
+            val pfd = dm.openDownloadedFile(downloadId)
+            val cacheDir = context.cacheDir
+            val apkDir = File(cacheDir, "apks")
+            if (!apkDir.exists()) apkDir.mkdirs()
+            val apkFile = File(apkDir, "dunder-$tagName.apk")
             
-            if (localUri == null) {
-                return DownloadResult(false, "Downloaded file URI not available")
+            // Copy from ParcelFileDescriptor to our cache file
+            val input = ParcelFileDescriptor.AutoCloseInputStream(pfd)
+            val output = FileOutputStream(apkFile)
+            val buffer = ByteArray(8192)
+            var len: Int
+            while (input.read(buffer).also { len = it } != -1) {
+                output.write(buffer, 0, len)
+            }
+            output.flush()
+            output.close()
+            input.close()
+            
+            Log.d(TAG, "APK copied to cache: ${apkFile.absolutePath}, size=${apkFile.length()}")
+            
+            if (!apkFile.exists() || apkFile.length() == 0L) {
+                return DownloadResult(false, "APK copy failed - file empty")
             }
 
-            // Install the APK
-            return installApkDirect(localUri)
+            // Install via FileProvider URI
+            return installApkDirect(apkFile)
 
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -258,17 +276,23 @@ class UpdateManager(
     }
 
     /**
-     * Direct install using multiple fallback strategies with a content URI.
-     * DownloadManager returns a content:// URI that can be used directly.
+     * Direct install using multiple fallback strategies with FileProvider URI.
      */
-    private fun installApkDirect(apkUri: Uri): DownloadResult {
+    private fun installApkDirect(apkFile: File): DownloadResult {
         return try {
             val pm = context.packageManager
-            Log.d(TAG, "installApkDirect: uri=$apkUri")
+            
+            // Get FileProvider URI for our cache file
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, apkFile)
+            Log.d(TAG, "installApkDirect: file=${apkFile.absolutePath}, uri=$uri")
+            
+            // Grant permission to package installer
+            context.grantUriPermission("com.android.packageinstaller", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             
             // Strategy 1: ACTION_VIEW with package installer
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                data = apkUri
+                data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 setPackage("com.android.packageinstaller")
@@ -286,7 +310,7 @@ class UpdateManager(
             
             // Try without setPackage
             val intent2 = Intent(Intent.ACTION_VIEW).apply {
-                data = apkUri
+                data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -302,7 +326,7 @@ class UpdateManager(
             
             // Strategy 2: ACTION_INSTALL_PACKAGE
             val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                data = apkUri
+                data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
