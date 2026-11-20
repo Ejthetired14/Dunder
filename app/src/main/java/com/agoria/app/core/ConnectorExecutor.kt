@@ -1,8 +1,12 @@
 package com.agoria.app.core
 
+import android.accounts.AccountManager
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
-import android.util.Base64
+import android.provider.CalendarContract
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.Repository
 import com.agoria.app.util.Files
@@ -19,6 +23,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URLEncoder
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 data class ConnectorResult(
@@ -117,8 +125,7 @@ class ConnectorExecutor(
         "device" -> device(config, action, args)
         "files" -> files(config, action, args, agentId)
         "http" -> http(config, action, args)
-        "gmail" -> gmail(config, action, args)
-        "calendar" -> calendar(config, action, args)
+        "accounts" -> accounts(action, args)
         "github" -> github(config, action, args)
         "slack" -> slack(config, action, args)
         "discord" -> discord(config, action, args)
@@ -506,157 +513,131 @@ class ConnectorExecutor(
         return out
     }
 
-    // --------------------------------------------------------------------- gmail
+    // ------------------------------------------------------------------ accounts
+    //
+    // These actions never call an API. They open the app the user is already signed in to,
+    // with the work filled in, so the account, the credentials and the final tap stay with
+    // the user. That is why nothing here can expire or leak a token.
 
-    private fun gmail(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
-        val token = cfg(config, "accessToken") ?: return ConnectorResult(false, "Missing Gmail access token")
-        val user = cfg(config, "userEmail") ?: "me"
-        val auth = mapOf("Authorization" to "Bearer $token")
-        return when (action) {
-            "list" -> {
-                val query = args.optString("query", "")
-                val max = args.optInt("maxResults", 5).coerceIn(1, 25)
-                val url = "https://gmail.googleapis.com/gmail/v1/users/$user/messages?maxResults=$max" +
-                    if (query.isBlank()) "" else "&q=" + enc(query)
-                val response = http("GET", url, auth)
-                if (!response.ok) return ConnectorResult(false, "Gmail error: ${text(response.body, 300)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Gmail returned invalid JSON")
-                val messages = root.optJSONArray("messages") ?: return ConnectorResult(true, "No messages found.")
-                val sb = StringBuilder("Gmail messages:\n")
-                for (i in 0 until messages.length()) {
-                    val item = messages.getJSONObject(i)
-                    val id = item.optString("id")
-                    val detail = http("GET", "https://gmail.googleapis.com/gmail/v1/users/$user/messages/$id?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date", auth)
-                    if (!detail.ok) continue
-                    val detailRoot = json(detail.body) ?: continue
-                    val payload = detailRoot.optJSONObject("payload")
-                    val headers = payload?.optJSONArray("headers")
-                    val subject = headerValue(headers, "Subject")
-                    val from = headerValue(headers, "From")
-                    val date = headerValue(headers, "Date")
-                    sb.append("- ").append(subject.ifBlank { "(no subject)" })
-                        .append(" — ").append(from).append(" (").append(date).append(")\n  id: ").append(id).append('\n')
-                }
-                ConnectorResult(true, sb.toString().trim())
-            }
-            "get" -> {
-                val id = args.optString("messageId").ifBlank { return ConnectorResult(false, "Missing messageId") }
-                val url = "https://gmail.googleapis.com/gmail/v1/users/$user/messages/$id?format=full"
-                val response = http("GET", url, auth)
-                if (!response.ok) return ConnectorResult(false, "Gmail error: ${text(response.body, 300)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Gmail returned invalid JSON")
-                val payload = root.optJSONObject("payload")
-                val headers = payload?.optJSONArray("headers")
-                val subject = headerValue(headers, "Subject")
-                val from = headerValue(headers, "From")
-                val body = gmailBody(payload)
-                ConnectorResult(
-                    true,
-                    "Subject: $subject\nFrom: $from\n\n" + text(body, 2000),
-                )
-            }
-            "send" -> {
-                val to = args.optString("to").ifBlank { return ConnectorResult(false, "Missing recipient") }
-                val subject = args.optString("subject").ifBlank { return ConnectorResult(false, "Missing subject") }
-                val body = args.optString("body").ifBlank { return ConnectorResult(false, "Missing body") }
-                val mime = "To: $to\r\n" +
-                    "Subject: $subject\r\n" +
-                    "Content-Type: text/plain; charset=\"UTF-8\"\r\n" +
-                    "MIME-Version: 1.0\r\n\r\n" +
-                    body
-                val raw = Base64.encodeToString(mime.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP)
-                val payload = JSONObject().put("raw", raw)
-                val response = http(
-                    "POST",
-                    "https://gmail.googleapis.com/gmail/v1/users/$user/messages/send",
-                    auth,
-                    payload.toString(),
-                )
-                if (!response.ok) return ConnectorResult(false, "Gmail send failed: ${text(response.body, 400)}")
-                ConnectorResult(true, "Sent email to $to with subject '$subject'.")
-            }
-            else -> ConnectorResult(false, "Unknown Gmail action '$action'")
-        }
+    private fun accounts(action: String, args: JSONObject): ConnectorResult = when (action) {
+        "list" -> signedInAccounts()
+        "email" -> draftEmail(args)
+        "event" -> addEvent(args)
+        "open" -> openLink(args)
+        else -> ConnectorResult(false, "Unknown Your Accounts action '$action'")
     }
 
-    private fun headerValue(headers: JSONArray?, name: String): String {
-        if (headers == null) return ""
-        for (i in 0 until headers.length()) {
-            val header = headers.optJSONObject(i) ?: continue
-            if (header.optString("name").equals(name, ignoreCase = true)) return header.optString("value")
+    private fun signedInAccounts(): ConnectorResult {
+        val accounts = try {
+            AccountManager.get(context).accounts?.toList().orEmpty()
+        } catch (e: SecurityException) {
+            return ConnectorResult(
+                false,
+                "Android would not let the app read the accounts on this phone. Open Settings > Passwords & accounts to see or add them.",
+                e.message,
+            )
         }
-        return ""
+        if (accounts.isEmpty()) {
+            return ConnectorResult(
+                true,
+                "No accounts are signed in on this phone yet. Open Settings > Passwords & accounts, add your mail or calendar account, then try again.",
+            )
+        }
+        val sb = StringBuilder("Accounts signed in on this phone:\n")
+        accounts.sortedWith(compareBy({ accountTypeLabel(it.type) }, { it.name })).forEach { account ->
+            sb.append("- ").append(account.name).append(" (").append(accountTypeLabel(account.type)).append(")\n")
+        }
+        sb.append("\nThe email, event and open actions work inside those accounts.")
+        return ConnectorResult(true, sb.toString().trim())
     }
 
-    private fun gmailBody(payload: JSONObject?): String {
-        if (payload == null) return ""
-        val body = payload.optJSONObject("body")
-        val data = body?.optString("data")
-        if (!data.isNullOrBlank()) {
-            return try {
-                String(Base64.decode(data, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8)
+    private fun accountTypeLabel(type: String): String = when (type) {
+        "com.google" -> "Google"
+        "com.microsoft" -> "Microsoft"
+        "com.android.exchange" -> "Exchange"
+        "com.whatsapp" -> "WhatsApp"
+        else -> type.substringAfterLast('.').ifBlank { type }
+    }
+
+    private fun draftEmail(args: JSONObject): ConnectorResult {
+        val to = args.optString("to").trim()
+        val subject = args.optString("subject").trim()
+        val body = args.optString("body")
+        if (to.isBlank() && subject.isBlank() && body.isBlank()) {
+            return ConnectorResult(false, "Give the draft a recipient, a subject or a body.")
+        }
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(to)))
+            .putExtra(Intent.EXTRA_SUBJECT, subject)
+            .putExtra(Intent.EXTRA_TEXT, body)
+        if (to.isNotBlank()) intent.putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
+        return launch(
+            intent,
+            "Opened a draft in your mail app for ${to.ifBlank { "a recipient of your choice" }}. Review it and tap send.",
+            "No mail app accepted the draft. Install or enable your mail app, then try again.",
+        )
+    }
+
+    private fun addEvent(args: JSONObject): ConnectorResult {
+        val title = args.optString("title").trim().ifBlank { return ConnectorResult(false, "Missing event title") }
+        val start = parseInstant(args.optString("start"))
+            ?: return ConnectorResult(false, "Missing start time. Use ISO-8601, for example 2026-11-20T10:00:00Z.")
+        val end = parseInstant(args.optString("end")) ?: (start + 60 * 60 * 1000L)
+        if (end <= start) return ConnectorResult(false, "The event end must be after its start.")
+        val intent = Intent(Intent.ACTION_INSERT)
+            .setData(CalendarContract.Events.CONTENT_URI)
+            .putExtra(CalendarContract.Events.TITLE, title)
+            .putExtra(CalendarContract.Events.DESCRIPTION, args.optString("description"))
+            .putExtra(CalendarContract.Events.EVENT_LOCATION, args.optString("location"))
+            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
+        return launch(
+            intent,
+            "Opened '$title' in your calendar app. Confirm it there and it lands in your own account.",
+            "No calendar app accepted the event. Install or enable a calendar app, then try again.",
+        )
+    }
+
+    private fun openLink(args: JSONObject): ConnectorResult {
+        val raw = args.optString("url").trim().ifBlank { return ConnectorResult(false, "Missing url") }
+        if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
+            return ConnectorResult(false, "Only http and https links can be opened.")
+        }
+        return launch(
+            Intent(Intent.ACTION_VIEW, Uri.parse(raw)),
+            "Opened $raw in the app or browser where you are signed in.",
+            "Nothing on this phone could open $raw. Try a browser.",
+        )
+    }
+
+    private fun parseInstant(raw: String): Long? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+        return try {
+            Instant.parse(value).toEpochMilli()
+        } catch (_: Exception) {
+            try {
+                OffsetDateTime.parse(value).toInstant().toEpochMilli()
             } catch (_: Exception) {
-                ""
+                try {
+                    LocalDateTime.parse(value).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                } catch (_: Exception) {
+                    value.toLongOrNull()?.let { if (it < 100_000_000_000L) it * 1000 else it }
+                }
             }
         }
-        val parts = payload.optJSONArray("parts")
-        if (parts != null) {
-            val sb = StringBuilder()
-            for (i in 0 until parts.length()) {
-                sb.append(gmailBody(parts.optJSONObject(i)))
-            }
-            return sb.toString()
-        }
-        return ""
     }
 
-    // ------------------------------------------------------------------ calendar
-
-    private fun calendar(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
-        val token = cfg(config, "accessToken") ?: return ConnectorResult(false, "Missing calendar access token")
-        val calendarId = cfg(config, "calendarId") ?: "primary"
-        val auth = mapOf("Authorization" to "Bearer $token")
-        return when (action) {
-            "list" -> {
-                val max = args.optInt("maxResults", 5).coerceIn(1, 25)
-                val timeMin = args.optString("timeMin", Time.iso(Time.now()))
-                val url = "https://www.googleapis.com/calendar/v3/calendars/" + enc(calendarId) +
-                    "/events?timeMin=" + enc(timeMin) + "&maxResults=$max&singleEvents=true&orderBy=startTime"
-                val response = http("GET", url, auth)
-                if (!response.ok) return ConnectorResult(false, "Calendar error: ${text(response.body, 300)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Calendar returned invalid JSON")
-                val items = root.optJSONArray("items") ?: return ConnectorResult(true, "No events found.")
-                val sb = StringBuilder("Upcoming events:\n")
-                for (i in 0 until items.length()) {
-                    val item = items.getJSONObject(i)
-                    val start = item.optJSONObject("start")?.optString("dateTime")
-                        ?: item.optJSONObject("start")?.optString("date") ?: "?"
-                    sb.append("- ").append(item.optString("summary"))
-                        .append(" at ").append(start)
-                        .append('\n').append("  ").append(item.optString("htmlLink")).append('\n')
-                }
-                ConnectorResult(true, sb.toString().trim())
-            }
-            "create" -> {
-                val summary = args.optString("summary").ifBlank { return ConnectorResult(false, "Missing summary") }
-                val start = args.optString("start").ifBlank { return ConnectorResult(false, "Missing start") }
-                val end = args.optString("end").ifBlank { return ConnectorResult(false, "Missing end") }
-                val payload = JSONObject()
-                    .put("summary", summary)
-                    .put("description", args.optString("description", ""))
-                    .put("start", JSONObject().put("dateTime", start))
-                    .put("end", JSONObject().put("dateTime", end))
-                val response = http(
-                    "POST",
-                    "https://www.googleapis.com/calendar/v3/calendars/" + enc(calendarId) + "/events",
-                    auth,
-                    payload.toString(),
-                )
-                if (!response.ok) return ConnectorResult(false, "Calendar create failed: ${text(response.body, 400)}")
-                ConnectorResult(true, "Created calendar event '$summary'.")
-            }
-            else -> ConnectorResult(false, "Unknown calendar action '$action'")
-        }
+    private fun launch(intent: Intent, okSummary: String, missingSummary: String): ConnectorResult = try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ConnectorResult(true, okSummary)
+    } catch (e: ActivityNotFoundException) {
+        ConnectorResult(false, missingSummary, e.message)
+    } catch (e: Exception) {
+        ConnectorResult(
+            false,
+            "Android did not hand this to another app. Run it again from the chat while the office is on screen. (${e.message ?: e.javaClass.simpleName})",
+            e.message,
+        )
     }
 
     // -------------------------------------------------------------------- github
