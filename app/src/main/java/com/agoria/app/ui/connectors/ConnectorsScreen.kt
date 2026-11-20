@@ -428,4 +428,3 @@ private fun ConnectorSetupDialog(
 
 private fun sanitizeSecret(input: String): String =
     input.trim().filter { it >= ' ' && it <= '~' }
-}
