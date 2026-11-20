@@ -186,6 +186,26 @@ fun SettingsScreen(
         ) {
             SectionCard(title = "Autonomy") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Main autonomy toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text("Enable Autonomy", style = MaterialTheme.typography.titleSmall)
+                            Text("Let agents run automatically in the background", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = settings?.autonomyEnabled ?: false,
+                            onCheckedChange = { enabled ->
+                                viewModel.updateSettings { it.copy(autonomyEnabled = enabled) }
+                            }
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
