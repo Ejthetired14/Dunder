@@ -169,7 +169,7 @@ fun SettingsScreen(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -372,7 +372,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.FileDownload,
+                                imageVector = FileDownload,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp),
@@ -405,7 +405,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.FileUpload,
+                                imageVector = FileUpload,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.secondary,
                                 modifier = Modifier.size(24.dp),
@@ -436,7 +436,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.CloudUpload,
+                                imageVector = CloudUpload,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier.size(24.dp),
@@ -465,7 +465,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.CloudDownload,
+                                imageVector = CloudDownload,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier.size(24.dp),
@@ -597,7 +597,7 @@ fun SettingsScreen(
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.Settings,
+                                        imageVector = Settings,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.secondary,
                                         modifier = Modifier.size(24.dp),

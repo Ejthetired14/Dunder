@@ -71,22 +71,22 @@ fun OnboardingScreen(viewModel: AgoriaViewModel) {
 
         Spacer(Modifier.height(20.dp))
         FeatureRow(
-            icon = Icons.Default.AutoAwesome,
+            icon = AutoAwesome,
             title = "Autonomy",
             body = "Agents run on free model APIs. They choose what to think about, what to learn, and what to propose.",
         )
         FeatureRow(
-            icon = Icons.Default.EditNote,
+            icon = EditNote,
             title = "A diary of thoughts",
             body = "Every agent keeps a private diary. You can read it, search it, and watch the office change over time.",
         )
         FeatureRow(
-            icon = Icons.Default.FactCheck,
+            icon = FactCheck,
             title = "Approval gates",
             body = "Building a project, sending email, posting to a chat, or making an external HTTP request requires your approval.",
         )
         FeatureRow(
-            icon = Icons.Default.Hub,
+            icon = Hub,
             title = "Connectors",
             body = "Agents can ask for Gmail, GitHub, Slack, Notion, or a custom HTTP connector. You configure the credentials.",
         )

@@ -40,11 +40,11 @@ private data class TopDestination(
 )
 
 private val topDestinations = listOf(
-    TopDestination("home", "Home", Icons.Default.Home),
-    TopDestination("office", "Office", Icons.Default.Business),
-    TopDestination("diary", "Diary", Icons.Default.MenuBook),
-    TopDestination("approvals", "Approvals", Icons.Default.FactCheck),
-    TopDestination("connectors", "Connect", Icons.Default.Hub),
+    TopDestination("home", "Home", Home),
+    TopDestination("office", "Office", Business),
+    TopDestination("diary", "Diary", MenuBook),
+    TopDestination("approvals", "Approvals", FactCheck),
+    TopDestination("connectors", "Connect", Hub),
 )
 
 @Composable

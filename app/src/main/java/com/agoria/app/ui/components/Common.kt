@@ -313,7 +313,7 @@ fun EmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = Icons.Default.AutoAwesome,
+            imageVector = AutoAwesome,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
@@ -331,23 +331,23 @@ fun EmptyState(
 
 fun connectorIcon(iconKey: String): ImageVector {
     return when (iconKey) {
-        "wikipedia" -> Icons.Default.Language
-        "hn" -> Icons.Default.Newspaper
-        "search" -> Icons.Default.Search
-        "weather" -> Icons.Default.Cloud
-        "currency" -> Icons.Default.AttachMoney
-        "device" -> Icons.Default.PhoneAndroid
-        "files" -> Icons.Default.Folder
-        "http" -> Icons.Default.Hub
-        "gmail" -> Icons.Default.Email
-        "calendar" -> Icons.Default.CalendarMonth
-        "github" -> Icons.Default.Code
-        "slack", "discord", "telegram" -> Icons.Default.Chat
-        "notion" -> Icons.Default.Description
-        "paypal", "polar" -> Icons.Default.AttachMoney
-        "agentmail" -> Icons.Default.Email
-        "gdrive" -> Icons.Default.Folder
-        else -> Icons.Default.Hub
+        "wikipedia" -> Language
+        "hn" -> Newspaper
+        "search" -> Search
+        "weather" -> Cloud
+        "currency" -> AttachMoney
+        "device" -> PhoneAndroid
+        "files" -> Folder
+        "http" -> Hub
+        "gmail" -> Email
+        "calendar" -> CalendarMonth
+        "github" -> Code
+        "slack", "discord", "telegram" -> Chat
+        "notion" -> Description
+        "paypal", "polar" -> AttachMoney
+        "agentmail" -> Email
+        "gdrive" -> Folder
+        else -> Hub
     }
 }
 
@@ -359,7 +359,7 @@ fun OfficeThumbnail(modifier: Modifier = Modifier) {
             .background(colors.primaryContainer)
     ) {
         Icon(
-            imageVector = Icons.Default.Hub,
+            imageVector = Hub,
             contentDescription = null,
             tint = colors.onPrimaryContainer.copy(alpha = 0.3f),
             modifier = Modifier

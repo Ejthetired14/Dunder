@@ -101,7 +101,7 @@ fun AgentScreen(
                 title = { Text(agent?.name ?: "Agent") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -112,7 +112,7 @@ fun AgentScreen(
                             },
                         ) {
                             Icon(
-                                imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                imageVector = if (agent.autonomy) Pause else PlayArrow,
                                 contentDescription = if (agent.autonomy) "Pause" else "Resume",
                             )
                         }
@@ -281,7 +281,7 @@ private fun AgentHeader(
                     )
                 }
                 TextButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    Icon(Edit, contentDescription = "Edit")
                     Spacer(Modifier.width(6.dp))
                     Text("Edit")
                 }
@@ -375,7 +375,7 @@ private fun ChatTab(
                     onClick = onSend,
                     enabled = input.isNotBlank(),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    Icon(Send, contentDescription = "Send")
                 }
             }
         }
@@ -621,7 +621,7 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
                 horizontalArrangement = Arrangement.End,
             ) {
                 Button(onClick = onAdd) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    Icon(Add, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add memory")
                 }
@@ -710,7 +710,7 @@ private fun BuildsTab(
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { onShare(build) }) {
-                                    Icon(Icons.Default.Share, contentDescription = null)
+                                    Icon(Share, contentDescription = null)
                                     Spacer(Modifier.width(6.dp))
                                     Text("Share ZIP")
                                 }
@@ -729,7 +729,7 @@ private fun BuildsTab(
                                         Spacer(Modifier.width(6.dp))
                                         Text("Saving...")
                                     } else {
-                                        Icon(Icons.Default.Download, contentDescription = null)
+                                        Icon(Download, contentDescription = null)
                                         Spacer(Modifier.width(6.dp))
                                         Text("Save to Device")
                                     }
@@ -869,7 +869,7 @@ private fun EditAgentDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 TextButton(onClick = { confirmDelete = !confirmDelete }) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Icon(Delete, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(if (confirmDelete) "Tap again to delete" else "Delete agent")
                 }

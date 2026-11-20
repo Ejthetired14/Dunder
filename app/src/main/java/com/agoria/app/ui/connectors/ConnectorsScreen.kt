@@ -319,7 +319,7 @@ private fun ConnectorLogRow(log: ConnectorLogEntity) {
     ) {
         Row(Modifier.padding(12.dp)) {
             Icon(
-                imageVector = if (log.status == "ok") Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                imageVector = if (log.status == "ok") CheckCircle else ErrorOutline,
                 contentDescription = null,
                 tint = if (log.status == "ok") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
             )

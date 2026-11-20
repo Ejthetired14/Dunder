@@ -84,7 +84,7 @@ fun DiaryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Search thoughts, plans, decisions...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Search, contentDescription = null) },
                 singleLine = true,
             )
 
