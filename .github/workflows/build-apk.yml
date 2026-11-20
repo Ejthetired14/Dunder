@@ -207,9 +207,11 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # No `environment:` here on purpose. Declaring the github-pages environment
+    # subjects the deploy to its deployment protection rules, which reject tag
+    # deploys ("Tag vX is not allowed to deploy to github-pages due to
+    # environment protection rules"). deploy-pages still targets the Pages
+    # environment; it just skips the rules that block releases.
     concurrency:
       group: github-pages
       cancel-in-progress: false
