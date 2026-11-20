@@ -398,7 +398,7 @@ class UpdateManager(
         return try {
             val packageInstaller = context.packageManager.packageInstaller
             val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-                .setAppPackageName(context.packageName)
+            sessionParams.setAppPackageName(context.packageName)
             
             // Create session
             val sessionId = packageInstaller.createSession(sessionParams)
