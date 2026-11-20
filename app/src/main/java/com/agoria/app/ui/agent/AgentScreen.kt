@@ -192,6 +192,7 @@ private fun AgentContent(
             0 -> ChatTab(
                 viewModel = viewModel,
                 agent = agent,
+                messages = messages,
                 input = input,
                 onInput = { input = it },
                 onSend = {
@@ -202,7 +203,7 @@ private fun AgentContent(
                 },
                 listState = listState,
             )
-            1 -> DiaryTab(viewModel = viewModel, agentId = agent.id, diary = diary)
+            1 -> DiaryTab(diary = diary)
             2 -> TasksTab(tasks = tasks)
             3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
             else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onShare = onShareBuild)
@@ -307,27 +308,12 @@ private fun AgentHeader(
 private fun ChatTab(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
+    messages: List<MessageEntity>,
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
-    val agentId = agent.id
-    val pagedMessages = viewModel.pagedMessages(agentId)
-    val messagesPagination = viewModel.messagesPagination(agentId)
-
-    // Load initial data (latest messages)
-    LaunchedEffect(Unit) {
-        viewModel.loadPagedMessages(agentId, refresh = true)
-    }
-
-    // Load more when scrolled to top
-    LaunchedEffect(listState.firstVisibleItemIndex) {
-        if (listState.firstVisibleItemIndex == 0 && messagesPagination.hasMore && !messagesPagination.isLoading) {
-            viewModel.loadPagedMessages(agentId)
-        }
-    }
-
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -336,30 +322,7 @@ private fun ChatTab(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             reverseLayout = true, // Show latest messages at bottom
         ) {
-            // Load more indicator at top (older messages)
-            if (messagesPagination.hasMore) {
-                item {
-                    if (messagesPagination.isLoading) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else {
-                        TextButton(
-                            onClick = { viewModel.loadPagedMessages(agentId) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        ) {
-                            Text("Load older messages")
-                        }
-                    }
-                }
-            }
-
-            if (pagedMessages.isEmpty() && !messagesPagination.isLoading) {
+            if (messages.isEmpty()) {
                 item {
                     EmptyState(
                         title = "Say hello",
@@ -367,7 +330,7 @@ private fun ChatTab(
                     )
                 }
             } else {
-                items(pagedMessages.reversed(), key = { it.id }) { message ->
+                items(messages.reversed(), key = { it.id }) { message ->
                     MessageRow(message = message, agent = agent)
                 }
             }
@@ -507,16 +470,8 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
 }
 
 @Composable
-private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<DiaryEntryEntity>) {
-    val pagedDiary by viewModel.pagedDiary.collectAsStateWithLifecycle()
-    val diaryPagination by viewModel.diaryPagination.collectAsStateWithLifecycle()
-
-    // Load initial data
-    LaunchedEffect(Unit) {
-        viewModel.loadPagedDiary(agentId, refresh = true)
-    }
-
-    if (pagedDiary.isEmpty() && !diaryPagination.isLoading) {
+private fun DiaryTab(diary: List<DiaryEntryEntity>) {
+    if (diary.isEmpty()) {
         EmptyState(
             title = "No diary yet",
             body = "Start autonomy or send a message. Every cycle produces a private thought here.",
@@ -529,7 +484,7 @@ private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<Di
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(pagedDiary, key = { it.id }) { entry ->
+            items(diary, key = { it.id }) { entry ->
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -553,29 +508,6 @@ private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<Di
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                    }
-                }
-            }
-
-            // Load more indicator
-            if (diaryPagination.hasMore) {
-                item {
-                    if (diaryPagination.isLoading) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else {
-                        TextButton(
-                            onClick = { viewModel.loadPagedDiary(agentId) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        ) {
-                            Text("Load more")
-                        }
                     }
                 }
             }
