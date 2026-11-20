@@ -13,9 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Apply the queued patch to main
         run: |
           set -eux
+          git fetch origin main
           git apply --whitespace=nowarn patches/p.patch || patch -p1 -l < patches/p.patch
           rm -rf patches .github/workflows/apply-patch.yml
           git config user.name "Dunder Bot"
