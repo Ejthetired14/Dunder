@@ -78,14 +78,21 @@ jobs:
           # closes stdin, and sdkmanager itself returns 1 when there is nothing
           # left to accept, so the licence step is deliberately non-fatal. The
           # `--install` below is what actually proves the SDK is usable.
+          #
+          # The install output is written to a log and only its tail is echoed on
+          # failure: sdkmanager prints thousands of progress lines, which buried
+          # the Gradle error further down this job's log.
           set +o pipefail
           yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
           set -o pipefail
 
-          "$SDKMGR" --install \
+          if ! "$SDKMGR" --install \
             "platform-tools" \
             "platforms;android-$COMPILE_SDK" \
-            "build-tools;$BUILD_TOOLS"
+            "build-tools;$BUILD_TOOLS" > "$RUNNER_TEMP/sdk-install.log" 2>&1; then
+            tail -40 "$RUNNER_TEMP/sdk-install.log"
+            exit 1
+          fi
 
           echo "platforms:   $(ls "$SDK_ROOT/platforms")"
           echo "build-tools: $(ls "$SDK_ROOT/build-tools")"
@@ -106,10 +113,20 @@ jobs:
       - name: Build debug and release APKs
         run: |
           set -euo pipefail
+          # Gradle output goes to a file and only the tail is echoed, so a failure
+          # stays readable in this job log instead of being buried under download
+          # and task progress lines.
+          set +e
           ./gradlew :app:assembleDebug :app:assembleRelease \
             --no-daemon \
             --stacktrace \
-            --console=plain
+            --console=plain > "$RUNNER_TEMP/gradle.log" 2>&1
+          STATUS=$?
+          set -e
+          tail -120 "$RUNNER_TEMP/gradle.log"
+          if [ "$STATUS" -ne 0 ]; then
+            exit "$STATUS"
+          fi
           ls -l app/build/outputs/apk/debug/ app/build/outputs/apk/release/
 
       - name: Zipalign and sign release APK
