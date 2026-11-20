@@ -82,19 +82,48 @@ jobs:
       - name: Generate and Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          # Generate keystore with SAME password for store and key (required for PKCS12)
-          PASS=$(openssl rand -base64 24 | tr -d "=+/")
-          echo "Generated password"
-          
-          keytool -genkey -v \
-            -keystore release-key.jks \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -alias dunder-release \
-            -storepass "$PASS" \
-            -keypass "$PASS" \
-            -dname "CN=Dunder Release, OU=Dunder, O=Dunder, L=Local, ST=State, C=US"
+          # Check if keystore secrets exist
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
+            echo "Using existing keystore from secrets..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
+            PASS="${{ secrets.KEYSTORE_PASSWORD }}"
+            KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
+            KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+          else
+            echo "No keystore secrets found, generating new one..."
+            PASS=$(openssl rand -base64 24 | tr -d "=+/")
+            KEY_ALIAS="dunder-release"
+            KEY_PASSWORD="$PASS"
+            
+            keytool -genkey -v \
+              -keystore release-key.jks \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -alias "$KEY_ALIAS" \
+              -storepass "$PASS" \
+              -keypass "$KEY_PASSWORD" \
+              -dname "CN=Dunder Release, OU=Dunder, O=Dunder, L=Local, ST=State, C=US"
+            
+            # Output the keystore info for future releases (copy to secrets)
+            BASE64=$(base64 -w 0 release-key.jks)
+            echo ""
+            echo "=========================================="
+            echo "SAVE THESE FOR FUTURE RELEASES (Settings → Secrets → Actions):"
+            echo "=========================================="
+            echo "KEYSTORE_BASE64:"
+            echo "$BASE64"
+            echo ""
+            echo "KEYSTORE_PASSWORD:"
+            echo "$PASS"
+            echo ""
+            echo "KEY_ALIAS:"
+            echo "$KEY_ALIAS"
+            echo ""
+            echo "KEY_PASSWORD:"
+            echo "$KEY_PASSWORD"
+            echo "=========================================="
+          fi
           
           # Find apksigner
           APKSIGNER_PATH=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
@@ -104,33 +133,14 @@ jobs:
           fi
           echo "Using apksigner: $APKSIGNER_PATH"
           
-          # Sign the APK (use same password for both)
+          # Sign the APK
           "$APKSIGNER_PATH" sign \
             --ks release-key.jks \
             --ks-pass pass:"$PASS" \
-            --ks-key-alias dunder-release \
-            --key-pass pass:"$PASS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass pass:"$KEY_PASSWORD" \
             --out app/build/outputs/apk/release/app-release-signed.apk \
             app/build/outputs/apk/release/app-release-unsigned.apk
-          
-          # Output the keystore info for future releases (copy to secrets)
-          BASE64=$(base64 -w 0 release-key.jks)
-          echo ""
-          echo "=========================================="
-          echo "SAVE THESE FOR FUTURE RELEASES (Settings → Secrets → Actions):"
-          echo "=========================================="
-          echo "KEYSTORE_BASE64:"
-          echo "$BASE64"
-          echo ""
-          echo "KEYSTORE_PASSWORD:"
-          echo "$PASS"
-          echo ""
-          echo "KEY_ALIAS:"
-          echo "dunder-release"
-          echo ""
-          echo "KEY_PASSWORD:"
-          echo "$PASS"
-          echo "=========================================="
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
