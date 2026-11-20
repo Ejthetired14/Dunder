@@ -352,7 +352,7 @@ fun SettingsScreen(
                 val paymentConnectors = state.connectors?.filter { it.id == "stripe" } ?: emptyList()
                 if (paymentConnectors.isEmpty()) {
                     Text(
-                        text = "No payment connectors configured. Go to Connectors tab to add Stripe, PayPal, or Polar.",
+                        text = "No payment connector configured. Go to the Connectors tab to add Stripe.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -137,7 +137,7 @@ object PromptBuilder {
         sb.appendLine("Action shapes:")
         sb.appendLine("- create_task: {\"title\": \"...\", \"description\": \"...\"}")
         sb.appendLine("- request_approval: {\"type\": \"build_project\", \"title\": \"...\", \"summary\": \"...\", \"plan\": \"...\", \"name\": \"...\", \"description\": \"...\", \"risk\": \"medium\"}")
-        sb.appendLine("- request_connector: {\"connector_id\": \"accounts\", \"reason\": \"...\", \"scopes\": \"device accounts only\"}")
+        sb.appendLine("- request_connector: {\"connector_id\": \"accounts\", \"reason\": \"...\", \"scopes\": \"in-app browser session only\"}")
         sb.appendLine("- use_connector: {\"connector_id\": \"wikipedia\", \"action_name\": \"search\", \"args\": {\"query\": \"...\"}}")
         sb.appendLine("- update_goal: {\"goal\": \"...\"}")
         sb.appendLine("- update_memory: {\"kind\": \"fact\", \"content\": \"...\", \"importance\": 3}")
