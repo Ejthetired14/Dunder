@@ -30,6 +30,13 @@
             android:label="Office browser"
             android:theme="@style/Theme.Dunder.Starting" />
 
+        <!-- Reads a finished build ZIP inside the app instead of handing the file to another app. -->
+        <activity
+            android:name=".viewer.BuildViewerActivity"
+            android:exported="false"
+            android:label="Build"
+            android:theme="@style/Theme.Dunder.Starting" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

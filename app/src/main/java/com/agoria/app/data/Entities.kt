@@ -21,6 +21,10 @@ data class AgentEntity(
     val lastError: String?,
     val createdAt: Long,
     val updatedAt: Long,
+    /** Comma separated connector ids this agent may use. Empty means every enabled connector. */
+    val allowedConnectors: String = "",
+    /** Optional bearer token this agent alone can present through the HTTP connector. */
+    val apiToken: String = "",
 )
 
 @Entity(

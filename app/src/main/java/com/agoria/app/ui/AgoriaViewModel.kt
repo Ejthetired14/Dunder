@@ -584,6 +584,24 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Turning a connector off stops agents reaching it without forgetting its saved keys. */
+    fun toggleConnector(connectorId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            val row = repo.connector(connectorId) ?: return@launch
+            if (enabled) {
+                val def = com.agoria.app.core.ConnectorCatalog.get(connectorId)
+                val clean = when {
+                    row.configEnc != null -> "configured"
+                    def != null -> com.agoria.app.core.ConnectorCatalog.defaultStatus(def)
+                    else -> "needs_setup"
+                }
+                repo.updateConnector(row.copy(status = clean, lastError = null))
+            } else {
+                repo.updateConnector(row.copy(status = "disabled"))
+            }
+        }
+    }
+
     fun saveConnectorConfig(connectorId: String, config: JSONObject) {
         viewModelScope.launch {
             repo.saveConnectorConfig(connectorId, config)

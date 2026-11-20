@@ -270,9 +270,11 @@ class Repository(
             summary = summary,
             details = details,
             risk = risk,
+            // With auto-approve the policy has already answered, so the row is never shown as a
+            // pending question. The runtime executes it in the same cycle and rewrites the status.
             status = if (autoApprove) "auto_pending" else "pending",
             createdAt = Time.now(),
-            decidedAt = null,
+            decidedAt = if (autoApprove) Time.now() else null,
             result = if (autoApprove) "Auto-approved" else null,
         )
         db.approvalDao().insert(approval)

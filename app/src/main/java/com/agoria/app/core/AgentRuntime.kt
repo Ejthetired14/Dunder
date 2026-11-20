@@ -121,7 +121,7 @@ class AgentRuntime(
 
     suspend fun approve(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
-        if (approval.status != "pending") return
+        if (approval.status != "pending" && approval.status != "auto_pending") return
         val now = Time.now()
         val decided = approval.copy(
             status = "approved",
@@ -138,7 +138,7 @@ class AgentRuntime(
 
     suspend fun deny(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
-        if (approval.status != "pending") return
+        if (approval.status != "pending" && approval.status != "auto_pending") return
         val now = Time.now()
         val decided = approval.copy(
             status = "denied",
@@ -265,7 +265,13 @@ class AgentRuntime(
             .filter { it.status == "auto_pending" && it.type in autoApproveTypes }
 
         autoPending.forEach { approval ->
-            executeApproval(approval)
+            val decided = approval.copy(
+                status = "approved",
+                decidedAt = Time.now(),
+                result = "Auto-approved",
+            )
+            repo.updateApproval(decided)
+            executeApproval(decided)
         }
     }
 
@@ -360,6 +366,7 @@ class AgentRuntime(
         }
 
         var nextStatus = "idle"
+        val cycleStart = Time.now()
 
         when (action) {
             "none", "think" -> {
@@ -624,6 +631,22 @@ class AgentRuntime(
             }
         }
 
+        // Anything the policy auto-approved is run now, in this cycle. It is never left as a
+        // question the user has to answer a second time.
+        repo.approvalsFor(agentId).first()
+            .filter { it.status == "auto_pending" && it.createdAt >= cycleStart }
+            .forEach { auto ->
+                val decided = auto.copy(
+                    status = "approved",
+                    decidedAt = Time.now(),
+                    result = "Auto-approved",
+                )
+                repo.updateApproval(decided)
+                executeApproval(decided)
+                nextStatus = "idle"
+                log("Auto-approved: ${auto.title}")
+            }
+
         val summary = processed.message.ifBlank { processed.diary }
         _state.update {
             it.copy(
@@ -752,7 +775,10 @@ class AgentRuntime(
         val approvals = repo.approvalsFor(agent.id).first()
         val builds = repo.buildsFor(agent.id).first()
 
-        val connectors = repo.connectors.first().map { connector ->
+        val allowed = agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }
+        val connectors = repo.connectors.first()
+            .filter { it.status != "disabled" && (allowed.isEmpty() || it.id in allowed) }
+            .map { connector ->
             val def = ConnectorCatalog.get(connector.id)
             ConnectorBrief(
                 id = connector.id,

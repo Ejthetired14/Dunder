@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -137,7 +140,11 @@ fun AgentScreen(
             AgentContent(
                 viewModel = viewModel,
                 agent = agent,
-                onShareBuild = { build -> Share.shareZip(context, File(build.zipPath)) },
+                onViewBuild = { build ->
+                    context.startActivity(
+                        com.agoria.app.viewer.BuildViewerActivity.intent(context, build.zipPath, build.name),
+                    )
+                },
             )
         }
     }
@@ -147,7 +154,7 @@ fun AgentScreen(
 private fun AgentContent(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
-    onShareBuild: (BuildEntity) -> Unit,
+    onViewBuild: (BuildEntity) -> Unit,
 ) {
     val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
         AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
@@ -205,7 +212,7 @@ private fun AgentContent(
             1 -> DiaryTab(viewModel = viewModel, agentId = agent.id, diary = diary)
             2 -> TasksTab(tasks = tasks)
             3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
-            else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onShare = onShareBuild)
+            else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onView = onViewBuild)
         }
     }
 
@@ -715,11 +722,7 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                Button(onClick = onAdd) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add memory")
-                }
+                Button(onClick = onAdd) { Text("Add") }
             }
         }
     }
@@ -729,7 +732,7 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
 private fun BuildsTab(
     viewModel: AgoriaViewModel,
     agentId: String,
-    onShare: (BuildEntity) -> Unit,
+    onView: (BuildEntity) -> Unit,
 ) {
     val context = LocalContext.current
     val buildProgress by viewModel.buildProgress.collectAsStateWithLifecycle()
@@ -804,30 +807,17 @@ private fun BuildsTab(
                             )
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { onShare(build) }) {
-                                    Icon(Icons.Default.Share, contentDescription = null)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Share ZIP")
-                                }
-                                Button(
+                                FilledTonalButton(onClick = { onView(build) }) { Text("View") }
+                                TextButton(
                                     onClick = {
                                         savingBuildId = build.id
-                                        viewModel.saveBuildToDownloads(context, build) { uri ->
+                                        viewModel.saveBuildToDownloads(context, build) { _ ->
                                             savingBuildId = null
-                                            // Could show a snackbar here
                                         }
                                     },
                                     enabled = savingBuildId != build.id,
                                 ) {
-                                    if (savingBuildId == build.id) {
-                                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Saving...")
-                                    } else {
-                                        Icon(Icons.Default.Download, contentDescription = null)
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Save to Device")
-                                    }
+                                    Text(if (savingBuildId == build.id) "Saving" else "Save")
                                 }
                             }
                         }
@@ -924,10 +914,16 @@ private fun EditAgentDialog(
     var persona by remember { mutableStateOf(agent.persona) }
     var goal by remember { mutableStateOf(agent.goal) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var token by remember { mutableStateOf(agent.apiToken) }
+    var granted by remember {
+        mutableStateOf(
+            agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }.toSet(),
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit ${agent.name}") },
+        title = { Text(agent.name) },
         text = {
             Column(
                 modifier = Modifier
@@ -971,6 +967,36 @@ private fun EditAgentDialog(
                         .fillMaxWidth()
                         .heightIn(max = 180.dp),
                 )
+                Text("Can use", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = "Leave every chip off to allow all connectors. Picking any chip limits this agent to those.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column {
+                    com.agoria.app.core.ConnectorCatalog.all.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            pair.forEach { def ->
+                                FilterChip(
+                                    selected = def.id in granted,
+                                    onClick = {
+                                        granted = if (def.id in granted) granted - def.id else granted + def.id
+                                    },
+                                    label = { Text(def.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                )
+                            }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("Agent token (optional)") },
+                    supportingText = { Text("Used by the HTTP connector when its Authentication is set to agent.") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 TextButton(onClick = { confirmDelete = !confirmDelete }) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -997,6 +1023,8 @@ private fun EditAgentDialog(
                                 role = role.trim().ifBlank { agent.role },
                                 persona = persona.ifBlank { agent.persona },
                                 goal = goal.ifBlank { agent.goal },
+                                allowedConnectors = granted.sorted().joinToString(","),
+                                apiToken = token.trim(),
                             ),
                         )
                     }

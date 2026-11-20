@@ -63,6 +63,30 @@ class ConnectorExecutor(
         if (def == null) {
             return ConnectorResult(false, "Connector '$connectorId' has no definition.", "unknown connector")
         }
+        // A token can be issued per agent, and that agent only reaches the connectors it was
+        // granted. An empty grant list means every enabled connector.
+        if (agentId != null) {
+            val agent = repo.agent(agentId)
+            val granted = agent?.allowedConnectors.orEmpty()
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+            if (granted.isNotEmpty() && connectorId !in granted) {
+                return finish(
+                    connectorId,
+                    agentId,
+                    action,
+                    false,
+                    "'$connectorId' is not granted to ${agent?.name ?: "this agent"}. Granted: ${granted.joinToString(", ")}.",
+                    marksError = false,
+                )
+            }
+        }
+        // Agents ask what a connector can do instead of guessing action names.
+        val probe = action.trim().lowercase().replace('-', '_')
+        if (probe in setOf("list_actions", "actions", "help", "describe")) {
+            return finish(connectorId, agentId, probe, true, describeActions(def))
+        }
         // Agents name actions in their own words ("ls", "cat", "save"), so resolve the obvious
         // synonyms before checking the catalog. A name that still does not resolve is the model's
         // mistake, not a connector failure, so it must not paint the connector red.
@@ -109,6 +133,8 @@ class ConnectorExecutor(
             "rm", "remove", "unlink", "delete_file" -> "delete"
             else -> normalised
         }
+        if (connectorId == "accounts" && generic == "open") return "open_url"
+        if (connectorId == "files" && generic == "help") return "list"
         return when (connectorId) {
             "github" -> when (generic) {
                 "repo", "repository", "get_repository", "repo_info", "repository_info", "info" -> "get_repo"
@@ -129,6 +155,17 @@ class ConnectorExecutor(
             }
             else -> generic
         }
+    }
+
+    private fun describeActions(def: ConnectorDef): String {
+        val sb = StringBuilder(def.name + " actions:")
+        def.actions.forEach { action ->
+            sb.append("\n- ").append(action.id).append(": ").append(action.description)
+            if (action.argsHint.isNotBlank()) sb.append(" args ").append(action.argsHint)
+        }
+        val required = def.fields.filter { it.required }.map { it.label }
+        if (required.isNotEmpty()) sb.append("\nNeeds: ").append(required.joinToString(", "))
+        return sb.toString()
     }
 
     private fun missingConfig(def: ConnectorDef, config: JSONObject?): String? {
@@ -168,7 +205,7 @@ class ConnectorExecutor(
         return ConnectorResult(ok, short, if (ok) null else short)
     }
 
-    private fun dispatch(
+    private suspend fun dispatch(
         connectorId: String,
         connector: ConnectorEntity,
         config: JSONObject?,
@@ -183,7 +220,7 @@ class ConnectorExecutor(
         "currency" -> currency(config, action, args)
         "device" -> device(config, action, args)
         "files" -> files(config, action, args, agentId)
-        "http" -> http(config, action, args)
+        "http" -> http(config, action, args, agentId)
         "accounts" -> accounts(action, args)
         "github" -> github(config, action, args)
         "slack" -> slack(config, action, args)
@@ -195,6 +232,13 @@ class ConnectorExecutor(
         "agentmail" -> agentMail(config, action, args)
         "stripe" -> stripe(config, action, args)
         "cloudflare_workers" -> cloudflareWorkers(config, action, args)
+        "supabase" -> supabase(config, action, args)
+        "resend" -> resend(config, action, args)
+        "upstash" -> upstash(config, action, args)
+        "huggingface" -> huggingFace(config, action, args)
+        "vercel" -> vercel(config, action, args)
+        "netlify" -> netlify(config, action, args)
+        "linear" -> linear(config, action, args)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -207,6 +251,34 @@ class ConnectorExecutor(
         url: String,
         headers: Map<String, String> = emptyMap(),
         body: String? = null,
+    ): HttpResult {
+        // Edge APIs answer 429/500/503 under load, and a dropped socket is not a real answer.
+        // Three attempts with 1s, 2s and 4s backoff turn most of those into a normal reply.
+        var attempt = 0
+        var last = HttpResult(-1, "not attempted", false)
+        while (attempt < 3) {
+            last = httpOnce(method, url, headers, body)
+            val transient = last.code == -1 || last.code == 429 || last.code >= 500
+            if (!transient) return last
+            attempt++
+            if (attempt < 3) {
+                val waitMs = 1000L shl (attempt - 1)
+                try {
+                    Thread.sleep(waitMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return last
+                }
+            }
+        }
+        return last
+    }
+
+    private fun httpOnce(
+        method: String,
+        url: String,
+        headers: Map<String, String>,
+        body: String?,
     ): HttpResult {
         return try {
             val builder = Request.Builder()
@@ -376,9 +448,53 @@ class ConnectorExecutor(
             }
         }
         if (sb.length <= "Instant answer for '$query':\n".length) {
-            sb.append("No instant answer. Try a more specific query or use Wikipedia.")
+            // Most queries have no instant answer, which used to look like a broken connector.
+            // Fall through to the HTML result page and summarise the top hits.
+            val results = duckDuckGoResults(query)
+            if (results.isNotBlank()) {
+                sb.append("Web results:\n").append(results)
+            } else {
+                sb.append("No instant answer and no web results for '$query'.")
+            }
         }
         return ConnectorResult(true, sb.toString().trim())
+    }
+
+    private fun duckDuckGoResults(query: String): String {
+        val response = try {
+            client.newCall(
+                Request.Builder()
+                    .url("https://html.duckduckgo.com/html/?q=" + enc(query))
+                    .header("User-Agent", "Mozilla/5.0 (Android) Dunder/1.0")
+                    .build(),
+            ).execute()
+        } catch (_: Exception) {
+            return ""
+        }
+        val html = try {
+            response.body?.string().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        if (html.isBlank()) return ""
+        val titleRegex = Regex("""result__a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val snippetRegex = Regex("""result__snippet[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val snippets = snippetRegex.findAll(html).map { text(it.groupValues[1], 160) }.toList()
+        val sb = StringBuilder()
+        titleRegex.findAll(html).take(5).forEachIndexed { index, match ->
+            val raw = match.groupValues[1].replace("&amp;", "&")
+            val link = if (raw.contains("uddg=")) {
+                java.net.URLDecoder.decode(raw.substringAfter("uddg=").substringBefore("&"), "UTF-8")
+            } else {
+                raw
+            }
+            sb.append("- ").append(text(match.groupValues[2], 120))
+            if (link.isNotBlank()) sb.append(" — ").append(link)
+            sb.append('\n')
+            val snippet = snippets.getOrNull(index)
+            if (!snippet.isNullOrBlank()) sb.append("  ").append(snippet).append('\n')
+        }
+        return sb.toString().trim()
     }
 
     // ------------------------------------------------------------------- weather
@@ -503,7 +619,10 @@ class ConnectorExecutor(
         args: JSONObject,
         agentId: String?,
     ): ConnectorResult {
-        val root = Files.agentWorkspace(context, agentId ?: "shared").canonicalFile
+        // Each agent used to get its own root, so a file `list` had just shown was "not found"
+        // for any other agent and the answer flipped between "empty" and a listing. Everything
+        // now resolves against the shared workspace, which is where builds are written too.
+        val root = Files.workspace(context).canonicalFile
         // Models answer with "/notes.txt" or "./notes.txt" for the same file, so treat both as
         // relative to the workspace instead of rejecting them as an escape attempt.
         val relative = args.optString("path", "")
@@ -535,7 +654,16 @@ class ConnectorExecutor(
                 ConnectorResult(true, sb.toString().trim())
             }
             "read" -> {
-                if (!target.exists() || target.isDirectory) return ConnectorResult(false, "File not found: $relative")
+                if (!target.exists() || target.isDirectory) {
+                    val name = relative.substringAfterLast('/')
+                    val matches = findByName(root, name)
+                    val hint = if (matches.isEmpty()) {
+                        ""
+                    } else {
+                        " Did you mean: ${matches.joinToString(", ")}?"
+                    }
+                    return ConnectorResult(false, "File not found: $relative.$hint")
+                }
                 val content = Files.readText(target)
                     ?: return ConnectorResult(false, "Could not read $relative")
                 ConnectorResult(true, content.take(20_000))
@@ -550,11 +678,25 @@ class ConnectorExecutor(
         }
     }
 
+    private fun findByName(root: File, name: String): List<String> {
+        if (name.isBlank()) return emptyList()
+        return root.walkTopDown()
+            .filter { it.isFile && it.name.equals(name, ignoreCase = true) }
+            .take(5)
+            .map { root.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+            .toList()
+    }
+
     // ---------------------------------------------------------------------- http
 
-    private fun http(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+    private suspend fun http(config: JSONObject?, action: String, args: JSONObject, agentId: String?): ConnectorResult {
         val baseUrl = cfg(config, "baseUrl") ?: return ConnectorResult(false, "Missing base URL")
-        val apiKey = cfg(config, "apiKey")
+        val agentToken = if (cfg(config, "authSource") == "agent") {
+            agentId?.let { repo.agent(it)?.apiToken }?.ifBlank { null }
+        } else {
+            null
+        }
+        val apiKey = agentToken ?: cfg(config, "apiKey")
         val defaultHeaders = parseHeaders(cfg(config, "defaultHeaders"))
         val method = args.optString("method", "GET").uppercase()
         val path = args.optString("path", "")
@@ -601,8 +743,8 @@ class ConnectorExecutor(
         )
         "email" -> draftEmail(args)
         "event" -> addEvent(args)
-        "open" -> openLink(args)
-        else -> ConnectorResult(false, "Unknown Office Browser action '$action'. Use list, signin, email, event or open.")
+        "open_url", "open" -> openLink(args)
+        else -> ConnectorResult(false, "Unknown Office Browser action '$action'. Use list_actions to see them: list, signin, email, event, open_url.")
     }
 
     private fun browserSession(): ConnectorResult {
@@ -1198,7 +1340,7 @@ class ConnectorExecutor(
         val response = http("GET", url, headers)
         if (!response.ok) return ConnectorResult(false, "Polar error: ${text(response.body, 400)}")
         // List endpoints answer with {"items": [...]}, never a bare array, so read the wrapper.
-        val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+        val root = json(response.body) ?: return ConnectorResult(false, "Polar sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
         val items = root.optJSONArray("items") ?: JSONArray()
         if (items.length() == 0) return ConnectorResult(true, "Nothing found: no $label.")
         val sb = StringBuilder("Polar $label:\n")
@@ -1233,7 +1375,7 @@ class ConnectorExecutor(
                 val key = args.optString("licenseKey").ifBlank { return ConnectorResult(false, "Missing licenseKey") }
                 val response = http("POST", "$base/license-keys/validate", headers, JSONObject().put("key", key).toString())
                 if (!response.ok) return ConnectorResult(false, "Polar error: ${text(response.body, 400)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
                 val valid = root.optBoolean("valid", root.has("license_key"))
                 ConnectorResult(true, if (valid) "License key $key is valid." else "License key $key was not accepted.")
             }
@@ -1254,7 +1396,7 @@ class ConnectorExecutor(
                 )
                 val response = http("POST", "$base/products", headers, payload.toString())
                 if (!response.ok) return ConnectorResult(false, "Polar error: ${text(response.body, 400)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
                 ConnectorResult(true, "Created Polar product '" + root.optString("name") + "' (" + root.optString("id") + ").")
             }
             "create_checkout" -> {
@@ -1266,7 +1408,7 @@ class ConnectorExecutor(
                 }
                 val response = http("POST", "$base/checkouts", headers, payload.toString())
                 if (!response.ok) return ConnectorResult(false, "Polar error: ${text(response.body, 400)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
                 ConnectorResult(true, "Created checkout " + root.optString("id") + " for product $productId.\nURL: " + root.optString("url"))
             }
             else -> ConnectorResult(false, "Unknown Polar action '$action'. Use list_products, create_product, create_checkout, list_orders, get_customer or verify_license.")
@@ -1283,7 +1425,7 @@ class ConnectorExecutor(
     ): ConnectorResult {
         val response = http("GET", url, headers)
         if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
-        val root = json(response.body) ?: return ConnectorResult(false, "AgentMail returned invalid JSON")
+        val root = json(response.body) ?: return ConnectorResult(false, "AgentMail sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
         val items = root.optJSONArray("inboxes")
             ?: root.optJSONArray("messages")
             ?: root.optJSONArray("data")
@@ -1313,7 +1455,7 @@ class ConnectorExecutor(
                 args.optString("domain").ifBlank { null }?.let { payload.put("domain", it) }
                 val response = http("POST", "$base/inboxes", headers, payload.toString())
                 if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
-                val root = json(response.body) ?: return ConnectorResult(false, "AgentMail returned invalid JSON")
+                val root = json(response.body) ?: return ConnectorResult(false, "AgentMail sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
                 ConnectorResult(true, "Created inbox " + root.optString("inbox_id", root.optString("email")) + ".")
             }
             "send_email" -> {
@@ -1371,7 +1513,8 @@ class ConnectorExecutor(
         // The Workers upload endpoint accepts a script body only as JavaScript or
         // multipart/form-data; sending application/json is rejected with a 400 before the
         // script is ever looked at.
-        val scriptHeaders = headers + ("Content-Type" to "application/javascript")
+        val scriptType = cfg(config, "contentType") ?: "application/javascript"
+        val scriptHeaders = headers + ("Content-Type" to scriptType)
         val baseUrl = "https://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts"
         return when (action) {
             "deploy" -> {
@@ -1424,12 +1567,22 @@ class ConnectorExecutor(
                     val errors = root.optJSONArray("errors")?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
                     return ConnectorResult(false, "List failed: $errors")
                 }
-                val result = root.optJSONObject("result") ?: return ConnectorResult(true, "No workers found.")
-                val sb = StringBuilder("Cloudflare Workers:\n")
-                result.keys().forEachRemaining { name ->
-                    sb.append("- $name\n")
+                // The list endpoint answers with an array of scripts, not an object, so the old
+                // object-only read reported "No workers found" for every account.
+                val sb = StringBuilder()
+                when (val result = root.opt("result")) {
+                    is JSONArray -> {
+                        for (i in 0 until result.length()) {
+                            val script = result.optJSONObject(i) ?: continue
+                            sb.append("- ").append(script.optString("id").ifBlank { script.optString("name") })
+                            sb.append(" (modified ").append(script.optString("modified_on")).append(")\n")
+                        }
+                    }
+                    is JSONObject -> result.keys().forEachRemaining { name -> sb.append("- $name\n") }
+                    else -> Unit
                 }
-                ConnectorResult(true, sb.toString().trim())
+                if (sb.isEmpty()) ConnectorResult(true, "No workers found.")
+                else ConnectorResult(true, "Cloudflare Workers:\n" + sb.toString().trim())
             }
             "tail_logs" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
@@ -1460,6 +1613,328 @@ class ConnectorExecutor(
                 )
             }
             else -> ConnectorResult(false, "Unknown Cloudflare Workers action '$action'")
+        }
+    }
+
+    // ------------------------------------------------------------------ supabase
+
+    private fun supabase(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val base = cfg(config, "projectUrl")?.trimEnd('/')
+            ?: return ConnectorResult(false, "Missing project URL")
+        val key = cfg(config, "serviceKey") ?: return ConnectorResult(false, "Missing service key")
+        val headers = mapOf(
+            "apikey" to key,
+            "Authorization" to "Bearer $key",
+            "Content-Type" to "application/json",
+        )
+        val limit = args.optInt("limit", 20).coerceIn(1, 100)
+        return when (action) {
+            "list_rows" -> {
+                val table = args.optString("table").ifBlank { return ConnectorResult(false, "Missing table") }
+                val response = http("GET", "$base/rest/v1/" + enc(table) + "?select=*&limit=$limit", headers)
+                if (!response.ok) return ConnectorResult(false, "Supabase error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 6000))
+            }
+            "insert" -> {
+                val table = args.optString("table").ifBlank { return ConnectorResult(false, "Missing table") }
+                val row = args.optJSONObject("row") ?: return ConnectorResult(false, "Missing row")
+                val response = http(
+                    "POST",
+                    "$base/rest/v1/" + enc(table),
+                    headers + ("Prefer" to "return=representation"),
+                    row.toString(),
+                )
+                if (!response.ok) return ConnectorResult(false, "Supabase error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, "Inserted into " + table + ": " + text(response.body, 2000))
+            }
+            "rpc" -> {
+                val fn = args.optString("fn").ifBlank { return ConnectorResult(false, "Missing fn") }
+                val body = args.optJSONObject("args") ?: JSONObject()
+                val response = http("POST", "$base/rest/v1/rpc/" + enc(fn), headers, body.toString())
+                if (!response.ok) return ConnectorResult(false, "Supabase error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 4000))
+            }
+            else -> ConnectorResult(false, "Unknown Supabase action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // -------------------------------------------------------------------- resend
+
+    private fun resend(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val key = cfg(config, "apiKey") ?: return ConnectorResult(false, "Missing Resend API key")
+        val from = cfg(config, "from") ?: return ConnectorResult(false, "Missing from address")
+        val headers = mapOf("Authorization" to "Bearer $key", "Content-Type" to "application/json")
+        val limit = args.optInt("limit", 10).coerceIn(1, 100)
+        return when (action) {
+            "send_email" -> {
+                val to = args.optString("to").ifBlank { return ConnectorResult(false, "Missing to") }
+                val subject = args.optString("subject").ifBlank { "(no subject)" }
+                val textBody = args.optString("text")
+                val html = args.optString("html")
+                if (textBody.isBlank() && html.isBlank()) return ConnectorResult(false, "Missing text or html body")
+                val payload = JSONObject().put("from", from).put("to", to).put("subject", subject)
+                if (textBody.isNotBlank()) payload.put("text", textBody)
+                if (html.isNotBlank()) payload.put("html", html)
+                val response = http("POST", "https://api.resend.com/emails", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Resend error (${response.code}): ${text(response.body, 300)}")
+                val root = json(response.body) ?: JSONObject()
+                ConnectorResult(true, "Sent '$subject' to $to (id " + root.optString("id") + ").")
+            }
+            "list_emails" -> {
+                val response = http("GET", "https://api.resend.com/emails?limit=$limit", headers)
+                if (!response.ok) return ConnectorResult(false, "Resend error (${response.code}): ${text(response.body, 300)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Resend sent an unexpected body: ${text(response.body, 200)}")
+                val items = root.optJSONArray("data") ?: JSONArray()
+                if (items.length() == 0) return ConnectorResult(true, "No emails yet.")
+                val sb = StringBuilder("Recent emails:\n")
+                for (i in 0 until minOf(items.length(), 20)) {
+                    val item = items.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("subject")).append(" to ")
+                        .append(item.optJSONArray("to")?.optString(0).orEmpty())
+                        .append(" [").append(item.optString("last_event")).append("]\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "get_email" -> {
+                val id = args.optString("emailId").ifBlank { return ConnectorResult(false, "Missing emailId") }
+                val response = http("GET", "https://api.resend.com/emails/" + enc(id), headers)
+                if (!response.ok) return ConnectorResult(false, "Resend error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 4000))
+            }
+            else -> ConnectorResult(false, "Unknown Resend action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // ------------------------------------------------------------------- upstash
+
+    private fun upstash(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val base = cfg(config, "redisUrl")?.trimEnd('/') ?: return ConnectorResult(false, "Missing Upstash REST URL")
+        val token = cfg(config, "redisToken") ?: return ConnectorResult(false, "Missing Upstash REST token")
+        val headers = mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json")
+        fun resultOf(response: HttpResult, note: String): ConnectorResult {
+            if (!response.ok) return ConnectorResult(false, "Upstash error (${response.code}): ${text(response.body, 300)}")
+            val root = json(response.body)
+            val value = root?.opt("result")?.toString() ?: response.body
+            return ConnectorResult(true, note + ": " + value.take(4000))
+        }
+        return when (action) {
+            "command" -> {
+                val command = args.optJSONArray("command")
+                    ?: return ConnectorResult(false, "Missing command array")
+                resultOf(http("POST", base, headers, JSONArray().put(command).toString()), "Result")
+            }
+            "get" -> {
+                val key = args.optString("key").ifBlank { return ConnectorResult(false, "Missing key") }
+                resultOf(http("GET", "$base/get/" + enc(key), headers), key)
+            }
+            "set" -> {
+                val key = args.optString("key").ifBlank { return ConnectorResult(false, "Missing key") }
+                val value = args.optString("value")
+                val ttl = args.optInt("ttlSeconds", 0)
+                val path = if (ttl > 0) "$base/set/" + enc(key) + "?EX=$ttl" else "$base/set/" + enc(key)
+                resultOf(http("POST", path, headers, JSONArray().put(value).toString()), "Set $key")
+            }
+            "delete" -> {
+                val key = args.optString("key").ifBlank { return ConnectorResult(false, "Missing key") }
+                resultOf(http("POST", "$base/del/" + enc(key), headers), "Deleted $key")
+            }
+            else -> ConnectorResult(false, "Unknown Upstash action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // --------------------------------------------------------------- huggingface
+
+    private fun huggingFace(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val token = cfg(config, "hfToken") ?: return ConnectorResult(false, "Missing Hugging Face token")
+        val headers = mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json")
+        return when (action) {
+            "chat" -> {
+                val model = args.optString("model").ifBlank { "meta-llama/Llama-3.1-8B-Instruct" }
+                val prompt = args.optString("prompt").ifBlank { return ConnectorResult(false, "Missing prompt") }
+                val payload = JSONObject()
+                    .put("model", model)
+                    .put(
+                        "messages",
+                        JSONArray().put(JSONObject().put("role", "user").put("content", prompt)),
+                    )
+                    .put("max_tokens", args.optInt("maxTokens", 512))
+                val response = http("POST", "https://router.huggingface.co/v1/chat/completions", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Hugging Face error (${response.code}): ${text(response.body, 300)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                val message = root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
+                ConnectorResult(true, message?.optString("content").orEmpty().ifBlank { text(response.body, 2000) })
+            }
+            "infer" -> {
+                val model = args.optString("model").ifBlank { return ConnectorResult(false, "Missing model") }
+                val inputs = args.optString("inputs").ifBlank { return ConnectorResult(false, "Missing inputs") }
+                val payload = JSONObject().put("inputs", inputs)
+                args.optJSONObject("parameters")?.let { payload.put("parameters", it) }
+                val response = http("POST", "https://api-inference.huggingface.co/models/" + enc(model), headers, payload.toString())
+                if (response.code == 503) {
+                    return ConnectorResult(false, "Model $model is warming up. Try again in about 20 seconds.")
+                }
+                if (!response.ok) return ConnectorResult(false, "Hugging Face error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 4000))
+            }
+            "models" -> {
+                val query = args.optString("query")
+                val url = "https://huggingface.co/api/models?limit=10" + if (query.isBlank()) "" else "&search=" + enc(query)
+                val response = http("GET", url, headers)
+                if (!response.ok) return ConnectorResult(false, "Hugging Face error (${response.code}): ${text(response.body, 300)}")
+                val root = Json.tryArray(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                val sb = StringBuilder("Models:\n")
+                for (i in 0 until minOf(10, root.length())) {
+                    val item = root.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("id")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            else -> ConnectorResult(false, "Unknown Hugging Face action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // -------------------------------------------------------------------- vercel
+
+    private fun vercel(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val token = cfg(config, "vercelToken") ?: return ConnectorResult(false, "Missing Vercel token")
+        val headers = mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json")
+        val limit = args.optInt("limit", 10).coerceIn(1, 100)
+        return when (action) {
+            "list_projects" -> {
+                val response = http("GET", "https://api.vercel.com/v9/projects?limit=$limit", headers)
+                if (!response.ok) return ConnectorResult(false, "Vercel error (${response.code}): ${text(response.body, 300)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                val items = root.optJSONArray("projects") ?: JSONArray()
+                if (items.length() == 0) return ConnectorResult(true, "No Vercel projects.")
+                val sb = StringBuilder("Vercel projects:\n")
+                for (i in 0 until minOf(items.length(), 20)) {
+                    val item = items.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("name")).append(" (").append(item.optString("id")).append(")\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "list_deployments" -> {
+                val project = args.optString("projectId")
+                val url = "https://api.vercel.com/v6/deployments?limit=$limit" +
+                    if (project.isBlank()) "" else "&projectId=" + enc(project)
+                val response = http("GET", url, headers)
+                if (!response.ok) return ConnectorResult(false, "Vercel error (${response.code}): ${text(response.body, 300)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                val items = root.optJSONArray("deployments") ?: JSONArray()
+                if (items.length() == 0) return ConnectorResult(true, "No deployments.")
+                val sb = StringBuilder("Deployments:\n")
+                for (i in 0 until minOf(items.length(), 20)) {
+                    val item = items.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("name")).append(" ").append(item.optString("url"))
+                        .append(" [").append(item.optString("state")).append("]\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "get_deployment" -> {
+                val id = args.optString("deploymentId").ifBlank { return ConnectorResult(false, "Missing deploymentId") }
+                val response = http("GET", "https://api.vercel.com/v13/deployments/" + enc(id), headers)
+                if (!response.ok) return ConnectorResult(false, "Vercel error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 4000))
+            }
+            else -> ConnectorResult(false, "Unknown Vercel action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // ------------------------------------------------------------------- netlify
+
+    private fun netlify(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val token = cfg(config, "netlifyToken") ?: return ConnectorResult(false, "Missing Netlify token")
+        val headers = mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json")
+        val base = "https://api.netlify.com/api/v1"
+        return when (action) {
+            "list_sites" -> {
+                val response = http("GET", "$base/sites", headers)
+                if (!response.ok) return ConnectorResult(false, "Netlify error (${response.code}): ${text(response.body, 300)}")
+                val root = Json.tryArray(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                if (root.length() == 0) return ConnectorResult(true, "No Netlify sites.")
+                val sb = StringBuilder("Netlify sites:\n")
+                for (i in 0 until minOf(root.length(), 20)) {
+                    val item = root.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("name")).append(" (").append(item.optString("id"))
+                        .append(") ").append(item.optString("url")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "list_deploys" -> {
+                val siteId = args.optString("siteId").ifBlank { return ConnectorResult(false, "Missing siteId") }
+                val response = http("GET", "$base/sites/" + enc(siteId) + "/deploys", headers)
+                if (!response.ok) return ConnectorResult(false, "Netlify error (${response.code}): ${text(response.body, 300)}")
+                val root = Json.tryArray(response.body) ?: return ConnectorResult(false, "Unexpected body: ${text(response.body, 200)}")
+                val sb = StringBuilder("Deploys for $siteId:\n")
+                for (i in 0 until minOf(root.length(), 10)) {
+                    val item = root.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("id")).append(" [").append(item.optString("state"))
+                        .append("] ").append(item.optString("deploy_ssl_url")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim().ifBlank { "No deploys." })
+            }
+            "get_site" -> {
+                val siteId = args.optString("siteId").ifBlank { return ConnectorResult(false, "Missing siteId") }
+                val response = http("GET", "$base/sites/" + enc(siteId), headers)
+                if (!response.ok) return ConnectorResult(false, "Netlify error (${response.code}): ${text(response.body, 300)}")
+                ConnectorResult(true, text(response.body, 4000))
+            }
+            else -> ConnectorResult(false, "Unknown Netlify action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // -------------------------------------------------------------------- linear
+
+    private fun linear(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val key = cfg(config, "linearKey") ?: return ConnectorResult(false, "Missing Linear API key")
+        val headers = mapOf("Authorization" to key, "Content-Type" to "application/json")
+        fun graphql(query: String, variables: JSONObject = JSONObject()): JSONObject? {
+            val payload = JSONObject().put("query", query).put("variables", variables)
+            val response = http("POST", "https://api.linear.app/graphql", headers, payload.toString())
+            if (!response.ok) return null
+            return json(response.body)?.optJSONObject("data")
+        }
+        return when (action) {
+            "list_issues" -> {
+                val limit = args.optInt("limit", 10).coerceIn(1, 50)
+                val data = graphql(
+                    "query(\$first: Int!) { issues(first: \$first, orderBy: updatedAt) { nodes { identifier title state { name } url } } }",
+                    JSONObject().put("first", limit),
+                ) ?: return ConnectorResult(false, "Linear did not answer; check the API key.")
+                val nodes = data.optJSONObject("issues")?.optJSONArray("nodes") ?: JSONArray()
+                if (nodes.length() == 0) return ConnectorResult(true, "No Linear issues.")
+                val sb = StringBuilder("Linear issues:\n")
+                for (i in 0 until nodes.length()) {
+                    val item = nodes.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("identifier")).append(" ").append(item.optString("title"))
+                        .append(" [").append(item.optJSONObject("state")?.optString("name")).append("] ")
+                        .append(item.optString("url")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "create_issue" -> {
+                val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
+                val teamId = args.optString("teamId").ifBlank { return ConnectorResult(false, "Missing teamId") }
+                val data = graphql(
+                    "mutation(\$title: String!, \$teamId: String!, \$description: String) { issueCreate(input: { title: \$title, teamId: \$teamId, description: \$description }) { success issue { identifier url } } }",
+                    JSONObject().put("title", title).put("teamId", teamId).put("description", args.optString("description")),
+                ) ?: return ConnectorResult(false, "Linear did not answer; check the API key and team id.")
+                val issue = data.optJSONObject("issueCreate")?.optJSONObject("issue")
+                ConnectorResult(true, "Created " + (issue?.optString("identifier") ?: "issue") + " " + (issue?.optString("url") ?: ""))
+            }
+            "list_teams" -> {
+                val data = graphql("query { teams { nodes { id key name } } }")
+                    ?: return ConnectorResult(false, "Linear did not answer; check the API key.")
+                val nodes = data.optJSONObject("teams")?.optJSONArray("nodes") ?: JSONArray()
+                val sb = StringBuilder("Linear teams:\n")
+                for (i in 0 until nodes.length()) {
+                    val item = nodes.optJSONObject(i) ?: continue
+                    sb.append("- ").append(item.optString("key")).append(" ").append(item.optString("name"))
+                        .append(" (").append(item.optString("id")).append(")\n")
+                }
+                ConnectorResult(true, sb.toString().trim().ifBlank { "No teams." })
+            }
+            else -> ConnectorResult(false, "Unknown Linear action '$action'. Use list_actions to see them.")
         }
     }
 
