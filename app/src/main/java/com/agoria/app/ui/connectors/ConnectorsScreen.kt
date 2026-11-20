@@ -156,10 +156,14 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                     val config = JSONObject()
                     var missing = ""
                     def?.fields?.forEach { field ->
-                        val value = values[field.key] ?: ""
+                        var value = values[field.key] ?: ""
                         val existing = savedConfig?.optString(field.key) ?: ""
                         when {
-                            value.isNotBlank() -> config.put(field.key, value)
+                            value.isNotBlank() -> {
+                                // Sanitize secret fields: remove control characters, trim
+                                if (field.secret) value = sanitizeSecret(value)
+                                config.put(field.key, value)
+                            }
                             field.secret && existing.isNotBlank() -> config.put(field.key, existing)
                             field.required && existing.isBlank() -> missing = field.label
                             existing.isNotBlank() -> config.put(field.key, existing)
@@ -420,4 +424,8 @@ private fun ConnectorSetupDialog(
         confirmButton = { TextButton(onClick = onSave) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+private fun sanitizeSecret(input: String): String =
+    input.trim().replace(Regex("[\\p{Cc}\\p{Cf}]"), "") // Remove control/format chars
 }
