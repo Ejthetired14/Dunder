@@ -186,11 +186,11 @@ class UpdateManager(
             val totalSize = connection.contentLength
             val input = connection.inputStream
 
-            // Use external files directory (public Downloads) - accessible via FileProvider
-            val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: return DownloadResult(false, "Cannot access downloads directory")
+            // Use external files directory root with custom "apks" subdirectory
+            val externalFilesDir = context.getExternalFilesDir(null)
+                ?: return DownloadResult(false, "Cannot access external files directory")
 
-            // Ensure directory exists
+            val downloadsDir = File(externalFilesDir, "apks")
             if (!downloadsDir.exists()) downloadsDir.mkdirs()
 
             val apkFile = File(downloadsDir, "dunder-$tagName.apk")
