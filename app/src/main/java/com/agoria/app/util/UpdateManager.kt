@@ -287,72 +287,77 @@ class UpdateManager(
             val uri = FileProvider.getUriForFile(context, authority, apkFile)
             Log.d(TAG, "installApkDirect: file=${apkFile.absolutePath}, uri=$uri")
             
-            // Grant permission to package installer
-            context.grantUriPermission("com.android.packageinstaller", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            
-            // Strategy 1: ACTION_VIEW with package installer
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                data = uri
+            // Query all possible installer activities
+            val baseIntent = Intent(Intent.ACTION_VIEW).apply {
                 type = "application/vnd.android.package-archive"
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                setPackage("com.android.packageinstaller")
+            }
+            val installers = pm.queryIntentActivities(baseIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            Log.d(TAG, "Found ${installers.size} installer(s)")
+            for (i in installers) {
+                Log.d(TAG, "  Installer: ${i.activityInfo.packageName}")
             }
             
-            if (intent.resolveActivity(pm) != null) {
-                if (context is Activity) {
-                    (context as Activity).startActivity(intent)
-                } else {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
+            // Grant URI permission to ALL potential installers
+            for (installer in installers) {
+                try {
+                    context.grantUriPermission(installer.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to grant URI permission to ${installer.activityInfo.packageName}", e)
                 }
-                return DownloadResult(true)
             }
             
-            // Try without setPackage
+            // Also grant to package installer as fallback
+            try {
+                context.grantUriPermission("com.android.packageinstaller", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to grant URI permission to com.android.packageinstaller", e)
+            }
+            
+            // Strategy 1: Try each installer with ACTION_VIEW
+            for (installer in installers) {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    data = uri
+                    type = "application/vnd.android.package-archive"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    setPackage(installer.activityInfo.packageName)
+                }
+                if (intent.resolveActivity(pm) != null) {
+                    Log.d(TAG, "Starting installer: ${installer.activityInfo.packageName}")
+                    context.startActivity(intent)
+                    return DownloadResult(true)
+                }
+            }
+            
+            // Strategy 2: ACTION_VIEW without setPackage (system chooses)
             val intent2 = Intent(Intent.ACTION_VIEW).apply {
                 data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             if (intent2.resolveActivity(pm) != null) {
-                if (context is Activity) {
-                    (context as Activity).startActivity(intent2)
-                } else {
-                    intent2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent2)
-                }
+                Log.d(TAG, "Starting system chooser for ACTION_VIEW")
+                context.startActivity(intent2)
                 return DownloadResult(true)
             }
             
-            // Strategy 2: ACTION_INSTALL_PACKAGE
+            // Strategy 3: ACTION_INSTALL_PACKAGE
             val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
             }
             if (fallbackIntent.resolveActivity(pm) != null) {
-                if (context is Activity) {
-                    (context as Activity).startActivity(fallbackIntent)
-                } else {
-                    fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(fallbackIntent)
-                }
+                Log.d(TAG, "Starting ACTION_INSTALL_PACKAGE")
+                context.startActivity(fallbackIntent)
                 return DownloadResult(true)
             }
             
-            // Debug: log all available installers
-            val installers = pm.queryIntentActivities(
-                Intent(Intent.ACTION_VIEW).apply {
-                    type = "application/vnd.android.package-archive"
-                },
-                PackageManager.MATCH_DEFAULT_ONLY
-            )
-            Log.e(TAG, "No installer found. Available: ${installers.size}")
-            for (i in installers) {
-                Log.e(TAG, "  Installer: ${i.activityInfo.packageName}")
-            }
-
+            // If we reach here, no installer could be launched
+            Log.e(TAG, "No installer could be launched. Available: ${installers.size}")
             DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app in Settings > Apps > Special access.")
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException during install", e)
