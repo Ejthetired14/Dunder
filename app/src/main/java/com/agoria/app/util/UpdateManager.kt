@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
@@ -186,11 +185,9 @@ class UpdateManager(
             val totalSize = connection.contentLength
             val input = connection.inputStream
 
-            // Use external files directory root with custom "apks" subdirectory
-            val externalFilesDir = context.getExternalFilesDir(null)
-                ?: return DownloadResult(false, "Cannot access external files directory")
-
-            val downloadsDir = File(externalFilesDir, "apks")
+            // Use cache directory - always accessible via FileProvider on all Android versions
+            val cacheDir = context.cacheDir
+            val downloadsDir = File(cacheDir, "apks")
             if (!downloadsDir.exists()) downloadsDir.mkdirs()
 
             val apkFile = File(downloadsDir, "dunder-$tagName.apk")
