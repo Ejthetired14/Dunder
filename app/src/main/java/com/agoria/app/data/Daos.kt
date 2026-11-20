@@ -60,7 +60,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC")
     fun observeForAgent(agentId: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC LIMIT :limit OFFSET :offset")
+    // Newest first, so page 0 is the live tail of the conversation and later pages walk backwards
+    // into history. The chat renders this order directly in a reversed LazyColumn.
+    @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
     suspend fun pagedForAgent(agentId: String, limit: Int, offset: Int): List<MessageEntity>
 
     @Query("SELECT COUNT(*) FROM messages WHERE agentId = :agentId")
@@ -131,6 +133,12 @@ interface ConnectorDao {
 
     @Query("SELECT * FROM connectors WHERE id = :id")
     suspend fun get(id: String): ConnectorEntity?
+
+    @Query("SELECT * FROM connectors")
+    suspend fun getAll(): List<ConnectorEntity>
+
+    @Query("DELETE FROM connectors WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(connector: ConnectorEntity)
