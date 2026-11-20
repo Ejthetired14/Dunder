@@ -80,11 +80,15 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          ./gradlew assembleDebug --no-daemon -x lint --stacktrace --info 2>&1 | tail -100
+          ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1 | tee build-debug.log
+          echo "=== BUILD DEBUG EXIT CODE: ${PIPESTATUS[0]} ==="
+          tail -100 build-debug.log
 
       - name: Build Release APK
         run: |
-          ./gradlew assembleRelease --no-daemon -x lint --stacktrace --info 2>&1 | tail -100
+          ./gradlew assembleRelease --no-daemon -x lint --stacktrace 2>&1 | tee build-release.log
+          echo "=== BUILD RELEASE EXIT CODE: ${PIPESTATUS[0]} ==="
+          tail -100 build-release.log
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
