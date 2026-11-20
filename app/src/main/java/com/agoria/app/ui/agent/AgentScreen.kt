@@ -27,12 +27,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -384,6 +388,13 @@ private fun ChatTab(
 
 @Composable
 private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
+    val context = LocalContext.current
+    val copyToClipboard = { text: String ->
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.primaryClip = ClipData.newPlainText("Agent Message", text)
+        // Could add a toast here, but keeping it simple
+    }
+
     when (message.role) {
         "user" -> {
             Row(
@@ -413,13 +424,26 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 Surface(
                     shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .combinedClickable(
+                            onLongClick = { copyToClipboard(message.content) },
+                            onClick = {}
+                        )
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            IconButton(onClick = { copyToClipboard(message.content) }) {
+                                Icon(ContentCopy, contentDescription = "Copy message")
+                            }
+                        }
                         Text(
                             text = Time.clock(message.createdAt),
                             style = MaterialTheme.typography.labelSmall,
@@ -435,22 +459,41 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                     text = message.content,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 24.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onLongClick = { copyToClipboard(message.content) },
+                            onClick = {}
+                        ),
                 )
             }
         }
         "tool" -> {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onLongClick = { copyToClipboard(message.content) },
+                        onClick = {}
+                    ),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(
-                        text = "CONNECTOR RESULT",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "CONNECTOR RESULT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        IconButton(onClick = { copyToClipboard(message.content) }) {
+                            Icon(ContentCopy, contentDescription = "Copy result")
+                        }
+                    }
                     Text(
                         text = message.content,
                         style = MaterialTheme.typography.bodySmall,
@@ -465,6 +508,12 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 text = message.content,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onLongClick = { copyToClipboard(message.content) },
+                        onClick = {}
+                    ),
             )
         }
     }
