@@ -17,7 +17,7 @@ jobs:
   build:
     name: Build Debug & Release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     outputs:
       version_name: ${{ steps.version.outputs.version_name }}
       version_code: ${{ steps.version.outputs.version_code }}
@@ -28,20 +28,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Print Java version
-        run: java -version
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
-
-      - name: Verify Java
-        run: |
-          java -version
-          echo "JAVA_HOME=$JAVA_HOME"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -50,7 +42,6 @@ jobs:
           build-tools-version: 34.0.0
           emulator: false
           packages: ''
-          ndk-version: ''
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
@@ -70,11 +61,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Set Gradle JVM args
-        run: echo "GRADLE_OPTS=-Xmx4g" >> $GITHUB_ENV
-
-      - name: Print Gradle version
-        run: ./gradlew --version
+      - name: Print versions
+        run: |
+          java -version
+          ./gradlew --version
 
       - name: Extract version
         id: version
@@ -85,10 +75,10 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace
+        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace --info
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon -x lint --stacktrace
+        run: ./gradlew assembleRelease --no-daemon -x lint --stacktrace --info
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
@@ -99,7 +89,7 @@ jobs:
           [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
           
           UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
-          [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing"; exit 1; }
+          [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing"; find app/build -name "*.apk" 2>/dev/null; exit 1; }
           
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
