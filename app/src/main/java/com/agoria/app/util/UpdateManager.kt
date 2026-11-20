@@ -2,6 +2,8 @@ package com.agoria.app.util
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -210,42 +212,79 @@ class UpdateManager(
                 return false
             }
 
-            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                FileProvider.getUriForFile(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
+            ) {
+                // Nothing installs until the user turns on "Allow from this source", and that
+                // screen is easy to miss, so open it instead of finishing with no reaction.
+                Log.w(TAG, "installApk: install-packages permission is not granted")
+                Notifier.notifyLocal(
                     context,
-                    "${context.packageName}.fileprovider",
-                    apkFile
+                    "Allow Dunder to install updates",
+                    "Turn on \"Allow from this source\" in the screen that just opened, then tap Download & Install again.",
                 )
-            } else {
-                Uri.fromFile(apkFile)
+                openInstallPermissionSettings()
+                return false
             }
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile,
+            )
             Log.d(TAG, "installApk: uri=$uri")
 
-            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                data = uri
-                type = "application/vnd.android.package-archive"
+            // ACTION_VIEW with the APK mime type is what every supported Android version hands to
+            // the package installer. This deliberately does not check resolveActivity(): package
+            // visibility on Android 11+ hides the installer from us, so that check returned null
+            // and the install silently never started after the download finished.
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                clipData = ClipData.newRawUri("apk", uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(viewIntent)
+                return true
+            } catch (e: ActivityNotFoundException) {
+                Log.e(TAG, "installApk: no activity handled ACTION_VIEW for the APK", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "installApk: ACTION_VIEW failed", e)
             }
 
-            // Check if we can start the activity
-            val resolveInfo = intent.resolveActivity(context.packageManager)
-            Log.d(TAG, "installApk: resolveActivity=$resolveInfo")
-            if (resolveInfo != null) {
-                if (context is Activity) {
-                    (context as Activity).startActivity(intent)
-                } else {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                }
+            // Last resort for devices whose installer only answers the legacy action.
+            val legacyIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                data = uri
+                type = "application/vnd.android.package-archive"
+                clipData = ClipData.newRawUri("apk", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            return try {
+                context.startActivity(legacyIntent)
                 true
-            } else {
-                Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
+            } catch (e: Exception) {
+                Log.e(TAG, "installApk: ACTION_INSTALL_PACKAGE failed", e)
                 false
             }
         } catch (e: Exception) {
             Log.e(TAG, "installApk error", e)
             false
+        }
+    }
+
+    private fun openInstallPermissionSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "openInstallPermissionSettings failed", e)
         }
     }
 }
