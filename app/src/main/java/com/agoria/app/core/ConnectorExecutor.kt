@@ -19,6 +19,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URLEncoder
+import kotlin.text.Regex
 import java.util.concurrent.TimeUnit
 
 data class ConnectorResult(
