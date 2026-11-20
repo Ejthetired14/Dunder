@@ -41,7 +41,7 @@ jobs:
           api-level: 34
           build-tools-version: 34.0.0
           emulator: false
-          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+          ndk-version: r26c
           cache: 'gradle'
 
       - name: Accept Android SDK licenses
@@ -52,6 +52,8 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls -la $ANDROID_HOME/platforms/
           ls -la $ANDROID_HOME/build-tools/
+          which apksigner || echo "apksigner not in PATH"
+          find $ANDROID_HOME -name "apksigner" -type f 2>/dev/null | head -5
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -70,8 +72,16 @@ jobs:
           java -version
           ./gradlew --version
 
-      - name: List Gradle tasks
-        run: ./gradlew tasks --all 2>&1 | grep -E "(ksp|KSP|room|Room|compile|assemble)" | head -50
+      - name: Pre-build environment check
+        run: |
+          echo "=== Environment ==="
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "GRADLE_OPTS=$GRADLE_OPTS"
+          echo "=== Disk space ==="
+          df -h .
+          echo "=== Memory ==="
+          free -h
 
       - name: Extract version
         id: version
