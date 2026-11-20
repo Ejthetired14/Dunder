@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
@@ -185,8 +186,12 @@ class UpdateManager(
             val totalSize = connection.contentLength
             val input = connection.inputStream
 
-            // Use internal files directory - always accessible via FileProvider
-            val downloadsDir = context.filesDir ?: return DownloadResult(false, "Cannot access files directory")
+            // Use external files directory (public Downloads) - accessible via FileProvider
+            val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                ?: return DownloadResult(false, "Cannot access downloads directory")
+
+            // Ensure directory exists
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
 
             val apkFile = File(downloadsDir, "dunder-$tagName.apk")
             val output = FileOutputStream(apkFile)
@@ -262,6 +267,9 @@ class UpdateManager(
                 val pm = context.packageManager
                 val installers = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
                 Log.e(TAG, "installApk: Available installers count=${installers.size}")
+                for (i in installers) {
+                    Log.e(TAG, "installApk: Installer: ${i.activityInfo.packageName}")
+                }
                 DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app in Settings > Apps > Special access.")
             }
         } catch (e: SecurityException) {
