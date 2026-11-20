@@ -1,5 +1,9 @@
 package com.agoria.app.ui.connectors
 
+import android.accounts.Account
+import android.accounts.AccountManager
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.AlertDialog
@@ -38,11 +43,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agoria.app.core.ConnectorAuth
 import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef
 import com.agoria.app.data.ConnectorEntity
@@ -269,7 +276,7 @@ private fun ConnectorRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${def?.actions?.size ?: 0} actions \u2022 ${def?.category ?: "Custom"}",
+                    text = "${def?.actions?.size ?: 0} actions • ${def?.category ?: "Custom"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
@@ -277,7 +284,11 @@ private fun ConnectorRow(
                 )
             }
             Text(
-                text = if (connector.status == "needs_setup") "Set up" else "Edit",
+                text = when {
+                    def?.auth == ConnectorAuth.ACCOUNT -> "Open"
+                    connector.status == "needs_setup" -> "Set up"
+                    else -> "Edit"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -354,6 +365,13 @@ private fun ConnectorSetupDialog(
     onSave: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val context = LocalContext.current
+    // Accounts come from the phone itself. Nothing is fetched, stored or authenticated here.
+    val deviceAccounts = remember {
+        runCatching { AccountManager.get(context).accounts?.toList().orEmpty() }
+            .getOrElse { emptyList<Account>() }
+    }
+
     if (def == null) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -366,9 +384,11 @@ private fun ConnectorSetupDialog(
         return
     }
 
+    val usesDeviceAccounts = def.auth == ConnectorAuth.ACCOUNT
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set up ${def.name}") },
+        title = { Text(if (usesDeviceAccounts) "Your accounts" else "Set up ${def.name}") },
         text = {
             Column(
                 modifier = Modifier
@@ -385,6 +405,37 @@ private fun ConnectorSetupDialog(
                     text = def.setupHelp,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (usesDeviceAccounts) {
+                    AccountSignInBlock(
+                        accounts = deviceAccounts,
+                        onManage = {
+                            val opened = runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_SYNC_SETTINGS)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }.isSuccess
+                            if (!opened) {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+                if (def.actions.isNotEmpty()) {
+                    Text("What the agent can do", style = MaterialTheme.typography.labelLarge)
+                    def.actions.forEach { action ->
+                        Text(
+                            text = "• ${action.label} — ${action.description}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 def.fields.forEach { field ->
                     val saved = connector?.configEnc != null
                     OutlinedTextField(
@@ -412,12 +463,72 @@ private fun ConnectorSetupDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                if (connector?.configEnc != null) {
+                if (connector?.configEnc != null && !usesDeviceAccounts) {
                     TextButton(onClick = onClear) { Text("Clear saved configuration") }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            if (usesDeviceAccounts) {
+                TextButton(onClick = onDismiss) { Text("Done") }
+            } else {
+                TextButton(onClick = onSave) { Text("Save") }
+            }
+        },
+        dismissButton = {
+            if (usesDeviceAccounts) {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
+}
+
+@Composable
+private fun AccountSignInBlock(accounts: List<Account>, onManage: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Signed in on this phone",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            if (accounts.isEmpty()) {
+                Text(
+                    text = "No accounts here yet. Sign in to your mail and calendar apps once, then come back. The agent uses those apps and never sees a password.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            } else {
+                accounts.take(6).forEach { account ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.width(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = account.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            TextButton(onClick = onManage, contentPadding = PaddingValues(0.dp)) {
+                Text("Sign in or manage accounts")
+            }
+        }
+    }
 }
