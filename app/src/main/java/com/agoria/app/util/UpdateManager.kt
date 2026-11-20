@@ -424,16 +424,15 @@ class UpdateManager(
                 inputStream.close()
                 outputStream.close()
                 
-                // Commit session (install)
-                // Use a generic intent since we just need the intent sender
-                val intent = Intent(Intent.ACTION_VIEW)
-                val pendingIntent = PendingIntent.getActivity(
-                    context, 0, intent, 
+                // Commit session (install) - use broadcast intent to avoid "Open app" prompt
+                val intent = Intent("com.agoria.app.UPDATE_COMPLETE")
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context, 0, intent,
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
                 
                 session.commit(pendingIntent.intentSender)
-                Log.d(TAG, "PackageInstaller session committed")
+                Log.d(TAG, "PackageInstaller session committed (no restart prompt)")
                 
                 // Session committed - install will happen asynchronously
                 // Return success (the system will handle the install)
