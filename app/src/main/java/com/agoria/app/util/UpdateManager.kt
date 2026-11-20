@@ -2,8 +2,10 @@ package com.agoria.app.util
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
@@ -17,7 +19,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
@@ -276,7 +281,8 @@ class UpdateManager(
     }
 
     /**
-     * Direct install using multiple fallback strategies with FileProvider URI.
+     * Direct install using PackageInstaller API (primary) with intent fallbacks.
+     * PackageInstaller gives detailed error info and works on API 21+.
      */
     private fun installApkDirect(apkFile: File): DownloadResult {
         return try {
@@ -285,35 +291,45 @@ class UpdateManager(
             // Get FileProvider URI for our cache file
             val authority = "${context.packageName}.fileprovider"
             val uri = FileProvider.getUriForFile(context, authority, apkFile)
-            Log.d(TAG, "installApkDirect: file=${apkFile.absolutePath}, uri=$uri")
+            Log.d(TAG, "installApkDirect: file=${apkFile.absolutePath}, uri=$uri, exists=${apkFile.exists()}, size=${apkFile.length()}")
             
-            // Query all possible installer activities
+            // Log FileProvider config
+            Log.d(TAG, "FileProvider authority: $authority")
+            
+            // Grant URI permission to ALL potential installers
             val baseIntent = Intent(Intent.ACTION_VIEW).apply {
                 type = "application/vnd.android.package-archive"
             }
             val installers = pm.queryIntentActivities(baseIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            Log.d(TAG, "Found ${installers.size} installer(s)")
+            Log.d(TAG, "Found ${installers.size} installer(s) for ACTION_VIEW")
             for (i in installers) {
                 Log.d(TAG, "  Installer: ${i.activityInfo.packageName}")
-            }
-            
-            // Grant URI permission to ALL potential installers
-            for (installer in installers) {
                 try {
-                    context.grantUriPermission(installer.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.grantUriPermission(i.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    Log.d(TAG, "  Granted URI permission to ${i.activityInfo.packageName}")
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to grant URI permission to ${installer.activityInfo.packageName}", e)
+                    Log.w(TAG, "  Failed to grant URI permission to ${i.activityInfo.packageName}", e)
                 }
             }
             
             // Also grant to package installer as fallback
             try {
                 context.grantUriPermission("com.android.packageinstaller", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                Log.d(TAG, "Granted URI permission to com.android.packageinstaller")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to grant URI permission to com.android.packageinstaller", e)
             }
             
-            // Strategy 1: Try each installer with ACTION_VIEW
+            // PRIMARY STRATEGY: PackageInstaller API (API 21+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val result = installViaPackageInstaller(apkFile, uri)
+                if (result.success) {
+                    return result
+                }
+                Log.w(TAG, "PackageInstaller failed: ${result.error}, falling back to intents")
+            }
+            
+            // FALLBACK 1: Try each installer with ACTION_VIEW
             for (installer in installers) {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     data = uri
@@ -323,13 +339,15 @@ class UpdateManager(
                     setPackage(installer.activityInfo.packageName)
                 }
                 if (intent.resolveActivity(pm) != null) {
-                    Log.d(TAG, "Starting installer: ${installer.activityInfo.packageName}")
+                    Log.d(TAG, "Starting installer (ACTION_VIEW): ${installer.activityInfo.packageName}")
                     context.startActivity(intent)
                     return DownloadResult(true)
+                } else {
+                    Log.w(TAG, "resolveActivity returned null for ${installer.activityInfo.packageName}")
                 }
             }
             
-            // Strategy 2: ACTION_VIEW without setPackage (system chooses)
+            // FALLBACK 2: ACTION_VIEW without setPackage (system chooser)
             val intent2 = Intent(Intent.ACTION_VIEW).apply {
                 data = uri
                 type = "application/vnd.android.package-archive"
@@ -340,9 +358,11 @@ class UpdateManager(
                 Log.d(TAG, "Starting system chooser for ACTION_VIEW")
                 context.startActivity(intent2)
                 return DownloadResult(true)
+            } else {
+                Log.w(TAG, "resolveActivity returned null for system chooser")
             }
             
-            // Strategy 3: ACTION_INSTALL_PACKAGE
+            // FALLBACK 3: ACTION_INSTALL_PACKAGE
             val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 data = uri
                 type = "application/vnd.android.package-archive"
@@ -354,6 +374,8 @@ class UpdateManager(
                 Log.d(TAG, "Starting ACTION_INSTALL_PACKAGE")
                 context.startActivity(fallbackIntent)
                 return DownloadResult(true)
+            } else {
+                Log.w(TAG, "resolveActivity returned null for ACTION_INSTALL_PACKAGE")
             }
             
             // If we reach here, no installer could be launched
@@ -365,6 +387,69 @@ class UpdateManager(
         } catch (e: Exception) {
             Log.e(TAG, "Install error", e)
             DownloadResult(false, "Install error: ${e.message}")
+        }
+    }
+
+    /**
+     * Install using PackageInstaller.Session API (API 21+).
+     * This is the most reliable method and provides detailed error info.
+     */
+    private fun installViaPackageInstaller(apkFile: File, apkUri: Uri): DownloadResult {
+        return try {
+            val packageInstaller = context.packageManager.packageInstaller
+            val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                .setAppPackageName(context.packageName)
+                .setInstallerPackageName(context.packageName)
+            
+            // Create session
+            val sessionId = packageInstaller.createSession(sessionParams)
+            val session = packageInstaller.openSession(sessionId)
+            Log.d(TAG, "PackageInstaller session created: $sessionId")
+            
+            try {
+                // Open the APK file
+                val inputStream: InputStream = if (apkFile.exists()) {
+                    FileInputStream(apkFile)
+                } else {
+                    // Fallback to content resolver for URI
+                    context.contentResolver.openInputStream(apkUri) ?: return DownloadResult(false, "Cannot open APK file")
+                }
+                
+                // Write to session
+                val outputStream = session.openWrite("apk", 0, -1)
+                val buffer = ByteArray(8192)
+                var len: Int
+                while (inputStream.read(buffer).also { len = it } != -1) {
+                    outputStream.write(buffer, 0, len)
+                }
+                inputStream.close()
+                outputStream.close()
+                
+                // Commit session (install)
+                val intent = Intent(context, MainActivity::class.java) // dummy intent for callback
+                val pendingIntent = PendingIntent.getActivity(
+                    context, 0, intent, 
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                
+                session.commit(pendingIntent.intentSender)
+                Log.d(TAG, "PackageInstaller session committed")
+                
+                // Session committed - install will happen asynchronously
+                // Return success (the system will handle the install)
+                DownloadResult(true)
+                
+            } finally {
+                try {
+                    session.close()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error closing PackageInstaller session", e)
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "PackageInstaller install failed", e)
+            DownloadResult(false, "PackageInstaller failed: ${e.message}")
         }
     }
 }
