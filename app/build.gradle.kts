@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.agoria.app"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.agoria.app"
         minSdk = 33
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 105
         versionName = "1.0.105"
 
@@ -57,7 +57,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.15.0")
