@@ -540,7 +540,10 @@ fun SettingsScreen(
                                                     scope.launch { snackbarHostState.showSnackbar("Install started", duration = SnackbarDuration.Long) }
                                                 } else {
                                                     val err = error ?: "Install failed"
-                                                    if (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true) || err.contains("permission not granted", ignoreCase = true)) {
+                                                    // Only show permission dialog if permission check actually fails
+                                                    // If hasInstallPermission() is true but install fails with permission error, 
+                                                    // it's a transient Android issue - show actual error instead of looping
+                                                    if (!viewModel.hasInstallPermission() && (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true) || err.contains("permission not granted", ignoreCase = true))) {
                                                         showUnknownAppsDialog.value = true
                                                     } else {
                                                         scope.launch { snackbarHostState.showSnackbar(err, duration = SnackbarDuration.Long) }
