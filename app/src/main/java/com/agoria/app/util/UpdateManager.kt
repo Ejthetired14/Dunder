@@ -243,11 +243,11 @@ class UpdateManager(
             }
             Log.d(TAG, "installApk: uri=$uri")
 
-            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            // Use ACTION_VIEW which is the standard way to install APKs
+            val intent = Intent(Intent.ACTION_VIEW).apply {
                 data = uri
                 type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
             }
 
             // Check if we can start the activity
@@ -262,15 +262,38 @@ class UpdateManager(
                 }
                 DownloadResult(true)
             } else {
-                Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
-                // Provide more specific error
-                val pm = context.packageManager
-                val installers = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                Log.e(TAG, "installApk: Available installers count=${installers.size}")
-                for (i in installers) {
-                    Log.e(TAG, "installApk: Installer: ${i.activityInfo.packageName}")
+                Log.e(TAG, "installApk: No activity to handle ACTION_VIEW for APK")
+                // Try with ACTION_INSTALL_PACKAGE as fallback
+                val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                    data = uri
+                    type = "application/vnd.android.package-archive"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
                 }
-                DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app in Settings > Apps > Special access.")
+                val fallbackResolve = fallbackIntent.resolveActivity(context.packageManager)
+                if (fallbackResolve != null) {
+                    if (context is Activity) {
+                        (context as Activity).startActivity(fallbackIntent)
+                    } else {
+                        fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(fallbackIntent)
+                    }
+                    DownloadResult(true)
+                } else {
+                    // Provide more specific error
+                    val pm = context.packageManager
+                    val installers = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                    Log.e(TAG, "installApk: Available ACTION_VIEW installers count=${installers.size}")
+                    for (i in installers) {
+                        Log.e(TAG, "installApk: ACTION_VIEW Installer: ${i.activityInfo.packageName}")
+                    }
+                    val fallbackInstallers = pm.queryIntentActivities(fallbackIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                    Log.e(TAG, "installApk: Available ACTION_INSTALL_PACKAGE installers count=${fallbackInstallers.size}")
+                    for (i in fallbackInstallers) {
+                        Log.e(TAG, "installApk: ACTION_INSTALL_PACKAGE Installer: ${i.activityInfo.packageName}")
+                    }
+                    DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app in Settings > Apps > Special access.")
+                }
             }
         } catch (e: SecurityException) {
             Log.e(TAG, "installApk: SecurityException - missing install permission", e)
