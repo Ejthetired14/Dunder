@@ -40,7 +40,8 @@ class Repository(
     fun buildsFor(agentId: String) = db.buildDao().observeForAgent(agentId)
     fun memoriesFor(agentId: String) = db.memoryDao().observeForAgent(agentId)
 
-    suspend fun seedIfNeeded() = db.withTransaction {
+    suspend fun seedIfNeeded() {
+        db.withTransaction {
         var current = db.settingsDao().get()
         if (current == null) {
             current = SeedData.settings(Time.now())
@@ -71,6 +72,51 @@ class Repository(
         }
 
         db.settingsDao().upsert(settings.copy(seedVersion = 1))
+        }
+        syncConnectorCatalog()
+    }
+
+    /**
+     * Keeps the installed connectors aligned with [ConnectorCatalog]: rows for connectors that no
+     * longer exist are removed, and missing ones are added or refreshed. Without this, an upgrade
+     * keeps whatever the old catalog seeded and every removed connector stays broken forever.
+     */
+    suspend fun syncConnectorCatalog() {
+        val existing = db.connectorDao().getAll().associateBy { it.id }
+        existing.keys
+            .filter { ConnectorCatalog.get(it) == null }
+            .forEach { db.connectorDao().delete(it) }
+
+        ConnectorCatalog.all.forEach { def ->
+            val row = existing[def.id]
+            if (row == null) {
+                db.connectorDao().insert(
+                    ConnectorEntity(
+                        id = def.id,
+                        name = def.name,
+                        category = def.category,
+                        status = ConnectorCatalog.defaultStatus(def),
+                        configEnc = null,
+                        scopes = ConnectorCatalog.defaultScopes(def),
+                        lastUsed = null,
+                        lastError = null,
+                        createdAt = Time.now(),
+                    ),
+                )
+                return@forEach
+            }
+            val status = when {
+                row.status == "disabled" -> "disabled"
+                ConnectorCatalog.defaultStatus(def) == "ready" -> "ready"
+                row.configEnc != null -> "configured"
+                else -> row.status
+            }
+            if (row.name != def.name || row.category != def.category || row.status != status) {
+                db.connectorDao().update(
+                    row.copy(name = def.name, category = def.category, status = status),
+                )
+            }
+        }
     }
 
     suspend fun reset() {
