@@ -110,7 +110,8 @@ jobs:
             KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
             KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           else
-            echo "No keystore secrets found, generating new one..."
+            echo "::error::KEYSTORE SECRETS NOT CONFIGURED"
+            echo "::error::Add these to Settings → Secrets → Actions for consistent signing:"
             PASS=$(openssl rand -base64 24 | tr -d "=+/")
             KEY_ALIAS="dunder-release"
             KEY_PASSWORD="$PASS"
@@ -124,6 +125,15 @@ jobs:
               -storepass "$PASS" \
               -keypass "$KEY_PASSWORD" \
               -dname "CN=Dunder Release, OU=Dunder, O=Dunder, L=Local, ST=State, C=US"
+            
+            BASE64=$(base64 -w 0 release-key.jks)
+            echo "KEYSTORE_BASE64=$BASE64"
+            echo "KEYSTORE_PASSWORD=$PASS"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+            echo "::error::COPY THE ABOVE VALUES AND ADD AS GITHUB SECRETS"
+            echo "::error::Then re-run this workflow"
+            exit 1
           fi
           
           # Sign the APK
@@ -146,6 +156,8 @@ jobs:
           else
             RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
           fi
+          # Delete existing release if it exists (for re-runs)
+          gh release delete ${{ github.ref_name }} --yes 2>/dev/null || true
           gh release create ${{ github.ref_name }} \
             app/build/outputs/apk/debug/app-debug.apk \
             "$RELEASE_APK" \
