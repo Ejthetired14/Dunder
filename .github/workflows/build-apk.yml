@@ -79,10 +79,10 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace --scan
+        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon -x lint --stacktrace --scan
+        run: ./gradlew assembleRelease --no-daemon -x lint --stacktrace
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
