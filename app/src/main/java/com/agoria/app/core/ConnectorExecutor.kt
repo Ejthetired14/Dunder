@@ -126,6 +126,8 @@ class ConnectorExecutor(
         "telegram" -> telegram(config, action, args)
         "stripe" -> stripe(config, action, args)
         "cloudflare_workers" -> cloudflareWorkers(config, action, args)
+        "agentmail" -> agentmail(config, action, args)
+        "polar" -> polar(config, action, args)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -1202,5 +1204,223 @@ class ConnectorExecutor(
                 },
             };
         """.trimIndent()
+    }
+
+    // --------------------------------------------------------------- agentmail
+    private fun agentmail(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val apiKey = cfg(config, "apiKey") ?: return ConnectorResult(false, "Missing AgentMail API key")
+        val baseUrl = "https://agentmail.to/api/v1"
+        val headers = mapOf("Authorization" to "Bearer $apiKey", "Accept" to "application/json")
+
+        return when (action) {
+            "create_inbox" -> {
+                val username = args.optString("username").ifBlank { return ConnectorResult(false, "Missing username") }
+                val domain = args.optString("domain").ifBlank { return ConnectorResult(false, "Missing domain") }
+                val payload = JSONObject().put("username", username).put("domain", domain)
+                val response = http("POST", "$baseUrl/inboxes", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "AgentMail create inbox failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "AgentMail returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created inbox: ${root.optString("address")} (ID: ${root.optString("id")})\nDisplay name: ${root.optString("display_name")}",
+                )
+            }
+            "list_inboxes" -> {
+                val response = http("GET", "$baseUrl/inboxes", headers)
+                if (!response.ok) return ConnectorResult(false, "AgentMail list failed: ${text(response.body, 500)}")
+                val array = JSONArray(response.body)
+                if (array.length() == 0) return ConnectorResult(true, "No inboxes found.")
+                val sb = StringBuilder("AgentMail inboxes:\n")
+                for (i in 0 until array.length()) {
+                    val inbox = array.getJSONObject(i)
+                    sb.append("- ${inbox.optString("address")} (${inbox.optString("display_name")})\n  ID: ${inbox.optString("id")}, Active: ${inbox.optBoolean("active")}\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "get_inbox" -> {
+                val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
+                val response = http("GET", "$baseUrl/inboxes/$inboxId", headers)
+                if (!response.ok) return ConnectorResult(false, "AgentMail get failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "AgentMail returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Inbox: ${root.optString("address")} (${root.optString("display_name")})\nID: ${root.optString("id")}\nActive: ${root.optBoolean("active")}\nCreated: ${root.optString("created_at")}",
+                )
+            }
+            "list_messages" -> {
+                val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
+                val limit = args.optInt("limit", 10).coerceIn(1, 50)
+                val response = http("GET", "$baseUrl/inboxes/$inboxId/messages?limit=$limit", headers)
+                if (!response.ok) return ConnectorResult(false, "AgentMail list messages failed: ${text(response.body, 500)}")
+                val array = JSONArray(response.body)
+                if (array.length() == 0) return ConnectorResult(true, "No messages found.")
+                val sb = StringBuilder("Messages in $inboxId:\n")
+                for (i in 0 until array.length()) {
+                    val msg = array.getJSONObject(i)
+                    sb.append("- ${msg.optString("subject")} — ${msg.optString("from")}\n  ID: ${msg.optString("id")}, Date: ${msg.optString("received_at")}\n  Preview: ${text(msg.optString("text_preview"), 200)}\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "get_message" -> {
+                val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
+                val messageId = args.optString("messageId").ifBlank { return ConnectorResult(false, "Missing messageId") }
+                val response = http("GET", "$baseUrl/inboxes/$inboxId/messages/$messageId", headers)
+                if (!response.ok) return ConnectorResult(false, "AgentMail get message failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "AgentMail returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Subject: ${root.optString("subject")}\nFrom: ${root.optString("from")}\nTo: ${root.optString("to")}\nDate: ${root.optString("received_at")}\n\n${root.optString("text_body")}",
+                )
+            }
+            "send" -> {
+                val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
+                val to = args.optString("to").ifBlank { return ConnectorResult(false, "Missing recipient") }
+                val subject = args.optString("subject").ifBlank { return ConnectorResult(false, "Missing subject") }
+                val textBody = args.optString("text", "")
+                val htmlBody = args.optString("html", "").ifBlank { null }
+                val payload = JSONObject().put("to", to).put("subject", subject).put("text", textBody)
+                htmlBody?.let { payload.put("html", it) }
+                val response = http("POST", "$baseUrl/inboxes/$inboxId/messages", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "AgentMail send failed: ${text(response.body, 500)}")
+                ConnectorResult(true, "Sent email to $to with subject '$subject' from $inboxId")
+            }
+            "delete_inbox" -> {
+                val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
+                val response = http("DELETE", "$baseUrl/inboxes/$inboxId", headers)
+                if (!response.ok) return ConnectorResult(false, "AgentMail delete failed: ${text(response.body, 500)}")
+                ConnectorResult(true, "Deleted inbox $inboxId")
+            }
+            else -> ConnectorResult(false, "Unknown AgentMail action '$action'")
+        }
+    }
+
+    // ---------------------------------------------------------------- polar
+    private fun polar(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        val accessToken = cfg(config, "accessToken") ?: return ConnectorResult(false, "Missing Polar access token")
+        val baseUrl = "https://api.polar.sh/v1"
+        val headers = mapOf("Authorization" to "Bearer $accessToken", "Accept" to "application/json")
+
+        return when (action) {
+            "create_customer" -> {
+                val email = args.optString("email").ifBlank { return ConnectorResult(false, "Missing email") }
+                val name = args.optString("name", "")
+                val payload = JSONObject().put("email", email).put("name", name)
+                val response = http("POST", "$baseUrl/customers", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Polar create customer failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created customer: ${root.optString("id")} — ${root.optString("email")} (${root.optString("name")})\nCreated: ${root.optString("created_at")}",
+                )
+            }
+            "get_customer" -> {
+                val customerId = args.optString("customerId").ifBlank { return ConnectorResult(false, "Missing customerId") }
+                val response = http("GET", "$baseUrl/customers/$customerId", headers)
+                if (!response.ok) return ConnectorResult(false, "Polar get customer failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Customer: ${root.optString("id")} — ${root.optString("email")} (${root.optString("name")})\nCreated: ${root.optString("created_at")}\nMetadata: ${root.optString("metadata")}",
+                )
+            }
+            "list_products" -> {
+                val limit = args.optInt("limit", 10).coerceIn(1, 50)
+                val response = http("GET", "$baseUrl/products?limit=$limit", headers)
+                if (!response.ok) return ConnectorResult(false, "Polar list products failed: ${text(response.body, 500)}")
+                val array = JSONArray(response.body)
+                if (array.length() == 0) return ConnectorResult(true, "No products found.")
+                val sb = StringBuilder("Polar products:\n")
+                for (i in 0 until array.length()) {
+                    val p = array.getJSONObject(i)
+                    sb.append("- ${p.optString("id")}: ${p.optString("name")}\n  Description: ${text(p.optString("description"), 100)}\n  Active: ${p.optBoolean("active")}\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "create_product" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing name") }
+                val description = args.optString("description", "")
+                val payload = JSONObject().put("name", name).put("description", description)
+                val response = http("POST", "$baseUrl/products", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Polar create product failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created product: ${root.optString("id")} — ${root.optString("name")}\nDescription: ${root.optString("description")}\nActive: ${root.optBoolean("active")}",
+                )
+            }
+            "create_price" -> {
+                val productId = args.optString("productId").ifBlank { return ConnectorResult(false, "Missing productId") }
+                val amountCents = args.optLong("amountCents", 0L)
+                if (amountCents <= 0) return ConnectorResult(false, "amountCents must be > 0")
+                val currency = args.optString("currency", "usd").lowercase()
+                val interval = args.optString("interval", "month").lowercase()
+                if (!listOf("day", "week", "month", "year").contains(interval)) {
+                    return ConnectorResult(false, "interval must be day, week, month, or year")
+                }
+                val payload = JSONObject()
+                    .put("product_id", productId)
+                    .put("amount", amountCents)
+                    .put("currency", currency)
+                    .put("recurring_interval", interval)
+                val response = http("POST", "$baseUrl/prices", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Polar create price failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created price: ${root.optString("id")} — ${root.optLong("amount")} ${root.optString("currency")}/${root.optString("recurring_interval")}\nProduct: ${root.optString("product_id")}\nActive: ${root.optBoolean("active")}",
+                )
+            }
+            "create_checkout" -> {
+                val priceId = args.optString("priceId").ifBlank { return ConnectorResult(false, "Missing priceId") }
+                val customerId = args.optString("customerId", "").ifBlank { null }
+                val successUrl = args.optString("successUrl", "").ifBlank { null }
+                val cancelUrl = args.optString("cancelUrl", "").ifBlank { null }
+                val payload = JSONObject().put("price_id", priceId)
+                customerId?.let { payload.put("customer_id", it) }
+                successUrl?.let { payload.put("success_url", it) }
+                cancelUrl?.let { payload.put("cancel_url", it) }
+                val response = http("POST", "$baseUrl/checkouts", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Polar create checkout failed: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Created checkout: ${root.optString("id")}\nURL: ${root.optString("url")}\nExpires: ${root.optString("expires_at")}",
+                )
+            }
+            "list_subscriptions" -> {
+                val customerId = args.optString("customerId", "").ifBlank { null }
+                val status = args.optString("status", "active")
+                val limit = args.optInt("limit", 10).coerceIn(1, 50)
+                val url = StringBuilder("$baseUrl/subscriptions?limit=$limit&status=$status")
+                customerId?.let { url.append("&customer_id=").append(it) }
+                val response = http("GET", url.toString(), headers)
+                if (!response.ok) return ConnectorResult(false, "Polar list subscriptions failed: ${text(response.body, 500)}")
+                val array = JSONArray(response.body)
+                if (array.length() == 0) return ConnectorResult(true, "No subscriptions found.")
+                val sb = StringBuilder("Polar subscriptions (status: $status):\n")
+                for (i in 0 until array.length()) {
+                    val s = array.getJSONObject(i)
+                    sb.append("- ${s.optString("id")}: ${s.optString("status")}\n  Customer: ${s.optString("customer_id")}, Price: ${s.optString("price_id")}\n  Current period: ${s.optString("current_period_start")} to ${s.optString("current_period_end")}\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "cancel_subscription" -> {
+                val subscriptionId = args.optString("subscriptionId").ifBlank { return ConnectorResult(false, "Missing subscriptionId") }
+                val payload = JSONObject().put("cancel_at_period_end", true)
+                val response = http("POST", "$baseUrl/subscriptions/$subscriptionId/cancel", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "Polar cancel subscription failed: ${text(response.body, 500)}")
+                ConnectorResult(true, "Subscription $subscriptionId cancelled at period end")
+            }
+            "verify_key" -> {
+                val response = http("GET", "$baseUrl/organization", headers)
+                if (!response.ok) return ConnectorResult(false, "Invalid API key or no access: ${text(response.body, 500)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "Polar returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "API key valid. Organization: ${root.optString("name")} (${root.optString("id")})",
+                )
+            }
+            else -> ConnectorResult(false, "Unknown Polar action '$action'")
+        }
     }
 }
