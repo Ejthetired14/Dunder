@@ -13,8 +13,8 @@ android {
         applicationId = "com.agoria.app"
         minSdk = 33
         targetSdk = 34
-        versionCode = 115
-        versionName = "1.0.115"
+        versionCode = 116
+        versionName = "1.0.116"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -43,6 +43,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     packaging {
