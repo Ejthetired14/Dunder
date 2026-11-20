@@ -954,14 +954,22 @@ private fun EditAgentDialog(
                     onValueChange = { persona = it },
                     label = { Text("Persona") },
                     minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 6,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp),
                 )
                 OutlinedTextField(
                     value = goal,
                     onValueChange = { goal = it },
                     label = { Text("Goal") },
                     minLines = 2,
-                    modifier = Modifier.fillMaxWidth(),
+                    // Without a ceiling a long goal grows past the dialog and pushes the buttons
+                    // off screen, so the field scrolls internally instead of consuming the sheet.
+                    maxLines = 6,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp),
                 )
                 TextButton(onClick = { confirmDelete = !confirmDelete }) {
                     Icon(Icons.Default.Delete, contentDescription = null)
