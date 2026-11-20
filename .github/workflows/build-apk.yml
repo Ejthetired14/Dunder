@@ -73,12 +73,6 @@ jobs:
       - name: List Gradle tasks
         run: ./gradlew tasks --all 2>&1 | grep -E "(ksp|KSP|room|Room|compile|assemble)" | head -50
 
-      - name: Test compile without KSP
-        run: ./gradlew compileDebugKotlin --no-daemon -x kspDebugKotlin --stacktrace 2>&1 | tee compile-debug.log; echo "COMPILE EXIT: ${PIPESTATUS[0]}"; tail -100 compile-debug.log
-
-      - name: Test KSP task
-        run: ./gradlew kspDebugKotlin --no-daemon --stacktrace 2>&1 | tee ksp-debug.log; echo "KSP EXIT: ${PIPESTATUS[0]}"; tail -100 ksp-debug.log
-
       - name: Extract version
         id: version
         run: |
@@ -89,15 +83,13 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          ./gradlew assembleDebug --no-daemon -x lint --stacktrace --info 2>&1 | tee build-debug.log
-          echo "=== BUILD DEBUG EXIT CODE: ${PIPESTATUS[0]} ==="
-          tail -300 build-debug.log
+          ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1
+          echo "=== BUILD DEBUG EXIT CODE: $? ==="
 
       - name: Build Release APK
         run: |
-          ./gradlew assembleRelease --no-daemon -x lint --stacktrace --info 2>&1 | tee build-release.log
-          echo "=== BUILD RELEASE EXIT CODE: ${PIPESTATUS[0]} ==="
-          tail -300 build-release.log
+          ./gradlew assembleRelease --no-daemon -x lint --stacktrace 2>&1
+          echo "=== BUILD RELEASE EXIT CODE: $? ==="
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
