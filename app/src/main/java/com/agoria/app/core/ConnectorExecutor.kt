@@ -104,6 +104,20 @@ class ConnectorExecutor(
         summary: String,
     ): ConnectorResult {
         val short = summary.take(1200)
+        if (ok) {
+            // One failed call used to leave the connector flagged "error" for good, so Local Files
+            // kept showing an error even after it worked again.
+            val row = repo.connector(connectorId)
+            if (row != null && row.status == "error") {
+                val def = ConnectorCatalog.get(connectorId)
+                val clean = when {
+                    def == null -> "needs_setup"
+                    row.configEnc != null -> "configured"
+                    else -> ConnectorCatalog.defaultStatus(def)
+                }
+                repo.updateConnector(row.copy(status = clean, lastError = null))
+            }
+        }
         repo.recordConnectorUse(connectorId, if (ok) null else short)
         repo.addConnectorLog(connectorId, agentId, action, if (ok) "ok" else "error", short)
         return ConnectorResult(ok, short, if (ok) null else short)
@@ -442,10 +456,22 @@ class ConnectorExecutor(
         agentId: String?,
     ): ConnectorResult {
         val root = Files.agentWorkspace(context, agentId ?: "shared").canonicalFile
+        // Models answer with "/notes.txt" or "./notes.txt" for the same file, so treat both as
+        // relative to the workspace instead of rejecting them as an escape attempt.
         val relative = args.optString("path", "")
+            .trim()
+            .replace('\\', '/')
+            .trimStart('/')
+            .removePrefix("./")
         val target = if (relative.isBlank()) root else File(root, relative).canonicalFile
         if (target.canonicalPath != root.canonicalPath && !target.canonicalPath.startsWith(root.canonicalPath + File.separator)) {
-            return ConnectorResult(false, "Path escapes the agent workspace.")
+            val contents = Files.listFiles(root).take(12).joinToString(", ") {
+                if (it.isDirectory) it.name + "/" else it.name
+            }
+            return ConnectorResult(
+                false,
+                "That path points outside the agent workspace. Give a path relative to it, like \"notes.txt\". The workspace currently holds: ${contents.ifBlank { "nothing yet" }}.",
+            )
         }
         return when (action) {
             "list" -> {
