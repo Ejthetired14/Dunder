@@ -665,62 +665,84 @@ class ConnectorExecutor(
 
     private fun github(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
         val token = cfg(config, "token") ?: return ConnectorResult(false, "Missing GitHub token")
-        val repoName = cfg(config, "repo") ?: return ConnectorResult(false, "Missing repository")
-        if (!repoName.contains("/")) return ConnectorResult(false, "Repository must be owner/name")
         val headers = mapOf(
             "Authorization" to "Bearer $token",
             "Accept" to "application/vnd.github+json",
             "X-GitHub-Api-Version" to "2022-11-28",
         )
         return when (action) {
-            "get_repo" -> {
-                val response = http("GET", "https://api.github.com/repos/$repoName", headers)
-                if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
+            "create_repo" -> {
+                val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing repo name") }
+                val privateRepo = args.optBoolean("private", true)
+                val description = args.optString("description", "")
+                val payload = JSONObject()
+                    .put("name", name)
+                    .put("private", privateRepo)
+                    .put("description", description)
+                val response = http("POST", "https://api.github.com/user/repos", headers, payload.toString())
+                if (!response.ok) return ConnectorResult(false, "GitHub create repo failed: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
                 ConnectorResult(
                     true,
-                    "Repository ${root.optString("full_name")}: ${root.optString("description")}\n" +
-                        "stars ${root.optInt("stargazers_count")}, forks ${root.optInt("forks_count")}, " +
-                        "open issues ${root.optInt("open_issues_count")}, " +
-                        "default branch ${root.optString("default_branch")}.",
+                    "Created repository: ${root.optString("full_name")}\n${root.optString("html_url")}\nPrivate: $privateRepo",
                 )
             }
-            "list_issues" -> {
-                val state = args.optString("state", "open")
-                val response = http(
-                    "GET",
-                    "https://api.github.com/repos/$repoName/issues?state=$state&per_page=5",
-                    headers,
-                )
-                if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
-                val array = JSONArray(response.body)
-                if (array.length() == 0) return ConnectorResult(true, "No $state issues.")
-                val sb = StringBuilder("GitHub issues ($state):\n")
-                for (i in 0 until array.length()) {
-                    val issue = array.getJSONObject(i)
-                    sb.append("#").append(issue.optInt("number"))
-                        .append(" ").append(issue.optString("title"))
-                        .append(" — ").append(issue.optJSONObject("user")?.optString("login") ?: "?")
-                        .append('\n').append("  ").append(issue.optString("html_url")).append('\n')
+            "get_repo", "list_issues", "create_issue" -> {
+                val repoName = cfg(config, "repo") ?: return ConnectorResult(false, "Missing repository (set default repo in connector config or pass 'repo' in args)")
+                if (!repoName.contains("/")) return ConnectorResult(false, "Repository must be owner/name")
+                val effectiveRepo = args.optString("repo").ifBlank { repoName }
+                when (action) {
+                    "get_repo" -> {
+                        val response = http("GET", "https://api.github.com/repos/$effectiveRepo", headers)
+                        if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
+                        val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                        ConnectorResult(
+                            true,
+                            "Repository ${root.optString("full_name")}: ${root.optString("description")}\n" +
+                                "stars ${root.optInt("stargazers_count")}, forks ${root.optInt("forks_count")}, " +
+                                "open issues ${root.optInt("open_issues_count")}, " +
+                                "default branch ${root.optString("default_branch")}.",
+                        )
+                    }
+                    "list_issues" -> {
+                        val state = args.optString("state", "open")
+                        val response = http(
+                            "GET",
+                            "https://api.github.com/repos/$effectiveRepo/issues?state=$state&per_page=5",
+                            headers,
+                        )
+                        if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
+                        val array = JSONArray(response.body)
+                        if (array.length() == 0) return ConnectorResult(true, "No $state issues.")
+                        val sb = StringBuilder("GitHub issues ($state):\n")
+                        for (i in 0 until array.length()) {
+                            val issue = array.getJSONObject(i)
+                            sb.append("#").append(issue.optInt("number"))
+                                .append(" ").append(issue.optString("title"))
+                                .append(" — ").append(issue.optJSONObject("user")?.optString("login") ?: "?")
+                                .append('\n').append("  ").append(issue.optString("html_url")).append('\n')
+                        }
+                        ConnectorResult(true, sb.toString().trim())
+                    }
+                    "create_issue" -> {
+                        val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
+                        val body = args.optString("body", "")
+                        val payload = JSONObject().put("title", title).put("body", body)
+                        val response = http(
+                            "POST",
+                            "https://api.github.com/repos/$effectiveRepo/issues",
+                            headers,
+                            payload.toString(),
+                        )
+                        if (!response.ok) return ConnectorResult(false, "GitHub create issue failed: ${text(response.body, 400)}")
+                        val root = json(response.body)
+                        ConnectorResult(
+                            true,
+                            "Created issue #${root?.optInt("number")} in $effectiveRepo: $title\n${root?.optString("html_url") ?: ""}",
+                        )
+                    }
+                    else -> ConnectorResult(false, "Unknown GitHub action '$action'")
                 }
-                ConnectorResult(true, sb.toString().trim())
-            }
-            "create_issue" -> {
-                val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
-                val body = args.optString("body", "")
-                val payload = JSONObject().put("title", title).put("body", body)
-                val response = http(
-                    "POST",
-                    "https://api.github.com/repos/$repoName/issues",
-                    headers,
-                    payload.toString(),
-                )
-                if (!response.ok) return ConnectorResult(false, "GitHub create issue failed: ${text(response.body, 400)}")
-                val root = json(response.body)
-                ConnectorResult(
-                    true,
-                    "Created issue #${root?.optInt("number")} in $repoName: $title\n${root?.optString("html_url") ?: ""}",
-                )
             }
             else -> ConnectorResult(false, "Unknown GitHub action '$action'")
         }
