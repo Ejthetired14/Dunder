@@ -223,8 +223,13 @@ class UpdateManager(
             if (status != DownloadManager.STATUS_SUCCESSFUL) {
                 val reason = when (status) {
                     DownloadManager.STATUS_FAILED -> {
-                        val reasonIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)
-                        cursor.getInt(reasonIdx).toString()
+                        val errorCursor = dm.query(query)
+                        if (errorCursor.moveToFirst()) {
+                            val reasonIdx = errorCursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)
+                            errorCursor.getInt(reasonIdx).toString()
+                        } else {
+                            "Unknown failure reason"
+                        }
                     }
                     DownloadManager.STATUS_PAUSED -> "Download paused"
                     else -> "Unknown error (status=$status)"
