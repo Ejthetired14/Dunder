@@ -152,22 +152,6 @@ fun SettingsScreen(
     val tests = state.providerTests
     val revenue = state.revenue
 
-    // Backup to Google Drive
-    fun backupToGoogleDrive() {
-        uiScope.launch {
-            val result = viewModel.backupToGoogleDrive()
-            scope.launch { snackbarHostState.showSnackbar(if (result.ok) "Backup uploaded" else "Backup failed: ${result.error}") }
-        }
-    }
-
-    // Restore from Google Drive
-    fun restoreFromGoogleDrive() {
-        uiScope.launch {
-            val result = viewModel.restoreFromGoogleDrive()
-            scope.launch { snackbarHostState.showSnackbar(if (result.ok) "Restored from Google Drive" else "Restore failed: ${result.error}") }
-        }
-    }
-
     LaunchedEffect(settings) {
         settings?.let {
             tick = it.tickIntervalSeconds
@@ -365,7 +349,7 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 
-                val paymentConnectors = state.connectors?.filter { it.id in setOf("stripe", "paypal", "polar") } ?: emptyList()
+                val paymentConnectors = state.connectors?.filter { it.id == "stripe" } ?: emptyList()
                 if (paymentConnectors.isEmpty()) {
                     Text(
                         text = "No payment connectors configured. Go to Connectors tab to add Stripe, PayPal, or Polar.",
@@ -520,7 +504,7 @@ fun SettingsScreen(
 
             SectionCard(title = "Backup & Restore") {
                 Text(
-                    text = "Backup your agents, settings, and data. Restore from local file or Google Drive.",
+                    text = "Backup your agents, settings, and data to a file you keep, and restore it on any phone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -588,75 +572,7 @@ fun SettingsScreen(
                     ) { Text("Import") }
                 }
 
-                Spacer(Modifier.height(10.dp))
 
-                // Google Drive backup (if connector configured)
-                val gdriveConnector = state.connectors?.firstOrNull { it.id == "gdrive" }
-                if (gdriveConnector != null && gdriveConnector.status == "ready") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text("Backup to Google Drive", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        text = "Upload backup to Drive via gdrive connector",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        Button(
-                            onClick = { backupToGoogleDrive() },
-                        ) { Text("Backup to Drive") }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudDownload,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text("Restore from Google Drive", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        text = "Download and restore latest backup from Drive",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        Button(
-                            onClick = { restoreFromGoogleDrive() },
-                        ) { Text("Restore from Drive") }
-                    }
-                } else {
-                    Text(
-                        text = "Set up the Google Drive connector to enable cloud backup/restore.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                }
             }
 
             SectionCard(title = "App Updates") {
