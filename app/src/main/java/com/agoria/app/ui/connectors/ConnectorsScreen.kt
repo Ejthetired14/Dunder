@@ -53,6 +53,7 @@ import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.connectorIcon
 import com.agoria.app.util.Time
 import org.json.JSONObject
+import kotlin.text.Regex
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
