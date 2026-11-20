@@ -399,7 +399,6 @@ class UpdateManager(
             val packageInstaller = context.packageManager.packageInstaller
             val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
                 .setAppPackageName(context.packageName)
-                .setInstallerPackageName(context.packageName)
             
             // Create session
             val sessionId = packageInstaller.createSession(sessionParams)
@@ -426,7 +425,8 @@ class UpdateManager(
                 outputStream.close()
                 
                 // Commit session (install)
-                val intent = Intent(context, MainActivity::class.java) // dummy intent for callback
+                // Use a generic intent since we just need the intent sender
+                val intent = Intent(Intent.ACTION_VIEW)
                 val pendingIntent = PendingIntent.getActivity(
                     context, 0, intent, 
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
