@@ -76,6 +76,7 @@ import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.TaskEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.AgentScreenState
+import com.agoria.app.ui.PaginationState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
@@ -148,7 +149,7 @@ private fun AgentContent(
         AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
     ).value
 
-    val messages = state.messages
+    val newestMessageId = state.messages.lastOrNull()?.id
     val diary = state.diary
     val tasks = state.tasks
     val builds = state.builds
@@ -160,12 +161,6 @@ private fun AgentContent(
     var showMemory by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.size - 1)
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -192,6 +187,7 @@ private fun AgentContent(
             0 -> ChatTab(
                 viewModel = viewModel,
                 agent = agent,
+                newestMessageId = newestMessageId,
                 input = input,
                 onInput = { input = it },
                 onSend = {
@@ -307,24 +303,25 @@ private fun AgentHeader(
 private fun ChatTab(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
+    newestMessageId: String?,
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
     val agentId = agent.id
-    val pagedMessages = viewModel.pagedMessages(agentId)
-    val messagesPagination = viewModel.messagesPagination(agentId)
+    // Both of these are observed state now. Reading a snapshot once per composition meant new
+    // messages never appeared until the screen was reopened.
+    val pagedMessagesByAgent by viewModel.pagedMessagesByAgent.collectAsStateWithLifecycle()
+    val pagedMessages = pagedMessagesByAgent[agentId].orEmpty()
+    val paginationByAgent by viewModel.messagesPaginationByAgent.collectAsStateWithLifecycle()
+    val messagesPagination = paginationByAgent[agentId] ?: PaginationState()
 
-    // Load initial data (latest messages)
-    LaunchedEffect(Unit) {
+    // Load the newest page on entry and again whenever a message is added, then stay on the tail.
+    LaunchedEffect(newestMessageId) {
         viewModel.loadPagedMessages(agentId, refresh = true)
-    }
-
-    // Load more when scrolled to top
-    LaunchedEffect(listState.firstVisibleItemIndex) {
-        if (listState.firstVisibleItemIndex == 0 && messagesPagination.hasMore && !messagesPagination.isLoading) {
-            viewModel.loadPagedMessages(agentId)
+        if (newestMessageId != null) {
+            listState.scrollToItem(0)
         }
     }
 
@@ -334,31 +331,9 @@ private fun ChatTab(
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            reverseLayout = true, // Show latest messages at bottom
+            // Newest first in a reversed list: index 0 sits at the bottom, next to the composer.
+            reverseLayout = true,
         ) {
-            // Load more indicator at top (older messages)
-            if (messagesPagination.hasMore) {
-                item {
-                    if (messagesPagination.isLoading) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else {
-                        TextButton(
-                            onClick = { viewModel.loadPagedMessages(agentId) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        ) {
-                            Text("Load older messages")
-                        }
-                    }
-                }
-            }
-
             if (pagedMessages.isEmpty() && !messagesPagination.isLoading) {
                 item {
                     EmptyState(
@@ -367,7 +342,7 @@ private fun ChatTab(
                     )
                 }
             } else {
-                items(pagedMessages.reversed(), key = { it.id }) { message ->
+                items(pagedMessages, key = { it.id }) { message ->
                     MessageRow(message = message, agent = agent)
                 }
             }
@@ -383,6 +358,29 @@ private fun ChatTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(12.dp),
                         )
+                    }
+                }
+            }
+
+            // Older messages live above the newest ones, so this control sits at the top.
+            if (messagesPagination.hasMore) {
+                item {
+                    if (messagesPagination.isLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { viewModel.loadPagedMessages(agentId) },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        ) {
+                            Text("Load older messages")
+                        }
                     }
                 }
             }
