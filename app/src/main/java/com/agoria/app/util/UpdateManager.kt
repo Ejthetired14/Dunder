@@ -144,11 +144,28 @@ class UpdateManager(
      */
     fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (Boolean, String?) -> Unit) {
         scope.launch {
+            // Check permission before attempting download/install
+            if (!hasInstallPermission()) {
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "Install unknown apps permission not granted")
+                }
+                return@launch
+            }
             val result = withContext(Dispatchers.IO) {
                 downloadApk(release.apkUrl, release.tagName, onProgress)
             }
             withContext(Dispatchers.Main) { onComplete(result.success, result.error) }
         }
+    }
+
+    /**
+     * Checks if the app has permission to install packages (Android 8+).
+     */
+    fun hasInstallPermission(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return context.packageManager.canRequestPackageInstalls()
+        }
+        return true // Pre-O doesn't have this restriction
     }
 
     private data class DownloadResult(
@@ -248,6 +265,9 @@ class UpdateManager(
                 Log.e(TAG, "installApk: No activity to handle ACTION_INSTALL_PACKAGE")
                 DownloadResult(false, "No installer found. Enable 'Install unknown apps' for this app.")
             }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "installApk: SecurityException - missing install permission", e)
+            DownloadResult(false, "Install unknown apps permission not granted")
         } catch (e: Exception) {
             Log.e(TAG, "installApk error", e)
             DownloadResult(false, "Install error: ${e.message}")

@@ -530,20 +530,24 @@ fun SettingsScreen(
                             ) {
                                 Button(
                                     onClick = {
-                                        downloadProgress.value = 0
-                                        viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success, error ->
-                                            downloadProgress.value = null
-                                            if (success) {
-                                                scope.launch { snackbarHostState.showSnackbar("Install started", duration = SnackbarDuration.Long) }
-                                            } else {
-                                                val err = error ?: "Install failed"
-                                                if (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true)) {
-                                                    showUnknownAppsDialog.value = true
+                                        if (!viewModel.hasInstallPermission()) {
+                                            showUnknownAppsDialog.value = true
+                                        } else {
+                                            downloadProgress.value = 0
+                                            viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success, error ->
+                                                downloadProgress.value = null
+                                                if (success) {
+                                                    scope.launch { snackbarHostState.showSnackbar("Install started", duration = SnackbarDuration.Long) }
                                                 } else {
-                                                    scope.launch { snackbarHostState.showSnackbar(err, duration = SnackbarDuration.Long) }
+                                                    val err = error ?: "Install failed"
+                                                    if (err.contains("unknown apps", ignoreCase = true) || err.contains("Install unknown apps", ignoreCase = true) || err.contains("permission not granted", ignoreCase = true)) {
+                                                        showUnknownAppsDialog.value = true
+                                                    } else {
+                                                        scope.launch { snackbarHostState.showSnackbar(err, duration = SnackbarDuration.Long) }
+                                                    }
                                                 }
-                                            }
-                                        })
+                                            })
+                                        }
                                     },
                                     enabled = downloadProgress.value == null,
                                 ) {

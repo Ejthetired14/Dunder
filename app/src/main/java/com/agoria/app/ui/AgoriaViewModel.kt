@@ -699,6 +699,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         return app.updateManager.isNewerRelease(release)
     }
 
+    fun hasInstallPermission(): Boolean {
+        return app.updateManager.hasInstallPermission()
+    }
+
     fun downloadAndInstallUpdate(
         release: com.agoria.app.util.UpdateManager.ReleaseInfo,
         onProgress: (Int) -> Unit,
