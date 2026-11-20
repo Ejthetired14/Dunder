@@ -163,7 +163,8 @@ private fun AgentContent(
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.size - 1)
+            // reverseLayout = true means index 0 is visually at bottom (newest)
+            listState.scrollToItem(0)
         }
     }
 
