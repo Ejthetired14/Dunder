@@ -5,9 +5,15 @@ import java.util.Locale
 enum class ConnectorAuth {
     NONE,
     API_KEY,
-    OAUTH_TOKEN,
     WEBHOOK,
     BOT_TOKEN,
+
+    /**
+     * Uses the accounts already signed in on this phone. The app never stores a token or a
+     * password for these connectors: it hands the action to the signed-in mail, calendar or
+     * browser app, and the user confirms it there.
+     */
+    ACCOUNT,
 }
 
 data class ConnectorField(
@@ -157,6 +163,24 @@ object ConnectorCatalog {
             iconKey = "files",
         ),
         ConnectorDef(
+            id = "accounts",
+            name = "Your Accounts",
+            category = "Personal",
+            description = "Work inside the accounts already signed in on this phone. Draft mail in your own mail app, add an event to your own calendar, and open links in your signed-in browser. No API keys, no tokens, no separate sign-in.",
+            auth = ConnectorAuth.ACCOUNT,
+            fields = emptyList(),
+            actions = listOf(
+                ConnectorActionDef("list", "Signed-in accounts", "List the accounts already set up on this device.", false, "{}"),
+                ConnectorActionDef("email", "Draft an email", "Open your mail app with a ready draft. You review it and tap send.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
+                ConnectorActionDef("event", "Add calendar event", "Open your calendar app with the event filled in. You confirm it.", true, "{\"title\": \"...\", \"start\": \"2026-11-20T10:00:00Z\", \"end\": \"2026-11-20T11:00:00Z\", \"location\": \"\"}"),
+                ConnectorActionDef("open", "Open a link", "Open a web link in the app or browser where you are already signed in.", true, "{\"url\": \"https://mail.google.com\"}"),
+            ),
+            setupHelp = "Sign in once in Android Settings under Passwords & accounts. The office then works through your own mail, calendar and browser apps, so nothing here can expire and no password is ever handed to the app.",
+            docsUrl = "",
+            risk = "medium",
+            iconKey = "accounts",
+        ),
+        ConnectorDef(
             id = "http",
             name = "HTTP Request",
             category = "Web",
@@ -174,45 +198,6 @@ object ConnectorCatalog {
             docsUrl = "https://developer.mozilla.org/en-US/docs/Web/HTTP",
             risk = "high",
             iconKey = "http",
-        ),
-        ConnectorDef(
-            id = "gmail",
-            name = "Gmail",
-            category = "Email",
-            description = "Read and send mail through the Gmail API.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
-            fields = listOf(
-                ConnectorField("accessToken", "OAuth access token", "Paste a token with gmail.readonly and gmail.send scopes.", true, true, "ya29...."),
-                ConnectorField("userEmail", "Account email", "Optional. Used for labels and display.", false, false, "you@example.com"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("list", "List messages", "Search recent messages.", false, "{\"query\": \"is:unread\", \"maxResults\": 5}"),
-                ConnectorActionDef("get", "Read message", "Read one message by id.", false, "{\"messageId\": \"...\"}"),
-                ConnectorActionDef("send", "Send email", "Send a plain-text email. Requires approval.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
-            ),
-            setupHelp = "Create an OAuth 2.0 access token with the Google OAuth Playground (developers.google.com/oauthplayground) using the Gmail API v1 and the scopes gmail.readonly and gmail.send. Paste the access token below. Tokens expire after about an hour; paste a fresh one when it expires.",
-            docsUrl = "https://developers.google.com/gmail/api",
-            risk = "high",
-            iconKey = "gmail",
-        ),
-        ConnectorDef(
-            id = "calendar",
-            name = "Google Calendar",
-            category = "Calendar",
-            description = "Read and create events in a Google calendar.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
-            fields = listOf(
-                ConnectorField("accessToken", "OAuth access token", "Paste a token with calendar.readonly and calendar.events scopes.", true, true, "ya29...."),
-                ConnectorField("calendarId", "Calendar id", "Defaults to primary.", false, false, "primary"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("list", "List events", "List upcoming events.", false, "{\"maxResults\": 5}"),
-                ConnectorActionDef("create", "Create event", "Create an event. Requires approval.", true, "{\"summary\": \"...\", \"start\": \"2026-11-17T10:00:00Z\", \"end\": \"2026-11-17T11:00:00Z\", \"description\": \"...\"}"),
-            ),
-            setupHelp = "Create an OAuth token with the Google Calendar API v3 and the scopes calendar.readonly and calendar.events in the OAuth Playground. Paste the access token below.",
-            docsUrl = "https://developers.google.com/calendar/api",
-            risk = "high",
-            iconKey = "calendar",
         ),
         ConnectorDef(
             id = "github",
@@ -358,110 +343,20 @@ object ConnectorCatalog {
             risk = "high",
             iconKey = "cloudflare",
         ),
-        ConnectorDef(
-            id = "paypal",
-            name = "PayPal",
-            category = "Payments",
-            description = "Create orders, capture payments, and manage subscriptions through PayPal REST API.",
-            auth = ConnectorAuth.API_KEY,
-            fields = listOf(
-                ConnectorField("clientId", "Client ID", "PayPal REST API client ID from developer dashboard.", true, true, "Ad...xyz"),
-                ConnectorField("clientSecret", "Client Secret", "PayPal REST API client secret.", true, true, "EF...xyz"),
-                ConnectorField("environment", "Environment", "sandbox or live.", false, false, "sandbox"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("create_order", "Create Order", "Create a PayPal order for a purchase.", true, "{\"amount\": \"10.00\", \"currency\": \"USD\", \"intent\": \"CAPTURE\"}"),
-                ConnectorActionDef("capture_order", "Capture Order", "Capture payment for an approved order.", true, "{\"orderId\": \"...\"}"),
-                ConnectorActionDef("get_order", "Get Order Details", "Retrieve order details by ID.", false, "{\"orderId\": \"...\"}"),
-                ConnectorActionDef("create_subscription", "Create Subscription", "Create a subscription plan.", true, "{\"planId\": \"P-...\", \"subscriberEmail\": \"user@example.com\"}"),
-                ConnectorActionDef("list_transactions", "List Transactions", "List recent transactions.", false, "{\"startDate\": \"2026-01-01\", \"endDate\": \"2026-12-31\"}"),
-            ),
-            setupHelp = "Create a PayPal app at developer.paypal.com, get Client ID and Secret. Use sandbox for testing, live for production. The app will only make API calls you approve.",
-            docsUrl = "https://developer.paypal.com/docs/api/overview/",
-            risk = "high",
-            iconKey = "paypal",
-        ),
-        ConnectorDef(
-            id = "polar",
-            name = "Polar",
-            category = "Payments",
-            description = "Sell digital products and subscriptions through Polar.sh — the merchant of record for developers.",
-            auth = ConnectorAuth.API_KEY,
-            fields = listOf(
-                ConnectorField("accessToken", "Access Token", "Polar access token from your organization settings.", true, true, "polar_oat_..."),
-                ConnectorField("organizationId", "Organization ID", "Your Polar organization ID.", true, true, "..."),
-                ConnectorField("webhookSecret", "Webhook Secret", "Optional. For verifying webhook events.", false, false, "whsec_..."),
-            ),
-            actions = listOf(
-                ConnectorActionDef("create_product", "Create Product", "Create a digital product.", true, "{\"name\": \"My Course\", \"description\": \"Learn...\", \"priceAmount\": 2900, \"priceCurrency\": \"USD\", \"isRecurring\": false}"),
-                ConnectorActionDef("create_checkout", "Create Checkout", "Create a checkout session for a product.", true, "{\"productId\": \"...\", \"customerEmail\": \"user@example.com\", \"successUrl\": \"https://yourapp.com/success\"}"),
-                ConnectorActionDef("create_subscription", "Create Subscription", "Create a subscription product.", true, "{\"name\": \"Pro Plan\", \"description\": \"Monthly access\", \"priceAmount\": 1900, \"priceCurrency\": \"USD\", \"interval\": \"month\"}"),
-                ConnectorActionDef("get_customer", "Get Customer", "Retrieve customer by email.", false, "{\"email\": \"user@example.com\"}"),
-                ConnectorActionDef("list_products", "List Products", "List all products.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("list_orders", "List Orders", "List recent orders.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("verify_license", "Verify License Key", "Check if a license key is valid.", false, "{\"licenseKey\": \"...\"}"),
-            ),
-            setupHelp = "Get your access token from Polar dashboard (settings → access tokens). Copy your Organization ID from the URL. Add a webhook endpoint pointing to your app if needed. The app will only make API calls you approve.",
-            docsUrl = "https://polar.sh/docs/api",
-            risk = "high",
-            iconKey = "polar",
-        ),
-        ConnectorDef(
-            id = "agentmail",
-            name = "AgentMail",
-            category = "Email",
-            description = "Programmatic email inboxes for AI agents. Create addresses, send and receive mail via API.",
-            auth = ConnectorAuth.API_KEY,
-            fields = listOf(
-                ConnectorField("apiKey", "API Key", "AgentMail API key from your dashboard.", true, true, "am_sk_..."),
-                ConnectorField("domain", "Domain", "Your verified sending domain (optional, uses shared domain if empty).", false, false, "mail.yourapp.com"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("create_inbox", "Create Inbox", "Create a new email inbox.", true, "{\"username\": \"agent-1\", \"domain\": \"mail.yourapp.com\"}"),
-                ConnectorActionDef("list_inboxes", "List Inboxes", "List all inboxes.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("send_email", "Send Email", "Send an email from an inbox. Requires approval.", true, "{\"from\": \"agent-1@mail.yourapp.com\", \"to\": \"user@example.com\", \"subject\": \"Hello\", \"html\": \"<p>Body</p>\"}"),
-                ConnectorActionDef("get_email", "Get Email", "Retrieve a specific email by ID.", false, "{\"inboxId\": \"...\", \"emailId\": \"...\"}"),
-                ConnectorActionDef("list_emails", "List Emails", "List emails in an inbox.", false, "{\"inboxId\": \"...\", \"limit\": 10}"),
-                ConnectorActionDef("delete_inbox", "Delete Inbox", "Delete an inbox. Requires approval.", true, "{\"inboxId\": \"...\"}"),
-            ),
-            setupHelp = "Sign up at agentmail.to, get your API key from the dashboard. Optionally verify your own domain for sending. The app will only make API calls you approve.",
-            docsUrl = "https://agentmail.to/docs",
-            risk = "high",
-            iconKey = "agentmail",
-        ),
-        ConnectorDef(
-            id = "gdrive",
-            name = "Google Drive",
-            category = "Storage",
-            description = "Backup and restore app data to Google Drive. Upload JSON snapshots and download for restore.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
-            fields = listOf(
-                ConnectorField("accessToken", "OAuth Access Token", "Paste a token with drive.file scope.", true, true, "ya29...."),
-                ConnectorField("folderId", "Folder ID (optional)", "Specific folder ID for backups. Leave empty for app root.", false, false, "1ABC...xyz"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("upload_backup", "Upload Backup", "Upload a JSON backup file to Drive.", true, "{\"fileName\": \"agoria-backup-2026-01-15.json\", \"content\": \"{...}\"}"),
-                ConnectorActionDef("download_backup", "Download Backup", "Download a backup file by name.", false, "{\"fileName\": \"agoria-backup-2026-01-15.json\"}"),
-                ConnectorActionDef("list_backups", "List Backups", "List backup files in the Drive folder.", false, "{\"limit\": 20}"),
-                ConnectorActionDef("delete_backup", "Delete Backup", "Delete a backup file by ID. Requires approval.", true, "{\"fileId\": \"...\"}"),
-            ),
-            setupHelp = "Create OAuth token with Google Drive API v3 and scope drive.file in OAuth Playground. Paste the access token below. For a dedicated folder, create a folder in Drive and paste its ID from the URL.",
-            docsUrl = "https://developers.google.com/drive/api",
-            risk = "high",
-            iconKey = "gdrive",
-        ),
     )
 
     val byId: Map<String, ConnectorDef> = all.associateBy { it.id }
 
     fun get(id: String): ConnectorDef? = byId[id]
 
-    fun defaultStatus(def: ConnectorDef): String =
-        if (def.fields.any { it.required } || def.auth != ConnectorAuth.NONE) "needs_setup" else "ready"
+    fun defaultStatus(def: ConnectorDef): String = when {
+        def.auth == ConnectorAuth.ACCOUNT -> "ready"
+        def.fields.any { it.required } || def.auth != ConnectorAuth.NONE -> "needs_setup"
+        else -> "ready"
+    }
 
     fun defaultScopes(def: ConnectorDef): String = when (def.id) {
-        "gmail" -> "gmail.readonly, gmail.send"
-        "calendar" -> "calendar.readonly, calendar.events"
+        "accounts" -> "device accounts only"
         "github" -> "repo, issues"
         "notion" -> "pages, databases"
         else -> def.fields.filter { it.required }.joinToString(", ") { it.key }
@@ -474,6 +369,7 @@ object ConnectorCatalog {
         return when (connectorId) {
             "wikipedia", "hn", "search", "weather", "currency" -> true
             "device" -> true
+            "accounts" -> action == "list"
             "files" -> action == "list" || action == "read"
             else -> false
         }
