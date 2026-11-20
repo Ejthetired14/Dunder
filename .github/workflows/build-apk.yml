@@ -39,7 +39,6 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           api-level: 35
-          ndk-version: r27c
           build-tools-version: 35.0.0
           cmake-version: 3.22.1
           emulator: false
@@ -64,6 +63,9 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Set Gradle JVM args
+        run: echo "GRADLE_OPTS=-Xmx4g -Dorg.gradle.jvmargs=-Xmx4g" >> $GITHUB_ENV
 
       - name: Extract version from build.gradle.kts
         id: version
