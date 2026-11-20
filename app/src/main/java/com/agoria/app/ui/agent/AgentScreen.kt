@@ -21,11 +21,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -53,6 +55,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -417,6 +421,22 @@ private fun ChatTab(
 }
 
 @Composable
+private fun CopyMessageButton(text: String) {
+    val clipboard = LocalClipboardManager.current
+    IconButton(
+        onClick = { clipboard.setText(AnnotatedString(text)) },
+        modifier = Modifier.size(28.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.ContentCopy,
+            contentDescription = "Copy message",
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(15.dp),
+        )
+    }
+}
+
+@Composable
 private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
     when (message.role) {
         "user" -> {
@@ -428,12 +448,14 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                     shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
                     color = MaterialTheme.colorScheme.primary,
                 ) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
         }
@@ -450,15 +472,23 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                     modifier = Modifier.weight(1f, fill = false),
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            text = Time.clock(message.createdAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = Time.clock(message.createdAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                            CopyMessageButton(message.content)
+                        }
                     }
                 }
             }

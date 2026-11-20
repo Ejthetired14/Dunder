@@ -9,7 +9,7 @@ enum class ConnectorAuth {
     BOT_TOKEN,
 
     /**
-     * Uses the accounts already signed in on this phone. The app never stores a token or a
+     * Uses the office's own browser session, never the accounts signed in to this phone. The app never stores a token or a
      * password for these connectors: it hands the action to the signed-in mail, calendar or
      * browser app, and the user confirms it there.
      */
@@ -164,18 +164,19 @@ object ConnectorCatalog {
         ),
         ConnectorDef(
             id = "accounts",
-            name = "Your Accounts",
+            name = "Office Browser",
             category = "Personal",
-            description = "Work inside the accounts already signed in on this phone. Draft mail in your own mail app, add an event to your own calendar, and open links in your signed-in browser. No API keys, no tokens, no separate sign-in.",
+            description = "Work inside a browser window that belongs to the office. Sign in there once with the account the office should use, then it can draft Gmail, add Google Calendar events and open any page in that same session. Your phone's own accounts are never touched.",
             auth = ConnectorAuth.ACCOUNT,
             fields = emptyList(),
             actions = listOf(
-                ConnectorActionDef("list", "Signed-in accounts", "List the accounts already set up on this device.", false, "{}"),
-                ConnectorActionDef("email", "Draft an email", "Open your mail app with a ready draft. You review it and tap send.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
-                ConnectorActionDef("event", "Add calendar event", "Open your calendar app with the event filled in. You confirm it.", true, "{\"title\": \"...\", \"start\": \"2026-11-20T10:00:00Z\", \"end\": \"2026-11-20T11:00:00Z\", \"location\": \"\"}"),
-                ConnectorActionDef("open", "Open a link", "Open a web link in the app or browser where you are already signed in.", true, "{\"url\": \"https://mail.google.com\"}"),
+                ConnectorActionDef("list", "Browser session", "Report whether the office browser is signed in to Google.", false, "{}"),
+                ConnectorActionDef("signin", "Sign in", "Open the office browser on a sign-in page so you can sign in once.", true, "{\"url\": \"https://accounts.google.com/ServiceLogin\"}"),
+                ConnectorActionDef("email", "Draft an email", "Open a Gmail draft in the office browser. You review it and press send.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
+                ConnectorActionDef("event", "Add calendar event", "Open a Google Calendar event form in the office browser. You confirm it.", true, "{\"title\": \"...\", \"start\": \"2026-11-20T10:00:00Z\", \"end\": \"2026-11-20T11:00:00Z\", \"location\": \"\"}"),
+                ConnectorActionDef("open", "Open a link", "Open a web link in the office browser.", true, "{\"url\": \"https://mail.google.com\"}"),
             ),
-            setupHelp = "Sign in once in Android Settings under Passwords & accounts. The office then works through your own mail, calendar and browser apps, so nothing here can expire and no password is ever handed to the app.",
+            setupHelp = "Open the office browser and sign in to the account you want the office to use. That session is stored for the app only, so the office works as that account without reading the accounts on your phone.",
             docsUrl = "",
             risk = "medium",
             iconKey = "accounts",
@@ -356,7 +357,7 @@ object ConnectorCatalog {
     }
 
     fun defaultScopes(def: ConnectorDef): String = when (def.id) {
-        "accounts" -> "device accounts only"
+        "accounts" -> "in-app browser session only"
         "github" -> "repo, issues"
         "notion" -> "pages, databases"
         else -> def.fields.filter { it.required }.joinToString(", ") { it.key }

@@ -1,11 +1,10 @@
 package com.agoria.app.core
 
-import android.accounts.AccountManager
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.webkit.CookieManager
 import android.provider.CalendarContract
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.Repository
@@ -541,48 +540,48 @@ class ConnectorExecutor(
 
     // ------------------------------------------------------------------ accounts
     //
-    // These actions never call an API. They open the app the user is already signed in to,
-    // with the work filled in, so the account, the credentials and the final tap stay with
-    // the user. That is why nothing here can expire or leak a token.
+    // Everything here happens inside the office browser, a WebView that keeps its own cookies.
+    // The user signs in there once. The app never reads the accounts on the phone and never sees a
+    // password, so the agents work as the provided account and not as the device owner.
 
     private fun accounts(action: String, args: JSONObject): ConnectorResult = when (action) {
-        "list" -> signedInAccounts()
+        "list" -> browserSession()
+        "signin" -> openInOfficeBrowser(
+            args.optString("url").trim().ifBlank { "https://accounts.google.com/ServiceLogin" },
+            "Opened the office browser. Sign in to the account the office should use; that session is kept for the office only.",
+        )
         "email" -> draftEmail(args)
         "event" -> addEvent(args)
         "open" -> openLink(args)
-        else -> ConnectorResult(false, "Unknown Your Accounts action '$action'")
+        else -> ConnectorResult(false, "Unknown Office Browser action '$action'. Use list, signin, email, event or open.")
     }
 
-    private fun signedInAccounts(): ConnectorResult {
-        val accounts = try {
-            AccountManager.get(context).accounts?.toList().orEmpty()
-        } catch (e: SecurityException) {
-            return ConnectorResult(
-                false,
-                "Android would not let the app read the accounts on this phone. Open Settings > Passwords & accounts to see or add them.",
-                e.message,
-            )
+    private fun browserSession(): ConnectorResult {
+        val cookies = try {
+            CookieManager.getInstance()
+        } catch (_: Exception) {
+            null
         }
-        if (accounts.isEmpty()) {
-            return ConnectorResult(
-                true,
-                "No accounts are signed in on this phone yet. Open Settings > Passwords & accounts, add your mail or calendar account, then try again.",
-            )
-        }
-        val sb = StringBuilder("Accounts signed in on this phone:\n")
-        accounts.sortedWith(compareBy({ accountTypeLabel(it.type) }, { it.name })).forEach { account ->
-            sb.append("- ").append(account.name).append(" (").append(accountTypeLabel(account.type)).append(")\n")
-        }
-        sb.append("\nThe email, event and open actions work inside those accounts.")
+        val google = cookies?.getCookie("https://accounts.google.com").orEmpty()
+        val gmail = cookies?.getCookie("https://mail.google.com").orEmpty()
+        val calendar = cookies?.getCookie("https://calendar.google.com").orEmpty()
+        val sb = StringBuilder("Office browser session:\n")
+        sb.append("- Google sign-in: ").append(if (google.isNotBlank()) "signed in" else "not signed in yet").append('\n')
+        sb.append("- Gmail: ").append(if (gmail.isNotBlank()) "reachable" else "will ask to sign in").append('\n')
+        sb.append("- Google Calendar: ").append(if (calendar.isNotBlank()) "reachable" else "will ask to sign in").append('\n')
+        sb.append("\nUse signin to open the office browser sign-in page.")
         return ConnectorResult(true, sb.toString().trim())
     }
 
-    private fun accountTypeLabel(type: String): String = when (type) {
-        "com.google" -> "Google"
-        "com.microsoft" -> "Microsoft"
-        "com.android.exchange" -> "Exchange"
-        "com.whatsapp" -> "WhatsApp"
-        else -> type.substringAfterLast('.').ifBlank { type }
+    private fun openInOfficeBrowser(url: String, okSummary: String): ConnectorResult = try {
+        context.startActivity(com.agoria.app.browser.AgentBrowserActivity.intent(context, url))
+        ConnectorResult(true, okSummary)
+    } catch (e: Exception) {
+        ConnectorResult(
+            false,
+            "Could not open the office browser. Play Store versions of Chrome and WebView are required. (${e.message ?: e.javaClass.simpleName})",
+            e.message,
+        )
     }
 
     private fun draftEmail(args: JSONObject): ConnectorResult {
@@ -592,14 +591,11 @@ class ConnectorExecutor(
         if (to.isBlank() && subject.isBlank() && body.isBlank()) {
             return ConnectorResult(false, "Give the draft a recipient, a subject or a body.")
         }
-        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(to)))
-            .putExtra(Intent.EXTRA_SUBJECT, subject)
-            .putExtra(Intent.EXTRA_TEXT, body)
-        if (to.isNotBlank()) intent.putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
-        return launch(
-            intent,
-            "Opened a draft in your mail app for ${to.ifBlank { "a recipient of your choice" }}. Review it and tap send.",
-            "No mail app accepted the draft. Install or enable your mail app, then try again.",
+        val url = "https://mail.google.com/mail/?view=cm&fs=1" +
+            "&to=" + enc(to) + "&su=" + enc(subject) + "&body=" + enc(body)
+        return openInOfficeBrowser(
+            url,
+            "Opened a Gmail draft in the office browser for ${to.ifBlank { "a recipient of your choice" }}. Review it and press send.",
         )
     }
 
@@ -609,17 +605,16 @@ class ConnectorExecutor(
             ?: return ConnectorResult(false, "Missing start time. Use ISO-8601, for example 2026-11-20T10:00:00Z.")
         val end = parseInstant(args.optString("end")) ?: (start + 60 * 60 * 1000L)
         if (end <= start) return ConnectorResult(false, "The event end must be after its start.")
-        val intent = Intent(Intent.ACTION_INSERT)
-            .setData(CalendarContract.Events.CONTENT_URI)
-            .putExtra(CalendarContract.Events.TITLE, title)
-            .putExtra(CalendarContract.Events.DESCRIPTION, args.optString("description"))
-            .putExtra(CalendarContract.Events.EVENT_LOCATION, args.optString("location"))
-            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
-            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
-        return launch(
-            intent,
-            "Opened '$title' in your calendar app. Confirm it there and it lands in your own account.",
-            "No calendar app accepted the event. Install or enable a calendar app, then try again.",
+        val location = args.optString("location")
+        val description = args.optString("description")
+        val url = "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+            "&text=" + enc(title) +
+            "&dates=" + calendarStamp(start) + "/" + calendarStamp(end) +
+            (if (location.isBlank()) "" else "&location=" + enc(location)) +
+            (if (description.isBlank()) "" else "&details=" + enc(description))
+        return openInOfficeBrowser(
+            url,
+            "Opened '$title' in Google Calendar inside the office browser. Confirm it there and it lands in the office account.",
         )
     }
 
@@ -628,12 +623,13 @@ class ConnectorExecutor(
         if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
             return ConnectorResult(false, "Only http and https links can be opened.")
         }
-        return launch(
-            Intent(Intent.ACTION_VIEW, Uri.parse(raw)),
-            "Opened $raw in the app or browser where you are signed in.",
-            "Nothing on this phone could open $raw. Try a browser.",
-        )
+        return openInOfficeBrowser(raw, "Opened $raw in the office browser.")
     }
+
+    private fun calendarStamp(epochMillis: Long): String =
+        Instant.ofEpochMilli(epochMillis)
+            .atZone(ZoneId.of("UTC"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"))
 
     private fun parseInstant(raw: String): Long? {
         val value = raw.trim()
@@ -653,18 +649,24 @@ class ConnectorExecutor(
         }
     }
 
-    private fun launch(intent: Intent, okSummary: String, missingSummary: String): ConnectorResult = try {
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        ConnectorResult(true, okSummary)
-    } catch (e: ActivityNotFoundException) {
-        ConnectorResult(false, missingSummary, e.message)
-    } catch (e: Exception) {
-        ConnectorResult(
-            false,
-            "Android did not hand this to another app. Run it again from the chat while the office is on screen. (${e.message ?: e.javaClass.simpleName})",
-            e.message,
-        )
-    }
+    // Agents name actions in their own words ("create", "issues", "get_repository"), so map the
+    // obvious synonyms onto the three calls this connector actually implements instead of failing
+    // with "unknown action" for a request that was perfectly clear.
+    private fun normalizeGithubAction(action: String): String =
+        when (action.trim().lowercase().replace('-', '_').replace(' ', '_')) {
+            "get_repo", "repo", "repository", "get_repository", "repo_info", "repository_info",
+            "get_repository_info", "info" -> "get_repo"
+            "list_issues", "issues", "get_issues", "list_issue", "open_issues", "list_open_issues" -> "list_issues"
+            "create_issue", "issue", "new_issue", "open_issue", "file_issue", "create" -> "create_issue"
+            else -> action.trim().lowercase()
+        }
+
+    private fun normalizeNotionAction(action: String): String =
+        when (action.trim().lowercase().replace('-', '_').replace(' ', '_')) {
+            "query", "list", "list_pages", "query_database", "database_query", "search" -> "query"
+            "create_page", "create", "new_page", "add_page", "page", "insert", "add" -> "create_page"
+            else -> action.trim().lowercase()
+        }
 
     // -------------------------------------------------------------------- github
 
@@ -677,7 +679,7 @@ class ConnectorExecutor(
             "Accept" to "application/vnd.github+json",
             "X-GitHub-Api-Version" to "2022-11-28",
         )
-        return when (action) {
+        return when (normalizeGithubAction(action)) {
             "get_repo" -> {
                 val response = http("GET", "https://api.github.com/repos/$repoName", headers)
                 if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
@@ -727,7 +729,10 @@ class ConnectorExecutor(
                     "Created issue #${root?.optInt("number")} in $repoName: $title\n${root?.optString("html_url") ?: ""}",
                 )
             }
-            else -> ConnectorResult(false, "Unknown GitHub action '$action'")
+            else -> ConnectorResult(
+                false,
+                "Unknown GitHub action '$action'. This connector understands get_repo, list_issues and create_issue.",
+            )
         }
     }
 
@@ -770,7 +775,7 @@ class ConnectorExecutor(
             "Authorization" to "Bearer $token",
             "Notion-Version" to "2022-06-28",
         )
-        return when (action) {
+        return when (normalizeNotionAction(action)) {
             "query" -> {
                 val payload = JSONObject().put("page_size", args.optInt("page_size", 5).coerceIn(1, 25))
                 val response = http(
@@ -828,7 +833,10 @@ class ConnectorExecutor(
                 if (!response.ok) return ConnectorResult(false, "Notion create failed: ${text(response.body, 400)}")
                 ConnectorResult(true, "Created Notion page '$title'.")
             }
-            else -> ConnectorResult(false, "Unknown Notion action '$action'")
+            else -> ConnectorResult(
+                false,
+                "Unknown Notion action '$action'. This connector understands query and create_page.",
+            )
         }
     }
 
@@ -1020,19 +1028,21 @@ class ConnectorExecutor(
             "Authorization" to "Bearer $apiToken",
             "Content-Type" to "application/json",
         )
+        // The Workers upload endpoint accepts a script body only as JavaScript or
+        // multipart/form-data; sending application/json is rejected with a 400 before the
+        // script is ever looked at.
+        val scriptHeaders = headers + ("Content-Type" to "application/javascript")
         val baseUrl = "https://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts"
         return when (action) {
             "deploy" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
                 val code = args.optString("code").ifBlank { return ConnectorResult(false, "Missing worker code") }
                 val url = "$baseUrl/$name"
-                val response = http("PUT", url, headers, code)
-                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val response = http("PUT", url, scriptHeaders, code)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${cfErrors(response.body)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errorsArray = root.optJSONArray("errors")
-                    val errors = errorsArray?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
-                    return ConnectorResult(false, "Cloudflare deploy failed: $errors")
+                    return ConnectorResult(false, "Cloudflare deploy failed: ${cfErrors(root)}")
                 }
                 val result = root.optJSONObject("result")
                 val deployedUrl = result?.optString("url") ?: "https://$name.$accountId.workers.dev"
@@ -1096,13 +1106,11 @@ class ConnectorExecutor(
                 val callbackUrl = args.optString("appCallbackUrl").ifBlank { return ConnectorResult(false, "Missing appCallbackUrl") }
                 val code = stripeWebhookWorkerCode(name, webhookSecret, callbackUrl)
                 val url = "$baseUrl/$name"
-                val response = http("PUT", url, headers, code)
-                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${text(response.body, 400)}")
+                val response = http("PUT", url, scriptHeaders, code)
+                if (!response.ok) return ConnectorResult(false, "Cloudflare error: ${cfErrors(response.body)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Cloudflare returned invalid JSON")
                 if (!root.optBoolean("success")) {
-                    val errorsArray = root.optJSONArray("errors")
-                    val errors = errorsArray?.let { array -> (0 until array.length()).map { array.getString(it) }.joinToString(", ") } ?: "Unknown error"
-                    return ConnectorResult(false, "Cloudflare deploy failed: $errors")
+                    return ConnectorResult(false, "Cloudflare deploy failed: ${cfErrors(root)}")
                 }
                 val result = root.optJSONObject("result")
                 val deployedUrl = result?.optString("url") ?: "https://$name.$accountId.workers.dev"
@@ -1113,6 +1121,28 @@ class ConnectorExecutor(
             }
             else -> ConnectorResult(false, "Unknown Cloudflare Workers action '$action'")
         }
+    }
+
+    private fun cfErrors(body: String?): String {
+        val root = json(body ?: "") ?: return text(body, 400).ifBlank { "no response from Cloudflare" }
+        return cfErrors(root)
+    }
+
+    private fun cfErrors(root: JSONObject): String {
+        val array = root.optJSONArray("errors")
+        if (array == null || array.length() == 0) {
+            return root.optString("message").ifBlank { "Unknown error" }
+        }
+        val messages = (0 until array.length()).mapNotNull { index ->
+            val item = array.opt(index)
+            val message = when (item) {
+                null -> ""
+                is JSONObject -> item.optString("message").ifBlank { item.optString("code") }
+                else -> item.toString()
+            }
+            message.ifBlank { null }
+        }
+        return messages.joinToString(", ").ifBlank { "Unknown error" }
     }
 
     private fun stripeWebhookWorkerCode(name: String, webhookSecret: String, callbackUrl: String): String {

@@ -1,7 +1,5 @@
 package com.agoria.app.ui.connectors
 
-import android.accounts.Account
-import android.accounts.AccountManager
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -366,10 +364,13 @@ private fun ConnectorSetupDialog(
     onClear: () -> Unit,
 ) {
     val context = LocalContext.current
-    // Accounts come from the phone itself. Nothing is fetched, stored or authenticated here.
-    val deviceAccounts = remember {
-        runCatching { AccountManager.get(context).accounts?.toList().orEmpty() }
-            .getOrElse { emptyList<Account>() }
+    // The office works in its own browser window with its own cookies. Nothing here reads the
+    // accounts that are signed in to the phone.
+    val browserSignedIn = remember {
+        runCatching {
+            val cookies = android.webkit.CookieManager.getInstance()
+            cookies.getCookie("https://accounts.google.com").orEmpty().isNotBlank()
+        }.getOrDefault(false)
     }
 
     if (def == null) {
@@ -388,7 +389,7 @@ private fun ConnectorSetupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (usesDeviceAccounts) "Your accounts" else "Set up ${def.name}") },
+        title = { Text(if (usesDeviceAccounts) "Office browser" else "Set up ${def.name}") },
         text = {
             Column(
                 modifier = Modifier
@@ -406,22 +407,16 @@ private fun ConnectorSetupDialog(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (usesDeviceAccounts) {
-                    AccountSignInBlock(
-                        accounts = deviceAccounts,
-                        onManage = {
-                            val opened = runCatching {
+                    BrowserSessionBlock(
+                        signedIn = browserSignedIn,
+                        onOpen = {
+                            runCatching {
                                 context.startActivity(
-                                    Intent(Settings.ACTION_SYNC_SETTINGS)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    com.agoria.app.browser.AgentBrowserActivity.intent(
+                                        context,
+                                        "https://accounts.google.com/ServiceLogin",
+                                    ),
                                 )
-                            }.isSuccess
-                            if (!opened) {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Settings.ACTION_SETTINGS)
-                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                    )
-                                }
                             }
                         },
                     )
@@ -486,7 +481,7 @@ private fun ConnectorSetupDialog(
 }
 
 @Composable
-private fun AccountSignInBlock(accounts: List<Account>, onManage: () -> Unit) {
+private fun BrowserSessionBlock(signedIn: Boolean, onOpen: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -496,38 +491,17 @@ private fun AccountSignInBlock(accounts: List<Account>, onManage: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "Signed in on this phone",
+                text = if (signedIn) "Office browser is signed in" else "Office browser is signed out",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            if (accounts.isEmpty()) {
-                Text(
-                    text = "No accounts here yet. Sign in to your mail and calendar apps once, then come back. The agent uses those apps and never sees a password.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            } else {
-                accounts.take(6).forEach { account ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.width(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = account.name,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-            TextButton(onClick = onManage, contentPadding = PaddingValues(0.dp)) {
-                Text("Sign in or manage accounts")
+            Text(
+                text = "The office browses in its own window. Sign in there once with the account the office should use and it keeps that session. Your phone's accounts are never read and the app never sees a password.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            TextButton(onClick = onOpen, contentPadding = PaddingValues(0.dp)) {
+                Text(if (signedIn) "Open office browser" else "Sign in to the office browser")
             }
         }
     }
