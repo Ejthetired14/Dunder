@@ -18,7 +18,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import kotlin.text.Regex
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
@@ -169,7 +168,7 @@ class ConnectorExecutor(
     }
 
     private fun cfg(config: JSONObject?, key: String): String? =
-        config?.optString(key)?.trim()?.replace(Regex("[\\p{Cc}\\p{Cf}]"), "")?.ifBlank { null }
+        config?.optString(key)?.trim()?.filter { it >= ' ' && it <= '~' }?.ifBlank { null }
 
     private fun enc(value: String): String =
         URLEncoder.encode(value, "UTF-8").replace("+", "%20")
