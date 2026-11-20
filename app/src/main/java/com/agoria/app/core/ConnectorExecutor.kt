@@ -1227,8 +1227,12 @@ class ConnectorExecutor(
             }
             "list_inboxes" -> {
                 val response = http("GET", "$baseUrl/inboxes", headers)
-                if (!response.ok) return ConnectorResult(false, "AgentMail list failed: ${text(response.body, 500)}")
-                val array = JSONArray(response.body)
+                if (!response.ok) return ConnectorResult(false, "AgentMail list failed (${response.code}): ${text(response.body, 500)}")
+                val body = response.body.trim()
+                val array = if (body.startsWith("[")) JSONArray(body) else {
+                    val obj = JSONObject(body)
+                    if (obj.has("data")) obj.getJSONArray("data") else JSONArray(body)
+                }
                 if (array.length() == 0) return ConnectorResult(true, "No inboxes found.")
                 val sb = StringBuilder("AgentMail inboxes:\n")
                 for (i in 0 until array.length()) {
@@ -1251,8 +1255,12 @@ class ConnectorExecutor(
                 val inboxId = args.optString("inboxId").ifBlank { return ConnectorResult(false, "Missing inboxId") }
                 val limit = args.optInt("limit", 10).coerceIn(1, 50)
                 val response = http("GET", "$baseUrl/inboxes/$inboxId/messages?limit=$limit", headers)
-                if (!response.ok) return ConnectorResult(false, "AgentMail list messages failed: ${text(response.body, 500)}")
-                val array = JSONArray(response.body)
+                if (!response.ok) return ConnectorResult(false, "AgentMail list messages failed (${response.code}): ${text(response.body, 500)}")
+                val body = response.body.trim()
+                val array = if (body.startsWith("[")) JSONArray(body) else {
+                    val obj = JSONObject(body)
+                    if (obj.has("data")) obj.getJSONArray("data") else JSONArray(body)
+                }
                 if (array.length() == 0) return ConnectorResult(true, "No messages found.")
                 val sb = StringBuilder("Messages in $inboxId:\n")
                 for (i in 0 until array.length()) {
