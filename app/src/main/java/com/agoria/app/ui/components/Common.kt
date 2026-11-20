@@ -25,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
@@ -339,14 +339,10 @@ fun connectorIcon(iconKey: String): ImageVector {
         "device" -> Icons.Default.PhoneAndroid
         "files" -> Icons.Default.Folder
         "http" -> Icons.Default.Hub
-        "gmail" -> Icons.Default.Email
-        "calendar" -> Icons.Default.CalendarMonth
+        "accounts" -> Icons.Default.AccountCircle
         "github" -> Icons.Default.Code
         "slack", "discord", "telegram" -> Icons.Default.Chat
         "notion" -> Icons.Default.Description
-        "paypal", "polar" -> Icons.Default.AttachMoney
-        "agentmail" -> Icons.Default.Email
-        "gdrive" -> Icons.Default.Folder
         else -> Icons.Default.Hub
     }
 }
