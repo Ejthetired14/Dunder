@@ -73,6 +73,9 @@ jobs:
       - name: List Gradle tasks
         run: ./gradlew tasks --all 2>&1 | grep -E "(ksp|KSP|room|Room|compile|assemble)" | head -50
 
+      - name: Test compile without KSP
+        run: ./gradlew compileDebugKotlin --no-daemon -x kspDebugKotlin --stacktrace 2>&1 | tee compile-debug.log; echo "COMPILE EXIT: ${PIPESTATUS[0]}"; tail -100 compile-debug.log
+
       - name: Test KSP task
         run: ./gradlew kspDebugKotlin --no-daemon --stacktrace 2>&1 | tee ksp-debug.log; echo "KSP EXIT: ${PIPESTATUS[0]}"; tail -100 ksp-debug.log
 
