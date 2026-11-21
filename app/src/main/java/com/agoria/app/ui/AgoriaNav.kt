@@ -185,6 +185,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
         }
     }
 }
+}
 
 @Composable
 private fun AgoriaBottomBar(
