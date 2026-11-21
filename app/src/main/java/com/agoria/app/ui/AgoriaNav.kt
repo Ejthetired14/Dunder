@@ -142,7 +142,10 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                             }
                         }
                     },
-                    modifier = touchDetector, // Apply touch detector to bottom bar too
+                    // The touch detector lives on the content Box. Passing it here gave the
+                    // NavigationBar a fillMaxSize modifier, which stretched the bar over the
+                    // whole screen and hid every screen behind it.
+                    modifier = Modifier,
                 )
             }
         },
