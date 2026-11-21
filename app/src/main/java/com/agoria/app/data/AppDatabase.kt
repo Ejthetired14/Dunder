@@ -1,11 +1,13 @@
 package com.agoria.app.data
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import java.io.File
 
 @Database(
     entities = [
@@ -47,7 +49,27 @@ abstract class AppDatabase : RoomDatabase() {
         const val NAME = "agoria.db"
         const val VERSION = 4
 
-        fun create(context: Context): AppDatabase =
+        fun create(context: Context): AppDatabase {
+            val database = build(context)
+            return try {
+                // Open eagerly: a migration that cannot run surfaces here instead of crashing
+                // whichever screen happens to touch the database first.
+                database.openHelper.writableDatabase
+                database
+            } catch (t: Throwable) {
+                Log.e(TAG, "Database upgrade failed, keeping the old file and starting fresh", t)
+                runCatching { database.close() }
+                val file = context.getDatabasePath(NAME)
+                if (file.exists()) {
+                    file.renameTo(File(file.parentFile, "$NAME.failed-${System.currentTimeMillis()}"))
+                }
+                build(context).also { it.openHelper.writableDatabase }
+            }
+        }
+
+        private const val TAG = "AppDatabase"
+
+        private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
@@ -175,6 +197,48 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
         db.addColumn("tasks", "projectId", "TEXT NOT NULL DEFAULT ''")
         db.addColumn("builds", "projectId", "TEXT NOT NULL DEFAULT ''")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_projectId` ON `tasks` (`projectId`)")
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_builds_projectId` ON `builds` (`projectId`)")
+
+        // Version 4 drops the builds->agents foreign key and the agentId/createdAt indices, and
+        // drops both the foreign key and the indices on memories. A database written before that
+        // still has them, and Room rejects the upgrade because the tables do not match the
+        // entities, so both tables are rebuilt into their version 4 shape here.
+        db.rebuildBuilds()
+        db.rebuildMemories()
     }
+}
+
+private fun SupportSQLiteDatabase.rebuildBuilds() {
+    if (!hasTable("builds")) return
+    val project = if (columns("builds").contains("projectId")) "`projectId`" else "''"
+    execSQL(
+        "CREATE TABLE IF NOT EXISTS `builds_v4` (`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, " +
+            "`name` TEXT NOT NULL, `description` TEXT NOT NULL, `fileCount` INTEGER NOT NULL, " +
+            "`zipPath` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+            "`completedAt` INTEGER, `projectId` TEXT NOT NULL, PRIMARY KEY(`id`))",
+    )
+    execSQL(
+        "INSERT OR REPLACE INTO `builds_v4` (`id`, `agentId`, `name`, `description`, " +
+            "`fileCount`, `zipPath`, `status`, `createdAt`, `completedAt`, `projectId`) " +
+            "SELECT `id`, `agentId`, `name`, `description`, `fileCount`, `zipPath`, `status`, " +
+            "`createdAt`, `completedAt`, $project FROM `builds`",
+    )
+    execSQL("DROP TABLE `builds`")
+    execSQL("ALTER TABLE `builds_v4` RENAME TO `builds`")
+    execSQL("CREATE INDEX IF NOT EXISTS `index_builds_projectId` ON `builds` (`projectId`)")
+}
+
+private fun SupportSQLiteDatabase.rebuildMemories() {
+    if (!hasTable("memories")) return
+    execSQL(
+        "CREATE TABLE IF NOT EXISTS `memories_v4` (`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, " +
+            "`kind` TEXT NOT NULL, `content` TEXT NOT NULL, `importance` INTEGER NOT NULL, " +
+            "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+    )
+    execSQL(
+        "INSERT OR REPLACE INTO `memories_v4` (`id`, `agentId`, `kind`, `content`, " +
+            "`importance`, `createdAt`) SELECT `id`, `agentId`, `kind`, `content`, `importance`, " +
+            "`createdAt` FROM `memories`",
+    )
+    execSQL("DROP TABLE `memories`")
+    execSQL("ALTER TABLE `memories_v4` RENAME TO `memories`")
 }
