@@ -20,7 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavGraph.Companion.findStartDestination
+
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -64,10 +64,11 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     currentRoute = currentRoute,
                     pendingCount = pendingCount,
                     onNavigate = { route ->
+                        // Only pop if we're navigating to a different tab; preserve each tab's back stack
+                        val currentDestination = navController.currentBackStackEntryAsState().value?.destination?.route
+                        if (currentDestination == route) return@onNavigate
                         navController.navigate(route) {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
-                            }
+                            popUpTo(route) { inclusive = true; saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
