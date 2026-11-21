@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,7 +69,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val isTopDestination = topDestinations.any { it.route == currentRoute }
 
     // Auto-hide bottom bar state
-    val bottomBarVisible by remember { mutableStateOf(true) }
+    val bottomBarVisible = remember { mutableStateOf(true) }
     var hideJob: Job? = null
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
@@ -81,12 +80,12 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
         .pointerInput(Unit) {
             detectTapGestures(
                 onTap = { _ ->
-                    if (!bottomBarVisible) return@detectTapGestures
+                    if (!bottomBarVisible.value) return@detectTapGestures
                     // Reset hide timer
                     hideJob?.cancel()
                     hideJob = coroutineScope.launch {
                         delay(autoHideDelay)
-                        bottomBarVisible = false
+                        bottomBarVisible.value = false
                     }
                 },
                 onDoubleTap = { _ -> },
@@ -99,13 +98,13 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     LaunchedEffect(Unit) {
         hideJob = coroutineScope.launch {
             delay(autoHideDelay)
-            bottomBarVisible = false
+            bottomBarVisible.value = false
         }
     }
 
     Scaffold(
         bottomBar = {
-            if (isTopDestination && bottomBarVisible) {
+            if (isTopDestination && bottomBarVisible.value) {
                 AgoriaBottomBar(
                     currentRoute = currentRoute,
                     pendingCount = pendingCount,
