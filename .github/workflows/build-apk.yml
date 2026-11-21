@@ -94,46 +94,61 @@ jobs:
       - name: Build Debug APK
         run: |
           set -e
+          ok=0
           for i in 1 2 3; do
             echo "=== Build Debug APK attempt $i ==="
             if ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1; then
               echo "Build Debug APK succeeded on attempt $i"
+              ok=1
               break
             fi
-            echo "Attempt $i failed, retrying in 60s..."
-            sleep 60
+            echo "Attempt $i failed"
+            [ "$i" -lt 3 ] && sleep 30
           done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::assembleDebug failed on all 3 attempts"
+            exit 1
+          fi
 
       - name: Build Release APK
         run: |
           set -e
+          ok=0
           for i in 1 2 3; do
             echo "=== Build Release APK attempt $i ==="
             if ./gradlew assembleRelease --no-daemon -x lint --stacktrace 2>&1; then
               echo "Build Release APK succeeded on attempt $i"
+              ok=1
               break
             fi
-            echo "Attempt $i failed, retrying in 60s..."
-            sleep 60
+            echo "Attempt $i failed"
+            [ "$i" -lt 3 ] && sleep 30
           done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::assembleRelease failed on all 3 attempts"
+            exit 1
+          fi
 
       - name: Find APKs
+        id: find-apks
         run: |
           echo "=== Finding APKs ==="
           echo "All APKs found:"
           find . -name "*.apk" 2>/dev/null | sort
-          
+
           DEBUG_APK=$(find . -name "*debug*.apk" -not -path "*/build/*/intermediates/*" | head -1)
           RELEASE_APK_UNSIGNED=$(find . -name "*release*.apk" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
-          
-          # Fallback: try broader search if release not found
+
           if [ -z "$RELEASE_APK_UNSIGNED" ]; then
             RELEASE_APK_UNSIGNED=$(find . -name "*.apk" -not -name "*debug*" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
           fi
-          
+
+          [ -n "$DEBUG_APK" ] || { echo "::error::No debug APK found after assembleDebug"; find . -name "*.apk"; exit 1; }
+          [ -n "$RELEASE_APK_UNSIGNED" ] || { echo "::error::No unsigned release APK found after assembleRelease"; find . -name "*.apk"; exit 1; }
+
           echo "DEBUG_APK=$DEBUG_APK" >> $GITHUB_OUTPUT
           echo "RELEASE_APK_UNSIGNED=$RELEASE_APK_UNSIGNED" >> $GITHUB_OUTPUT
-          
+
           echo "Found debug APK: $DEBUG_APK"
           echo "Found release unsigned APK: $RELEASE_APK_UNSIGNED"
 
@@ -142,18 +157,12 @@ jobs:
         id: sign-apk
         run: |
           set -euo pipefail
-          
+
           APKSIGNER=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
           [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
-          
-          # Debug: list ALL APKs in the workspace
-          echo "=== ALL APKs in workspace ==="
-          find . -type f -name "*.apk" 2>/dev/null | sort
-          
-          # Try multiple strategies to find the unsigned release APK
+
           UNSIGNED="${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}"
-          
-          # If the output is empty or file doesn't exist, search broadly
+
           if [ -z "$UNSIGNED" ] || [ ! -f "$UNSIGNED" ]; then
             echo "Primary APK path not found, searching broadly..."
             UNSIGNED=$(find . -type f -name "*.apk" \
@@ -163,20 +172,11 @@ jobs:
               -not -path "*/build/*/generated/*" \
               | head -1)
           fi
-          
-          # Final fallback: any APK that's not debug or signed
-          if [ -z "$UNSIGNED" ] || [ ! -f "$UNSIGNED" ]; then
-            echo "Still not found, trying any non-debug non-signed APK..."
-            UNSIGNED=$(find . -type f -name "*.apk" \
-              -not -name "*debug*" \
-              -not -name "*signed*" \
-              | head -1)
-          fi
-          
-          [ -z "$UNSIGNED" ] && { echo "No release APK found at all"; find . -name "*.apk" 2>/dev/null; exit 1; }
-          [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing: $UNSIGNED"; find . -name "*.apk" 2>/dev/null; exit 1; }
+
+          [ -z "$UNSIGNED" ] && { echo "::error::No release APK found at all"; find . -name "*.apk" 2>/dev/null; exit 1; }
+          [ ! -f "$UNSIGNED" ] && { echo "::error::Unsigned APK missing: $UNSIGNED"; find . -name "*.apk" 2>/dev/null; exit 1; }
           echo "Found unsigned APK: $UNSIGNED"
-          
+
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
             PASS="${{ secrets.KEYSTORE_PASSWORD }}"
@@ -189,7 +189,7 @@ jobs:
             KPASS="$PASS"
             keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias "$ALIAS" -storepass "$PASS" -keypass "$KPASS" -dname "CN=Dunder,O=Dunder,L=Local,ST=State,C=US"
           fi
-          
+
           SIGNED="app/build/outputs/apk/release/app-release-signed.apk"
           mkdir -p "$(dirname "$SIGNED")"
           "$APKSIGNER" sign --ks release-key.jks --ks-pass pass:"$PASS" --ks-key-alias "$ALIAS" --key-pass pass:"$KPASS" --out "$SIGNED" "$UNSIGNED"
@@ -202,17 +202,17 @@ jobs:
         run: |
           DEBUG_APK="${{ steps.find-apks.outputs.DEBUG_APK }}"
           SIGNED_APK="${{ steps.sign-apk.outputs.SIGNED_APK }}"
-          
+
           [ ! -f "$DEBUG_APK" ] && { echo "Debug APK not found: $DEBUG_APK"; exit 1; }
           [ ! -f "$SIGNED_APK" ] && { echo "Signed APK not found: $SIGNED_APK"; exit 1; }
-          
+
           gh release delete ${{ github.ref_name }} --yes 2>/dev/null || true
           gh release create ${{ github.ref_name }} \
             "$DEBUG_APK" \
             "$SIGNED_APK" \
             --title "Dunder ${{ github.ref_name }}" \
             --notes "Debug and release APKs for ${{ github.ref_name }}"
-          
+
           URL=$(gh release view ${{ github.ref_name }} --json url --jq .url)
           BODY=$(gh release view ${{ github.ref_name }} --json body --jq .body | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
           echo "html_url=$URL" >> $GITHUB_OUTPUT
