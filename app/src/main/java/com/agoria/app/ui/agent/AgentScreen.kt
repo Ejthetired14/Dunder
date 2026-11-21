@@ -74,9 +74,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.KeyboardActions
 import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -441,8 +441,8 @@ private fun ChatTab(
                         .weight(1f)
                         .fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onSend() }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    onDone = { onSend() },
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onSend, enabled = input.isNotBlank()) {
@@ -816,15 +816,11 @@ private fun TaskCard(task: TaskEntity) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 StatusPill(task.status)
-                if (task.result.isNotBlank()) {
-                    Text(
-                        text = "Result: ${task.result.take(50)}...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = "${task.progress}% complete",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
