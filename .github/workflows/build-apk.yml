@@ -118,10 +118,13 @@ jobs:
             --stacktrace \
             --console=plain > "$RUNNER_TEMP/compile.log" 2>&1
           STATUS=$?
-          cat "$RUNNER_TEMP/compile.log"
+          # Show full log on failure
           if [ "$STATUS" -ne 0 ]; then
+            cat "$RUNNER_TEMP/compile.log"
             exit "$STATUS"
           fi
+          # On success, just show summary
+          tail -20 "$RUNNER_TEMP/compile.log"
 
       - name: Build debug and release APKs
         run: |
