@@ -35,7 +35,10 @@ fun AgoriaRoot() {
                 OnboardingScreen(viewModel = viewModel)
             }
             else -> {
-                AgoriaNav(viewModel = viewModel)
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    AgoriaNav(viewModel = viewModel)
+                    com.agoria.app.ui.browser.BrowserOverlay()
+                }
             }
         }
     }

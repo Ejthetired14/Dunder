@@ -25,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
@@ -313,7 +313,7 @@ fun EmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = Icons.Filled.AutoAwesome,
+            imageVector = Icons.Default.AutoAwesome,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
@@ -331,23 +331,19 @@ fun EmptyState(
 
 fun connectorIcon(iconKey: String): ImageVector {
     return when (iconKey) {
-        "wikipedia" -> Icons.Filled.Language
-        "hn" -> Icons.Filled.Newspaper
-        "search" -> Icons.Filled.Search
-        "weather" -> Icons.Filled.Cloud
-        "currency" -> Icons.Filled.AttachMoney
-        "device" -> Icons.Filled.PhoneAndroid
-        "files" -> Icons.Filled.Folder
-        "http" -> Icons.Filled.Hub
-        "gmail" -> Icons.Filled.Email
-        "calendar" -> Icons.Filled.CalendarMonth
-        "github" -> Icons.Filled.Code
-        "slack", "discord", "telegram" -> Icons.Filled.Chat
-        "notion" -> Icons.Filled.Description
-        "paypal", "polar" -> Icons.Filled.AttachMoney
-        "agentmail" -> Icons.Filled.Email
-        "gdrive" -> Icons.Filled.Folder
-        else -> Icons.Filled.Hub
+        "wikipedia" -> Icons.Default.Language
+        "hn" -> Icons.Default.Newspaper
+        "search" -> Icons.Default.Search
+        "weather" -> Icons.Default.Cloud
+        "currency" -> Icons.Default.AttachMoney
+        "device" -> Icons.Default.PhoneAndroid
+        "files" -> Icons.Default.Folder
+        "http" -> Icons.Default.Hub
+        "accounts" -> Icons.Default.AccountCircle
+        "github" -> Icons.Default.Code
+        "slack", "discord", "telegram" -> Icons.Default.Chat
+        "notion" -> Icons.Default.Description
+        else -> Icons.Default.Hub
     }
 }
 
@@ -359,7 +355,7 @@ fun OfficeThumbnail(modifier: Modifier = Modifier) {
             .background(colors.primaryContainer)
     ) {
         Icon(
-            imageVector = Icons.Filled.Hub,
+            imageVector = Icons.Default.Hub,
             contentDescription = null,
             tint = colors.onPrimaryContainer.copy(alpha = 0.3f),
             modifier = Modifier

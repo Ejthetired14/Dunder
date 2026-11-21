@@ -108,7 +108,7 @@ fun ApprovalsScreen(
                 },
                 actions = {
                     IconButton(onClick = { showAutoApproveDialog = true }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Auto-approve settings")
+                        Icon(Icons.Default.Settings, contentDescription = "Auto-approve settings")
                     }
                 },
             )
@@ -183,7 +183,16 @@ fun ApprovalsScreen(
             types = autoApproveTypes,
             onEnabledChange = { enabled ->
                 viewModel.updateSettings { s ->
-                    s.copy(autoApproveEnabled = enabled)
+                    val newTypes = if (enabled && s.autoApproveTypes.isBlank()) {
+                        "connector_action" // Default to connector actions when first enabling
+                    } else {
+                        s.autoApproveTypes
+                    }
+                    s.copy(autoApproveEnabled = enabled, autoApproveTypes = newTypes)
+                }
+                // Update local state to reflect the default
+                if (enabled && autoApproveTypes.isBlank()) {
+                    autoApproveTypes = "connector_action"
                 }
             },
             onTypesChange = { types ->
@@ -534,13 +543,16 @@ private fun AutoApproveDialog(
 ) {
     val allTypes = listOf(
         "build_project" to "Build projects",
-        "connector_action" to "Connector actions",
+        "connector_action" to "Connector actions (GitHub, Notion, etc.)",
         "send_email" to "Send emails",
         "publish" to "Publish content",
         "delete" to "Delete resources",
         "spend_api" to "Spend API credits",
         "connector_install" to "Install connectors",
     )
+
+    // Default to connector_action if enabled but no types selected
+    val effectiveTypes = if (enabled && types.isBlank()) "connector_action" else types
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -558,20 +570,20 @@ private fun AutoApproveDialog(
                     Switch(checked = enabled, onCheckedChange = onEnabledChange)
                 }
                 Text(
-                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution.",
+                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution. Connector actions must be checked for GitHub/Notion auto-approve.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Auto-approve these types:", style = MaterialTheme.typography.labelLarge)
                 allTypes.forEach { (typeId, typeLabel) ->
-                    val isChecked = types.split(",").map { it.trim() }.contains(typeId)
+                    val isChecked = effectiveTypes.split(",").map { it.trim() }.contains(typeId)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = isChecked, onCheckedChange = { checked ->
-                            val current = types.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                            val current = effectiveTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
                             if (checked) current.add(typeId) else current.remove(typeId)
                             onTypesChange(current.joinToString(","))
                         })

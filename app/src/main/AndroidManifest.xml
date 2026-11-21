@@ -21,6 +21,22 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Dunder.Starting">
 
+        <!-- The office's own browser window. It keeps its own cookies, so the agents work as the
+             provided account and never as the accounts signed in to this phone. -->
+        <activity
+            android:name=".browser.AgentBrowserActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:label="Office browser"
+            android:theme="@style/Theme.Dunder.Starting" />
+
+        <!-- Reads a finished build ZIP inside the app instead of handing the file to another app. -->
+        <activity
+            android:name=".viewer.BuildViewerActivity"
+            android:exported="false"
+            android:label="Build"
+            android:theme="@style/Theme.Dunder.Starting" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
