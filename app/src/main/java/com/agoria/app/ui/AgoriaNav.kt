@@ -132,6 +132,11 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     onNavigate = { route ->
                         if (currentRoute != route) {
                             navController.navigate(route) {
+                                // Pop back to start destination (home) to avoid stacking duplicate tabs
+                                // saveState = true preserves each tab's ViewModel and scroll position
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
                                 launchSingleTop = true
                                 restoreState = true
                             }
