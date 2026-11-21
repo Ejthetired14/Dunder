@@ -116,7 +116,7 @@ jobs:
           ./gradlew :app:compileDebugKotlin \
             --no-daemon \
             --stacktrace \
-            --console=plain > "$RUNNER_TEMP/compile.log" 2>&1
+            --console=plain 2>&1 | tee "$RUNNER_TEMP/compile.log"
           STATUS=$?
           # Always show error lines
           grep -n "error:" "$RUNNER_TEMP/compile.log" | head -50 || true
@@ -124,7 +124,7 @@ jobs:
             echo "=== FULL COMPILE LOG (tail 200) ==="
             tail -200 "$RUNNER_TEMP/compile.log"
             # Also save for artifact
-            cp "$RUNNER_TEMP/compile.log" "$GITHUB_WORKSPACE/compile-errors.log"
+            cp "$RUNNER_TEMP/compile.log" "$RUNNER_TEMP/compile-errors.log"
             exit "$STATUS"
           fi
           # On success, just show summary
@@ -135,7 +135,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: compile-errors
-          path: ${{ github.workspace }}/compile-errors.log
+          path: ${{ runner.temp }}/compile-errors.log
           if-no-files-found: ignore
           retention-days: 1
 
