@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -15,13 +17,14 @@ import androidx.room.RoomDatabase
         ConnectorEntity::class,
         ConnectorRequestEntity::class,
         BuildEntity::class,
+        ProjectEntity::class,
         ProviderEntity::class,
         SettingsEntity::class,
         MemoryEntity::class,
         ConnectorLogEntity::class,
         RevenueEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun connectorDao(): ConnectorDao
     abstract fun connectorRequestDao(): ConnectorRequestDao
     abstract fun buildDao(): BuildDao
+    abstract fun projectDao(): ProjectDao
     abstract fun providerDao(): ProviderDao
     abstract fun settingsDao(): SettingsDao
     abstract fun memoryDao(): MemoryDao
@@ -41,10 +45,136 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "agoria.db"
+        const val VERSION = 4
 
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
+                // older APK over a newer one) falls back, because Room refuses to open a database
+                // written by a newer schema.
+                .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
+    }
+}
+
+private fun SupportSQLiteDatabase.hasTable(table: String): Boolean =
+    query("SELECT name FROM sqlite_master WHERE type='table' AND name=?", arrayOf(table)).use {
+        it.moveToFirst()
+    }
+
+private fun SupportSQLiteDatabase.columns(table: String): Set<String> {
+    val names = mutableSetOf<String>()
+    query("PRAGMA table_info(`$table`)").use { cursor ->
+        val nameIndex = cursor.getColumnIndex("name")
+        while (cursor.moveToNext()) {
+            if (nameIndex >= 0) names += cursor.getString(nameIndex)
+        }
+    }
+    return names
+}
+
+private fun SupportSQLiteDatabase.addColumn(table: String, column: String, definition: String) {
+    if (!hasTable(table)) return
+    if (columns(table).contains(column)) return
+    execSQL("ALTER TABLE `$table` ADD COLUMN `$column` $definition")
+}
+
+/**
+ * 1 -> 2 (the monetization release). Its schema changed in place: approvals lost two columns,
+ * builds was rebuilt, and a few indices moved. Rebuilding the two tables keeps existing rows.
+ */
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        if (db.hasTable("approvals") && db.columns("approvals").contains("decisionNote")) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `approvals_new` (" +
+                    "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `type` TEXT NOT NULL, " +
+                    "`title` TEXT NOT NULL, `summary` TEXT NOT NULL, `details` TEXT NOT NULL, " +
+                    "`risk` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "`decidedAt` INTEGER, `result` TEXT, PRIMARY KEY(`id`), " +
+                    "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) " +
+                    "ON UPDATE NO ACTION ON DELETE CASCADE)",
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `approvals_new` " +
+                    "(`id`, `agentId`, `type`, `title`, `summary`, `details`, `risk`, `status`, " +
+                    "`createdAt`, `decidedAt`, `result`) " +
+                    "SELECT `id`, `agentId`, `type`, `title`, `summary`, `details`, `risk`, " +
+                    "`status`, `createdAt`, `decidedAt`, `result` FROM `approvals`",
+            )
+            db.execSQL("DROP TABLE `approvals`")
+            db.execSQL("ALTER TABLE `approvals_new` RENAME TO `approvals`")
+        }
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_approvals_agentId` ON `approvals` (`agentId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_approvals_status` ON `approvals` (`status`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_approvals_createdAt` ON `approvals` (`createdAt`)")
+
+        if (db.hasTable("builds") && db.columns("builds").contains("approvalId")) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `builds_new` (" +
+                    "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                    "`description` TEXT NOT NULL, `fileCount` INTEGER NOT NULL, " +
+                    "`zipPath` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "`completedAt` INTEGER, PRIMARY KEY(`id`))",
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `builds_new` " +
+                    "(`id`, `agentId`, `name`, `description`, `fileCount`, `zipPath`, `status`, " +
+                    "`createdAt`, `completedAt`) " +
+                    "SELECT `id`, `agentId`, `name`, `description`, `fileCount`, `zipPath`, " +
+                    "'ready', `createdAt`, `createdAt` FROM `builds`",
+            )
+            db.execSQL("DROP TABLE `builds`")
+            db.execSQL("ALTER TABLE `builds_new` RENAME TO `builds`")
+        }
+
+        db.execSQL("DROP INDEX IF EXISTS `index_connectors_status`")
+        db.execSQL("DROP INDEX IF EXISTS `index_providers_priority`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_createdAt` ON `tasks` (`createdAt`)")
+
+        db.addColumn("settings", "agentProfitSharePercent", "INTEGER NOT NULL DEFAULT 50")
+        db.addColumn("settings", "userProfitSharePercent", "INTEGER NOT NULL DEFAULT 50")
+        db.addColumn("settings", "infrastructureFundCents", "INTEGER NOT NULL DEFAULT 0")
+        db.addColumn("settings", "stripeAccountId", "TEXT")
+        db.addColumn("settings", "stripePublishableKey", "TEXT")
+        db.addColumn("settings", "autoApproveEnabled", "INTEGER NOT NULL DEFAULT 0")
+        db.addColumn("settings", "autoApproveTypes", "TEXT NOT NULL DEFAULT ''")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `revenue` (" +
+                "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `source` TEXT NOT NULL, " +
+                "`amountCents` INTEGER NOT NULL, `currency` TEXT NOT NULL, " +
+                "`metadata` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_agentId` ON `revenue` (`agentId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_createdAt` ON `revenue` (`createdAt`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_source` ON `revenue` (`source`)")
+    }
+}
+
+/** 2 -> 3: per-agent connector grants and an optional per-agent API token. */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.addColumn("agents", "allowedConnectors", "TEXT NOT NULL DEFAULT ''")
+        db.addColumn("agents", "apiToken", "TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+/** 3 -> 4: one shared project folder for the office. */
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `projects` (" +
+                "`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, " +
+                "`leadAgentId` TEXT NOT NULL, `status` TEXT NOT NULL, `folder` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+        db.addColumn("tasks", "projectId", "TEXT NOT NULL DEFAULT ''")
+        db.addColumn("builds", "projectId", "TEXT NOT NULL DEFAULT ''")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_projectId` ON `tasks` (`projectId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_builds_projectId` ON `builds` (`projectId`)")
     }
 }

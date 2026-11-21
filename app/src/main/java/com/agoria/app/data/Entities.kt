@@ -79,7 +79,7 @@ data class MessageEntity(
             onDelete = ForeignKey.CASCADE,
         )
     ],
-    indices = [Index("agentId"), Index("status"), Index("createdAt")],
+    indices = [Index("agentId"), Index("status"), Index("createdAt"), Index("projectId")],
 )
 data class TaskEntity(
     @PrimaryKey val id: String,
@@ -90,6 +90,8 @@ data class TaskEntity(
     val progress: Int,
     val createdAt: Long,
     val updatedAt: Long,
+    /** Project this task belongs to. Empty means the office default project. */
+    val projectId: String = "",
 )
 
 @Entity(
@@ -154,7 +156,10 @@ data class ConnectorRequestEntity(
     val decidedAt: Long?,
 )
 
-@Entity(tableName = "builds")
+@Entity(
+    tableName = "builds",
+    indices = [Index("projectId")],
+)
 data class BuildEntity(
     @PrimaryKey val id: String,
     val agentId: String,
@@ -165,6 +170,26 @@ data class BuildEntity(
     val status: String,
     val createdAt: Long,
     val completedAt: Long?,
+    /** Project this build belongs to. Empty means the office default project. */
+    val projectId: String = "",
+)
+
+/**
+ * One shared project folder for the whole office. Every build, task and file of the project lives
+ * here, and only its lead agent may start a build, so the progress is in one place instead of
+ * scattered across each agent's tab.
+ */
+@Entity(tableName = "projects")
+data class ProjectEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val leadAgentId: String,
+    val status: String,
+    /** Folder name under the app's project workspace. */
+    val folder: String,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 @Entity(tableName = "providers")

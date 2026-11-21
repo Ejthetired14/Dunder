@@ -63,6 +63,8 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
     var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var error by remember { mutableStateOf("") }
     var showLogs by remember { mutableStateOf(false) }
+    // One short list per category instead of every connector on one endless page.
+    var expanded by remember { mutableStateOf(setOf("Needs attention")) }
 
     LaunchedEffect(setupConnectorId) {
         val id = setupConnectorId
@@ -113,13 +115,34 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                 }
             }
 
-            connectors.forEach { connector ->
-                ConnectorRow(
-                    connector = connector,
-                    onOpen = { selectedId = connector.id },
-                    onToggle = { on -> viewModel.toggleConnector(connector.id, on) },
+            val attention = connectors.filter { it.status == "error" || it.status == "needs_setup" }
+            val rest = connectors.filterNot { it in attention }
+            if (attention.isNotEmpty()) {
+                ConnectorGroup(
+                    title = "Needs attention",
+                    connectors = attention,
+                    expanded = "Needs attention" in expanded,
+                    onToggleGroup = {
+                        expanded = if ("Needs attention" in expanded) expanded - "Needs attention" else expanded + "Needs attention"
+                    },
+                    onOpen = { id -> selectedId = id },
+                    onToggle = { id, on -> viewModel.toggleConnector(id, on) },
                 )
             }
+            rest.groupBy { it.category.ifBlank { "Other" } }
+                .toSortedMap()
+                .forEach { (category, rows) ->
+                    ConnectorGroup(
+                        title = category,
+                        connectors = rows,
+                        expanded = category in expanded,
+                        onToggleGroup = {
+                            expanded = if (category in expanded) expanded - category else expanded + category
+                        },
+                        onOpen = { id -> selectedId = id },
+                        onToggle = { id, on -> viewModel.toggleConnector(id, on) },
+                    )
+                }
 
             if (logs.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -174,6 +197,46 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun ConnectorGroup(
+    title: String,
+    connectors: List<ConnectorEntity>,
+    expanded: Boolean,
+    onToggleGroup: () -> Unit,
+    onOpen: (String) -> Unit,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    val on = connectors.count { it.status != "disabled" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onToggleGroup, contentPadding = PaddingValues(horizontal = 4.dp)) {
+            Text(
+                text = (if (expanded) "▾ " else "▸ ") + title,
+                style = MaterialTheme.typography.titleSmall,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "$on/${connectors.size} on",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+    }
+    if (expanded) {
+        connectors.forEach { connector ->
+            ConnectorRow(
+                connector = connector,
+                onOpen = { onOpen(connector.id) },
+                onToggle = { enabled -> onToggle(connector.id, enabled) },
+            )
+        }
     }
 }
 

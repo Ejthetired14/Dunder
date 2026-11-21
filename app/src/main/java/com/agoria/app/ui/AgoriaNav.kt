@@ -6,7 +6,7 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -28,9 +28,11 @@ import androidx.navigation.compose.rememberNavController
 import com.agoria.app.ui.agent.AgentScreen
 import com.agoria.app.ui.approvals.ApprovalsScreen
 import com.agoria.app.ui.connectors.ConnectorsScreen
+import com.agoria.app.ui.browser.BrowsersScreen
 import com.agoria.app.ui.diary.DiaryScreen
 import com.agoria.app.ui.home.HomeScreen
 import com.agoria.app.ui.office.OfficeScreen
+import com.agoria.app.ui.project.ProjectScreen
 import com.agoria.app.ui.settings.SettingsScreen
 
 private data class TopDestination(
@@ -42,7 +44,7 @@ private data class TopDestination(
 private val topDestinations = listOf(
     TopDestination("home", "Home", Icons.Default.Home),
     TopDestination("office", "Office", Icons.Default.Business),
-    TopDestination("diary", "Diary", Icons.Default.MenuBook),
+    TopDestination("project", "Project", Icons.Default.Folder),
     TopDestination("approvals", "Approvals", Icons.Default.FactCheck),
     TopDestination("connectors", "Connect", Icons.Default.Hub),
 )
@@ -93,6 +95,20 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 OfficeScreen(
                     viewModel = viewModel,
                     onOpenAgent = { id -> navController.navigate("agent/$id") },
+                    onOpenBrowsers = { navController.navigate("browsers") },
+                )
+            }
+            composable("project") {
+                ProjectScreen(
+                    viewModel = viewModel,
+                    onOpenAgent = { id -> navController.navigate("agent/$id") },
+                    onOpenBrowsers = { navController.navigate("browsers") },
+                )
+            }
+            composable("browsers") {
+                BrowsersScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable("diary") {

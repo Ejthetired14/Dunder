@@ -221,7 +221,7 @@ class ConnectorExecutor(
         "device" -> device(config, action, args)
         "files" -> files(config, action, args, agentId)
         "http" -> http(config, action, args, agentId)
-        "accounts" -> accounts(action, args)
+        "accounts" -> accounts(agentId, connector, action, args)
         "github" -> github(config, action, args)
         "slack" -> slack(config, action, args)
         "discord" -> discord(config, action, args)
@@ -320,6 +320,12 @@ class ConnectorExecutor(
             .take(max)
 
     private fun json(body: String): JSONObject? = Json.tryObject(body)
+
+    private fun jsonArray(body: String): JSONArray? = try {
+        JSONArray(body)
+    } catch (_: Exception) {
+        null
+    }
 
     private fun ConnectorResult.asOk(): ConnectorResult = this
 
@@ -735,19 +741,58 @@ class ConnectorExecutor(
     // The user signs in there once. The app never reads the accounts on the phone and never sees a
     // password, so the agents work as the provided account and not as the device owner.
 
-    private fun accounts(action: String, args: JSONObject): ConnectorResult = when (action) {
-        "list" -> browserSession()
+    private suspend fun accounts(
+        agentId: String?,
+        connector: ConnectorEntity,
+        action: String,
+        args: JSONObject,
+    ): ConnectorResult = when (action) {
+        "list" -> browserSession(agentId)
         "signin" -> openInOfficeBrowser(
+            agentId,
+            connector,
             args.optString("url").trim().ifBlank { "https://accounts.google.com/ServiceLogin" },
-            "Opened the office browser. Sign in to the account the office should use; that session is kept for the office only.",
+            "Opened the office browser sign-in page for this agent. The session is kept for the office only.",
         )
-        "email" -> draftEmail(args)
-        "event" -> addEvent(args)
-        "open_url", "open" -> openLink(args)
-        else -> ConnectorResult(false, "Unknown Office Browser action '$action'. Use list_actions to see them: list, signin, email, event, open_url.")
+        "email" -> draftEmail(agentId, connector, args)
+        "event" -> addEvent(agentId, connector, args)
+        "open_url", "open", "browse" -> openLink(agentId, connector, args)
+        "read" -> readBrowser(agentId)
+        "view" -> {
+            val id = agentId ?: return ConnectorResult(true, "Open Browsers to watch an agent's page.")
+            com.agoria.app.browser.BrowserHub.show(id)
+            ConnectorResult(true, "Showing this agent's browser on screen.")
+        }
+        else -> ConnectorResult(
+            false,
+            "Unknown Office Browser action '$action'. Use list_actions to see them: " +
+                "list, signin, email, event, open_url, read, view.",
+        )
     }
 
-    private fun browserSession(): ConnectorResult {
+    private fun readBrowser(agentId: String?): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        var text: String? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        com.agoria.app.browser.BrowserHub.readPage(agentId) { value ->
+            text = value
+            latch.countDown()
+        }
+        // evaluateJavascript answers on the main thread; wait a moment for it without blocking for
+        // long, because a page with no loaded document simply has nothing to report.
+        latch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+        val value = text?.trim()
+        return if (value.isNullOrBlank()) {
+            ConnectorResult(
+                true,
+                "No page text to read yet. Open a page first with open_url; it loads in the background.",
+            )
+        } else {
+            ConnectorResult(true, value.take(3500))
+        }
+    }
+
+    private fun browserSession(agentId: String?): ConnectorResult {
         val cookies = try {
             CookieManager.getInstance()
         } catch (_: Exception) {
@@ -756,26 +801,49 @@ class ConnectorExecutor(
         val google = cookies?.getCookie("https://accounts.google.com").orEmpty()
         val gmail = cookies?.getCookie("https://mail.google.com").orEmpty()
         val calendar = cookies?.getCookie("https://calendar.google.com").orEmpty()
+        val mine = agentId?.let { com.agoria.app.browser.BrowserHub.session(it) }
         val sb = StringBuilder("Office browser session:\n")
         sb.append("- Google sign-in: ").append(if (google.isNotBlank()) "signed in" else "not signed in yet").append('\n')
         sb.append("- Gmail: ").append(if (gmail.isNotBlank()) "reachable" else "will ask to sign in").append('\n')
         sb.append("- Google Calendar: ").append(if (calendar.isNotBlank()) "reachable" else "will ask to sign in").append('\n')
-        sb.append("\nUse signin to open the office browser sign-in page.")
+        if (mine != null) {
+            sb.append("- This agent's page: ").append(mine.url.ifBlank { "none" })
+                .append(if (mine.loading) " (loading)" else "").append('\n')
+            if (mine.title.isNotBlank()) sb.append("- Page title: ").append(mine.title).append('\n')
+            if (mine.error != null) sb.append("- Last error: ").append(mine.error).append('\n')
+        }
+        sb.append("\nPages load in this agent's own background browser. Use read to get the text, ")
+        sb.append("view to put it on screen, or signin to sign the office in.")
         return ConnectorResult(true, sb.toString().trim())
     }
 
-    private fun openInOfficeBrowser(url: String, okSummary: String): ConnectorResult = try {
-        context.startActivity(com.agoria.app.browser.AgentBrowserActivity.intent(context, url))
-        ConnectorResult(true, okSummary)
-    } catch (e: Exception) {
-        ConnectorResult(
-            false,
-            "Could not open the office browser. Play Store versions of Chrome and WebView are required. (${e.message ?: e.javaClass.simpleName})",
-            e.message,
-        )
+    /**
+     * Opens a page in the agent's own background browser. The old behaviour started a full-screen
+     * activity for every link, which stole the screen from whatever the user was doing.
+     */
+    private suspend fun openInOfficeBrowser(
+        agentId: String?,
+        connector: ConnectorEntity,
+        url: String,
+        okSummary: String,
+        show: Boolean = false,
+    ): ConnectorResult {
+        val agent = agentId?.let { id -> repo.agent(id) }
+        val id = agentId ?: "office"
+        val name = agent?.name ?: "Office"
+        val started = com.agoria.app.browser.BrowserHub.open(id, name, url, show)
+        return if (started) {
+            ConnectorResult(true, okSummary)
+        } else {
+            ConnectorResult(false, "Could not open $url in the office browser.")
+        }
     }
 
-    private fun draftEmail(args: JSONObject): ConnectorResult {
+    private suspend fun draftEmail(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
         val to = args.optString("to").trim()
         val subject = args.optString("subject").trim()
         val body = args.optString("body")
@@ -785,12 +853,19 @@ class ConnectorExecutor(
         val url = "https://mail.google.com/mail/?view=cm&fs=1" +
             "&to=" + enc(to) + "&su=" + enc(subject) + "&body=" + enc(body)
         return openInOfficeBrowser(
+            agentId,
+            connector,
             url,
-            "Opened a Gmail draft in the office browser for ${to.ifBlank { "a recipient of your choice" }}. Review it and press send.",
+            "Drafted a Gmail message for ${to.ifBlank { "a recipient of your choice" }} in this agent's " +
+                "background browser. Nothing is sent until the user opens Browsers, reviews it and presses send.",
         )
     }
 
-    private fun addEvent(args: JSONObject): ConnectorResult {
+    private suspend fun addEvent(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
         val title = args.optString("title").trim().ifBlank { return ConnectorResult(false, "Missing event title") }
         val start = parseInstant(args.optString("start"))
             ?: return ConnectorResult(false, "Missing start time. Use ISO-8601, for example 2026-11-20T10:00:00Z.")
@@ -804,17 +879,24 @@ class ConnectorExecutor(
             (if (location.isBlank()) "" else "&location=" + enc(location)) +
             (if (description.isBlank()) "" else "&details=" + enc(description))
         return openInOfficeBrowser(
+            agentId,
+            connector,
             url,
-            "Opened '$title' in Google Calendar inside the office browser. Confirm it there and it lands in the office account.",
+            "Opened '$title' in Google Calendar inside this agent's background browser. " +
+                "The user confirms it there and it lands in the office account.",
         )
     }
 
-    private fun openLink(args: JSONObject): ConnectorResult {
+    private suspend fun openLink(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
         val raw = args.optString("url").trim().ifBlank { return ConnectorResult(false, "Missing url") }
         if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
             return ConnectorResult(false, "Only http and https links can be opened.")
         }
-        return openInOfficeBrowser(raw, "Opened $raw in the office browser.")
+        return openInOfficeBrowser(agentId, connector, raw, "Opened $raw in this agent's background browser.")
     }
 
     private fun calendarStamp(epochMillis: Long): String =
@@ -847,6 +929,8 @@ class ConnectorExecutor(
         when (action.trim().lowercase().replace('-', '_').replace(' ', '_')) {
             "get_repo", "repo", "repository", "get_repository", "repo_info", "repository_info",
             "get_repository_info", "info" -> "get_repo"
+            "whoami", "me", "who_am_i", "user", "account", "token" -> "whoami"
+            "list_repos", "repos", "repositories", "list_repositories", "my_repos" -> "list_repos"
             "list_issues", "issues", "get_issues", "list_issue", "open_issues", "list_open_issues" -> "list_issues"
             "create_issue", "issue", "new_issue", "open_issue", "file_issue", "create" -> "create_issue"
             else -> action.trim().lowercase()
@@ -854,7 +938,8 @@ class ConnectorExecutor(
 
     private fun normalizeNotionAction(action: String): String =
         when (action.trim().lowercase().replace('-', '_').replace(' ', '_')) {
-            "query", "list", "list_pages", "query_database", "database_query", "search" -> "query"
+            "query", "list", "list_pages", "query_database", "database_query" -> "query"
+            "search", "find", "lookup", "search_pages" -> "search"
             "create_page", "create", "new_page", "add_page", "page", "insert", "add" -> "create_page"
             else -> action.trim().lowercase()
         }
@@ -863,17 +948,56 @@ class ConnectorExecutor(
 
     private fun github(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
         val token = cfg(config, "token") ?: return ConnectorResult(false, "Missing GitHub token")
-        val repoName = cfg(config, "repo") ?: return ConnectorResult(false, "Missing repository")
-        if (!repoName.contains("/")) return ConnectorResult(false, "Repository must be owner/name")
         val headers = mapOf(
             "Authorization" to "Bearer $token",
             "Accept" to "application/vnd.github+json",
             "X-GitHub-Api-Version" to "2022-11-28",
         )
+
+        fun repoOf(): String? {
+            val explicit = args.optString("repo").trim().ifBlank { cfg(config, "repo") ?: "" }
+            if (explicit.isNotBlank()) return explicit
+            // A fine-grained token already knows its owner, so there is no owner/name to ask for.
+            // If it reaches exactly one repository, use that one; otherwise ask for a name.
+            val response = http("GET", "https://api.github.com/user/repos?per_page=100&sort=updated", headers)
+            if (!response.ok) return null
+            val array = runCatching { JSONArray(response.body) }.getOrNull() ?: return null
+            return if (array.length() == 1) array.optJSONObject(0)?.optString("full_name") else null
+        }
+
         return when (normalizeGithubAction(action)) {
+            "whoami" -> {
+                val response = http("GET", "https://api.github.com/user", headers)
+                if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
+                val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                ConnectorResult(
+                    true,
+                    "Signed in as ${root.optString("login")} (${root.optString("name")}). " +
+                        "This token can reach the repositories it was granted.",
+                )
+            }
+            "list_repos" -> {
+                val response = http("GET", "https://api.github.com/user/repos?per_page=20&sort=updated", headers)
+                if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
+                val array = jsonArray(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                if (array.length() == 0) return ConnectorResult(true, "This token cannot reach any repositories yet.")
+                val sb = StringBuilder("Repositories this token can reach:\n")
+                for (i in 0 until array.length()) {
+                    val repo = array.optJSONObject(i) ?: continue
+                    sb.append("- ").append(repo.optString("full_name"))
+                    if (repo.optBoolean("private")) sb.append(" (private)")
+                    sb.append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
             "get_repo" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                    )
                 val response = http("GET", "https://api.github.com/repos/$repoName", headers)
-                if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
+                if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
                 ConnectorResult(
                     true,
@@ -884,18 +1008,23 @@ class ConnectorExecutor(
                 )
             }
             "list_issues" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                    )
                 val state = args.optString("state", "open")
                 val response = http(
                     "GET",
                     "https://api.github.com/repos/$repoName/issues?state=$state&per_page=5",
                     headers,
                 )
-                if (!response.ok) return ConnectorResult(false, "GitHub error: ${text(response.body, 300)}")
-                val array = JSONArray(response.body)
-                if (array.length() == 0) return ConnectorResult(true, "No $state issues.")
-                val sb = StringBuilder("GitHub issues ($state):\n")
+                if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
+                val array = jsonArray(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                if (array.length() == 0) return ConnectorResult(true, "No $state issues in $repoName.")
+                val sb = StringBuilder("GitHub issues ($state) in $repoName:\n")
                 for (i in 0 until array.length()) {
-                    val issue = array.getJSONObject(i)
+                    val issue = array.optJSONObject(i) ?: continue
                     sb.append("#").append(issue.optInt("number"))
                         .append(" ").append(issue.optString("title"))
                         .append(" — ").append(issue.optJSONObject("user")?.optString("login") ?: "?")
@@ -904,6 +1033,11 @@ class ConnectorExecutor(
                 ConnectorResult(true, sb.toString().trim())
             }
             "create_issue" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                    )
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val body = args.optString("body", "")
                 val payload = JSONObject().put("title", title).put("body", body)
@@ -913,7 +1047,9 @@ class ConnectorExecutor(
                     headers,
                     payload.toString(),
                 )
-                if (!response.ok) return ConnectorResult(false, "GitHub create issue failed: ${text(response.body, 400)}")
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
                 val root = json(response.body)
                 ConnectorResult(
                     true,
@@ -922,7 +1058,8 @@ class ConnectorExecutor(
             }
             else -> ConnectorResult(
                 false,
-                "Unknown GitHub action '$action'. This connector understands get_repo, list_issues and create_issue.",
+                "Unknown GitHub action '$action'. This connector understands whoami, list_repos, " +
+                    "get_repo, list_issues and create_issue.",
             )
         }
     }
@@ -960,14 +1097,63 @@ class ConnectorExecutor(
     // -------------------------------------------------------------------- notion
 
     private fun notion(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
-        val token = cfg(config, "token") ?: return ConnectorResult(false, "Missing Notion token")
-        val databaseId = cfg(config, "databaseId") ?: return ConnectorResult(false, "Missing database id")
+        val token = cfg(config, "token")
+            ?: return ConnectorResult(false, "Missing Notion token")
+        val databaseId = args.optString("database_id").trim()
+            .ifBlank { cfg(config, "databaseId") ?: "" }
+        val parentPageId = args.optString("parent_page_id").trim()
+            .ifBlank { cfg(config, "parentPageId") ?: "" }
         val headers = mapOf(
             "Authorization" to "Bearer $token",
             "Notion-Version" to "2022-06-28",
+            "Content-Type" to "application/json",
         )
+
+        fun fail(response: HttpResult, what: String): ConnectorResult {
+            val body = text(response.body, 300)
+            val hint = when (response.code) {
+                401 -> " The integration token is not valid."
+                403, 404 -> " Share the page or database with the integration in Notion first."
+                else -> ""
+            }
+            return ConnectorResult(false, "Notion $what failed (HTTP ${response.code}): $body$hint")
+        }
+
+        fun search(query: String): ConnectorResult {
+            val payload = JSONObject()
+                .put("query", query)
+                .put("page_size", args.optInt("page_size", 10).coerceIn(1, 25))
+            val response = http("POST", "https://api.notion.com/v1/search", headers, payload.toString())
+            if (!response.ok) return fail(response, "search")
+            val root = json(response.body) ?: return ConnectorResult(false, "Notion returned invalid JSON")
+            val results = root.optJSONArray("results") ?: return ConnectorResult(true, "Nothing found in this workspace.")
+            if (results.length() == 0) return ConnectorResult(true, "Nothing shared with this integration matched.")
+            val sb = StringBuilder("Notion results:\n")
+            for (i in 0 until results.length()) {
+                val item = results.optJSONObject(i) ?: continue
+                sb.append("- ").append(notionTitle(item))
+                    .append(" (").append(item.optString("object")).append(") ")
+                    .append(item.optString("id")).append('\n')
+            }
+            return ConnectorResult(true, sb.toString().trim())
+        }
+
         return when (normalizeNotionAction(action)) {
+            "search" -> search(args.optString("query", ""))
+
             "query" -> {
+                if (databaseId.isBlank()) {
+                    val fallback = search(args.optString("query", ""))
+                    return if (fallback.ok) {
+                        ConnectorResult(
+                            true,
+                            fallback.summary + "\n\nNo database id is configured, so this is a workspace " +
+                                "search. Add a database id in the connector to query its rows.",
+                        )
+                    } else {
+                        fallback
+                    }
+                }
                 val payload = JSONObject().put("page_size", args.optInt("page_size", 5).coerceIn(1, 25))
                 val response = http(
                     "POST",
@@ -975,32 +1161,53 @@ class ConnectorExecutor(
                     headers,
                     payload.toString(),
                 )
-                if (!response.ok) return ConnectorResult(false, "Notion error: ${text(response.body, 300)}")
+                if (!response.ok) return fail(response, "database query")
                 val root = json(response.body) ?: return ConnectorResult(false, "Notion returned invalid JSON")
                 val results = root.optJSONArray("results") ?: return ConnectorResult(true, "No pages found.")
                 val sb = StringBuilder("Notion pages:\n")
                 for (i in 0 until results.length()) {
-                    val page = results.getJSONObject(i)
-                    sb.append("- ").append(page.optString("id")).append('\n')
+                    val page = results.optJSONObject(i) ?: continue
+                    sb.append("- ").append(notionTitle(page)).append(" ").append(page.optString("id")).append('\n')
                 }
                 ConnectorResult(true, sb.toString().trim())
             }
+
             "create_page" -> {
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val content = args.optString("content", "")
+                val parent = when {
+                    databaseId.isNotBlank() -> JSONObject().put("database_id", databaseId)
+                    parentPageId.isNotBlank() -> JSONObject().put("page_id", parentPageId)
+                    else -> return ConnectorResult(
+                        false,
+                        "Notion needs a destination. Add a database id in the connector, or pass " +
+                            "\"parent_page_id\" with the id of a page shared with the integration.",
+                    )
+                }
                 val payload = JSONObject()
-                    .put("parent", JSONObject().put("database_id", databaseId))
+                    .put("parent", parent)
                     .put(
                         "properties",
-                        JSONObject().put(
-                            "title",
+                        if (parent.has("database_id")) {
                             JSONObject().put(
                                 "title",
-                                JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
-                            ),
-                        ),
+                                JSONObject().put(
+                                    "title",
+                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
+                                ),
+                            )
+                        } else {
+                            JSONObject().put(
+                                "title",
+                                JSONObject().put(
+                                    "title",
+                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
+                                ),
+                            )
+                        },
                     )
-                    .put(
+                if (content.isNotBlank()) {
+                    payload.put(
                         "children",
                         JSONArray().put(
                             JSONObject()
@@ -1020,15 +1227,35 @@ class ConnectorExecutor(
                                 ),
                         ),
                     )
+                }
                 val response = http("POST", "https://api.notion.com/v1/pages", headers, payload.toString())
-                if (!response.ok) return ConnectorResult(false, "Notion create failed: ${text(response.body, 400)}")
+                if (!response.ok) return fail(response, "create page")
                 ConnectorResult(true, "Created Notion page '$title'.")
             }
+
             else -> ConnectorResult(
                 false,
-                "Unknown Notion action '$action'. This connector understands query and create_page.",
+                "Unknown Notion action '$action'. This connector understands search, query and create_page.",
             )
         }
+    }
+
+    private fun notionTitle(item: JSONObject): String {
+        item.optJSONObject("properties")?.let { properties ->
+            val keys = properties.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val property = properties.optJSONObject(key) ?: continue
+                val array = property.optJSONArray("title") ?: continue
+                val text = array.optJSONObject(0)?.optString("plain_text").orEmpty()
+                if (text.isNotBlank()) return text
+            }
+        }
+        item.optJSONArray("title")?.let { array ->
+            val text = array.optJSONObject(0)?.optString("plain_text").orEmpty()
+            if (text.isNotBlank()) return text
+        }
+        return item.optString("url").ifBlank { "untitled" }
     }
 
     // ------------------------------------------------------------------ telegram

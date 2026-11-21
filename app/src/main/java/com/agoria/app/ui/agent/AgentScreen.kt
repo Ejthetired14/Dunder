@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -41,6 +42,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -140,11 +143,7 @@ fun AgentScreen(
             AgentContent(
                 viewModel = viewModel,
                 agent = agent,
-                onViewBuild = { build ->
-                    context.startActivity(
-                        com.agoria.app.viewer.BuildViewerActivity.intent(context, build.zipPath, build.name),
-                    )
-                },
+                onBack = onBack,
             )
         }
     }
@@ -154,7 +153,7 @@ fun AgentScreen(
 private fun AgentContent(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
-    onViewBuild: (BuildEntity) -> Unit,
+    onBack: () -> Unit,
 ) {
     val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
         AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
@@ -184,6 +183,7 @@ private fun AgentContent(
                 if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
             },
             onEdit = { showEdit = true },
+            onDelete = { showDelete = true },
         )
 
         TabRow(selectedTabIndex = tab) {
@@ -191,7 +191,6 @@ private fun AgentContent(
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Diary") })
             Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Tasks") })
             Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Memory") })
-            Tab(selected = tab == 4, onClick = { tab = 4 }, text = { Text("Builds") })
         }
 
         when (tab) {
@@ -211,8 +210,7 @@ private fun AgentContent(
             )
             1 -> DiaryTab(viewModel = viewModel, agentId = agent.id, diary = diary)
             2 -> TasksTab(tasks = tasks)
-            3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
-            else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onView = onViewBuild)
+            else -> MemoryTab(memories = memories, onAdd = { showMemory = true })
         }
     }
 
@@ -227,6 +225,7 @@ private fun AgentContent(
             onDelete = {
                 viewModel.deleteAgent(agent.id)
                 showEdit = false
+                onBack()
             },
         )
     }
@@ -250,6 +249,7 @@ private fun AgentContent(
                 TextButton(onClick = {
                     viewModel.deleteAgent(agent.id)
                     showDelete = false
+                    onBack()
                 }) { Text("Delete") }
             },
             dismissButton = {
@@ -264,6 +264,7 @@ private fun AgentHeader(
     agent: AgentEntity,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -285,10 +286,32 @@ private fun AgentHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                var menu by remember { mutableStateOf(false) }
                 TextButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit")
                     Spacer(Modifier.width(6.dp))
                     Text("Edit")
+                }
+                Box {
+                    IconButton(onClick = { menu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Edit agent") },
+                            onClick = {
+                                menu = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete agent") },
+                            onClick = {
+                                menu = false
+                                onDelete()
+                            },
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -723,180 +746,6 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
                 horizontalArrangement = Arrangement.End,
             ) {
                 Button(onClick = onAdd) { Text("Add") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BuildsTab(
-    viewModel: AgoriaViewModel,
-    agentId: String,
-    onView: (BuildEntity) -> Unit,
-) {
-    val context = LocalContext.current
-    val buildProgress by viewModel.buildProgress.collectAsStateWithLifecycle()
-    val pagedBuilds by viewModel.pagedBuilds.collectAsStateWithLifecycle()
-    val buildsPagination by viewModel.buildsPagination.collectAsStateWithLifecycle()
-    var savingBuildId by remember { mutableStateOf<String?>(null) }
-
-    // Load initial data
-    LaunchedEffect(Unit) {
-        viewModel.loadPagedBuilds(agentId, refresh = true)
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        // Progress banner
-        buildProgress?.let { progress ->
-            when (progress) {
-                is BuildProgress.Started -> ProgressBanner(message = "Starting build...")
-                is BuildProgress.GeneratingFiles -> ProgressBanner(message = "Generating project files...")
-                is BuildProgress.WritingFiles -> ProgressBanner(
-                    message = "Writing files (${progress.written}/${progress.total})",
-                    progress = progress.written / progress.total.toFloat()
-                )
-                is BuildProgress.Zipping -> ProgressBanner(message = "Creating ZIP archive...")
-                is BuildProgress.Completed -> ProgressBanner(
-                    message = "Build complete: ${progress.build.name}",
-                    progress = 1f,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                is BuildProgress.Failed -> ProgressBanner(
-                    message = "Build failed: ${progress.error}",
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-
-        if (pagedBuilds.isEmpty() && !buildsPagination.isLoading) {
-            EmptyState(
-                title = "No builds yet",
-                body = "When an agent proposes a build and you approve it, the generated project appears here as a downloadable ZIP.",
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(16.dp),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(pagedBuilds, key = { it.id }) { build ->
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(build.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                Pill(text = "${build.fileCount} files")
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = build.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "Built ${Time.dateTime(build.createdAt)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilledTonalButton(onClick = { onView(build) }) { Text("View") }
-                                TextButton(
-                                    onClick = {
-                                        savingBuildId = build.id
-                                        viewModel.saveBuildToDownloads(context, build) { _ ->
-                                            savingBuildId = null
-                                        }
-                                    },
-                                    enabled = savingBuildId != build.id,
-                                ) {
-                                    Text(if (savingBuildId == build.id) "Saving" else "Save")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Load more indicator
-                if (buildsPagination.hasMore) {
-                    item {
-                        if (buildsPagination.isLoading) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                            ) {
-                                androidx.compose.material3.CircularProgressIndicator(
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
-                        } else {
-                            TextButton(
-                                onClick = { viewModel.loadPagedBuilds(agentId) },
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            ) {
-                                Text("Load more")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProgressBanner(
-    message: String,
-    progress: Float = -1f,
-    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-            .animateContentSize(),
-        shape = MaterialTheme.shapes.medium,
-        color = color.copy(alpha = 0.1f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (progress >= 0f) {
-                    CircularProgressIndicator(
-                        progress = progress,
-                        color = color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                } else {
-                    CircularProgressIndicator(
-                        color = color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                }
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = color,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            if (progress >= 0f && progress < 1f) {
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = progress,
-                    color = color,
-                    trackColor = color.copy(alpha = 0.2f),
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
     }

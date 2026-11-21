@@ -693,12 +693,20 @@ class AgentRuntime(
 
         val outcome = when (approval.type) {
             "build_project" -> {
-                val details = Json.tryObject(approval.details) ?: JSONObject()
-                val build = buildRunner.build(agent, approval)
-                if (build != null) {
-                    "Build complete: ${build.name} (${build.fileCount} files)"
+                // The shared project folder has one owner. Other agents can still plan, write tasks
+                // and report progress; only the lead agent writes into the project.
+                val project = repo.ensureProject()
+                val lead = project.leadAgentId
+                if (lead.isNotBlank() && lead != agent.id) {
+                    val leadName = repo.agent(lead)?.name ?: "the lead agent"
+                    "Build skipped: only $leadName can build in ${project.name}. Ask $leadName to run it."
                 } else {
-                    "Build failed: no files were generated."
+                    val build = buildRunner.build(agent, approval)
+                    if (build != null) {
+                        "Build complete: ${build.name} (${build.fileCount} files)"
+                    } else {
+                        "Build failed: no files were generated."
+                    }
                 }
             }
 
@@ -738,6 +746,7 @@ class AgentRuntime(
         }
 
         val ok = !outcome.startsWith("Failed") && !outcome.startsWith("Build failed") &&
+            !outcome.startsWith("Build skipped") &&
             !outcome.contains("no longer exists") && !outcome.startsWith("Approval data")
         repo.updateApproval(
             approval.copy(

@@ -7,6 +7,7 @@ import com.agoria.app.core.ConnectorDef
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.RevenueEntity
+import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.SecretCipher
 import com.agoria.app.util.Time
@@ -74,6 +75,7 @@ class Repository(
         db.settingsDao().upsert(settings.copy(seedVersion = 1))
         }
         syncConnectorCatalog()
+        ensureProject()
     }
 
     /**
@@ -122,6 +124,55 @@ class Repository(
     suspend fun reset() {
         db.clearAllTables()
         seedIfNeeded()
+        ensureProject()
+    }
+
+    // ------------------------------------------------------------ auto backups
+
+    /**
+     * Writes a full JSON snapshot next to the app. Called once a day from the application, so a
+     * bad upgrade or an accidental reset always has a recent file to restore from.
+     */
+    fun backupDirectory(): java.io.File {
+        val dir = java.io.File(context.filesDir, "backups")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    suspend fun writeAutoBackup(force: Boolean = false): java.io.File? {
+        return try {
+            val dir = backupDirectory()
+            val existing = dir.listFiles()?.sortedByDescending { it.name }.orEmpty()
+            val newest = existing.firstOrNull()
+            val day = 24 * 60 * 60 * 1000L
+            if (!force && newest != null && System.currentTimeMillis() - newest.lastModified() < day) {
+                return newest
+            }
+            val snapshot = exportSnapshot()
+            val file = java.io.File(dir, "auto-backup-${System.currentTimeMillis()}.json")
+            Files.writeText(file, snapshot.toString(2))
+            // Keep the five most recent snapshots; they are small and each one is a full restore.
+            existing.drop(4).forEach { it.delete() }
+            file
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun autoBackups(): List<java.io.File> =
+        backupDirectory().listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".json") }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
+
+    suspend fun restoreAutoBackup(file: java.io.File): Boolean {
+        val text = Files.readText(file) ?: return false
+        val json = try {
+            JSONObject(text)
+        } catch (_: Exception) {
+            return false
+        }
+        return importSnapshot(json)
     }
 
     // ---------------------------------------------------------------- settings
@@ -136,6 +187,65 @@ class Repository(
         db.settingsDao().upsert(block(current))
     }
 
+    // ---------------------------------------------------------------- projects
+
+    val projects = db.projectDao().observeAll()
+
+    fun tasksForProject(projectId: String) = db.taskDao().observeForProject(projectId)
+
+    fun buildsForProject(projectId: String) = db.buildDao().observeForProject(projectId)
+
+    suspend fun project(id: String): ProjectEntity? = db.projectDao().get(id)
+
+    suspend fun allProjects(): List<ProjectEntity> = db.projectDao().getAll()
+
+    /**
+     * The office always has exactly one shared project folder. It is created on first use and its
+     * lead is the first agent, so a fresh install already has somewhere to put tasks and builds.
+     */
+    suspend fun ensureProject(): ProjectEntity {
+        db.projectDao().getAll().firstOrNull()?.let { return it }
+        val agents = db.agentDao().getAll()
+        val now = Time.now()
+        val project = ProjectEntity(
+            id = DEFAULT_PROJECT_ID,
+            name = "Office project",
+            description = "Everything the office is building right now.",
+            leadAgentId = agents.firstOrNull()?.id ?: "",
+            status = "active",
+            folder = DEFAULT_PROJECT_ID,
+            createdAt = now,
+            updatedAt = now,
+        )
+        db.projectDao().insert(project)
+        return project
+    }
+
+    suspend fun createProject(name: String, description: String, leadAgentId: String): ProjectEntity {
+        val now = Time.now()
+        val id = "project-" + UUID.randomUUID().toString().take(8)
+        val project = ProjectEntity(
+            id = id,
+            name = name.trim().ifBlank { "Untitled project" },
+            description = description.trim(),
+            leadAgentId = leadAgentId,
+            status = "active",
+            folder = Files.safeName(id),
+            createdAt = now,
+            updatedAt = now,
+        )
+        db.projectDao().insert(project)
+        return project
+    }
+
+    suspend fun updateProject(project: ProjectEntity) =
+        db.projectDao().update(project.copy(updatedAt = Time.now()))
+
+    suspend fun deleteProject(id: String) {
+        db.projectDao().delete(id)
+        ensureProject()
+    }
+
     // ------------------------------------------------------------------ agents
 
     suspend fun agent(id: String): AgentEntity? = db.agentDao().get(id)
@@ -145,6 +255,10 @@ class Repository(
     suspend fun upsertAgent(agent: AgentEntity) = db.agentDao().insert(agent)
 
     suspend fun updateAgent(agent: AgentEntity) = db.agentDao().update(agent)
+
+    companion object {
+        const val DEFAULT_PROJECT_ID = "office-project"
+    }
 
     suspend fun deleteAgent(id: String) = db.agentDao().delete(id)
 
@@ -218,7 +332,9 @@ class Repository(
         title: String,
         description: String,
         status: String = "active",
+        projectId: String = "",
     ): TaskEntity {
+        val project = if (projectId.isBlank()) ensureProject().id else projectId
         val task = TaskEntity(
             id = UUID.randomUUID().toString(),
             agentId = agentId,
@@ -228,6 +344,7 @@ class Repository(
             progress = if (status == "done") 100 else 0,
             createdAt = Time.now(),
             updatedAt = Time.now(),
+            projectId = project,
         )
         db.taskDao().insert(task)
         return task
@@ -492,7 +609,9 @@ class Repository(
         description: String,
         zipPath: String,
         fileCount: Int,
+        projectId: String = "",
     ): BuildEntity {
+        val project = if (projectId.isBlank()) ensureProject().id else projectId
         val build = BuildEntity(
             id = UUID.randomUUID().toString(),
             agentId = agentId,
@@ -503,6 +622,7 @@ class Repository(
             status = "building",
             createdAt = Time.now(),
             completedAt = null,
+            projectId = project,
         )
         db.buildDao().insert(build)
         return build
@@ -536,8 +656,9 @@ class Repository(
     suspend fun exportSnapshot(): JSONObject {
         val root = JSONObject()
         root.put("app", "Dunder")
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportedAt", Time.iso(Time.now()))
+
         val s = settings()
         root.put(
             "settings",
@@ -547,65 +668,160 @@ class Repository(
                 put("autonomyEnabled", s.autonomyEnabled)
                 put("tickIntervalSeconds", s.tickIntervalSeconds)
                 put("agentCooldownSeconds", s.agentCooldownSeconds)
+                put("autoApproveEnabled", s.autoApproveEnabled)
+                put("autoApproveTypes", s.autoApproveTypes)
+                put("agentProfitSharePercent", s.agentProfitSharePercent)
+                put("userProfitSharePercent", s.userProfitSharePercent)
             },
         )
+
         root.put(
             "agents",
             JSONArray().apply {
-                allAgents().forEach {
+                allAgents().forEach { a ->
                     put(
                         JSONObject().apply {
-                            put("id", it.id)
-                            put("name", it.name)
-                            put("role", it.role)
-                            put("persona", it.persona)
-                            put("goal", it.goal)
-                            put("status", it.status)
-                            put("autonomy", it.autonomy)
-                            put("memory", it.memory)
-                            put("createdAt", it.createdAt)
+                            put("id", a.id)
+                            put("name", a.name)
+                            put("role", a.role)
+                            put("persona", a.persona)
+                            put("goal", a.goal)
+                            put("avatarIndex", a.avatarIndex)
+                            put("status", a.status)
+                            put("autonomy", a.autonomy)
+                            put("memory", a.memory)
+                            put("createdAt", a.createdAt)
+                            put("allowedConnectors", a.allowedConnectors)
+                            put("apiToken", a.apiToken)
                         },
                     )
                 }
             },
         )
+
         root.put(
-            "providers",
+            "projects",
             JSONArray().apply {
-                ProviderCatalog.all.forEach { spec ->
+                db.projectDao().getAll().forEach { p ->
                     put(
                         JSONObject().apply {
-                            put("id", spec.id)
-                            put("name", spec.name)
-                            put("baseUrl", spec.baseUrl)
-                            put("freeNote", spec.freeNote)
+                            put("id", p.id)
+                            put("name", p.name)
+                            put("description", p.description)
+                            put("leadAgentId", p.leadAgentId)
+                            put("status", p.status)
+                            put("folder", p.folder)
+                            put("createdAt", p.createdAt)
+                            put("updatedAt", p.updatedAt)
                         },
                     )
                 }
             },
         )
+
         root.put(
-            "connectorCatalog",
+            "tasks",
             JSONArray().apply {
-                ConnectorCatalog.all.forEach { def ->
+                db.taskDao().getAll().forEach { t ->
                     put(
                         JSONObject().apply {
-                            put("id", def.id)
-                            put("name", def.name)
-                            put("description", def.description)
-                            put("risk", def.risk)
-                            put("actions", JSONArray(def.actions.map { it.id }))
+                            put("id", t.id)
+                            put("agentId", t.agentId)
+                            put("title", t.title)
+                            put("description", t.description)
+                            put("status", t.status)
+                            put("progress", t.progress)
+                            put("createdAt", t.createdAt)
+                            put("updatedAt", t.updatedAt)
+                            put("projectId", t.projectId)
                         },
                     )
                 }
             },
         )
+
+        root.put(
+            "builds",
+            JSONArray().apply {
+                db.buildDao().getAll().forEach { b ->
+                    put(
+                        JSONObject().apply {
+                            put("id", b.id)
+                            put("agentId", b.agentId)
+                            put("name", b.name)
+                            put("description", b.description)
+                            put("fileCount", b.fileCount)
+                            put("zipPath", b.zipPath)
+                            put("status", b.status)
+                            put("createdAt", b.createdAt)
+                            put("completedAt", b.completedAt)
+                            put("projectId", b.projectId)
+                        },
+                    )
+                }
+            },
+        )
+
+        root.put(
+            "memories",
+            JSONArray().apply {
+                db.memoryDao().getAll().forEach { m ->
+                    put(
+                        JSONObject().apply {
+                            put("id", m.id)
+                            put("agentId", m.agentId)
+                            put("kind", m.kind)
+                            put("content", m.content)
+                            put("importance", m.importance)
+                            put("createdAt", m.createdAt)
+                        },
+                    )
+                }
+            },
+        )
+
+        root.put(
+            "diary",
+            JSONArray().apply {
+                db.diaryDao().getAll().takeLast(2000).forEach { d ->
+                    put(
+                        JSONObject().apply {
+                            put("id", d.id)
+                            put("agentId", d.agentId)
+                            put("kind", d.kind)
+                            put("content", d.content)
+                            put("importance", d.importance)
+                            put("pinned", d.pinned)
+                            put("createdAt", d.createdAt)
+                        },
+                    )
+                }
+            },
+        )
+
+        // Connector settings are exported decrypted: the on-device key that encrypted them does not
+        // exist on the next phone, so an encrypted blob would restore as unreadable garbage.
+        root.put(
+            "connectors",
+            JSONArray().apply {
+                db.connectorDao().getAll().forEach { c ->
+                    put(
+                        JSONObject().apply {
+                            put("id", c.id)
+                            put("status", c.status)
+                            put("scopes", c.scopes)
+                            put("config", connectorConfig(c.id) ?: JSONObject())
+                        },
+                    )
+                }
+            },
+        )
+
         return root
     }
 
     suspend fun importSnapshot(json: JSONObject): Boolean {
         try {
-            // Import settings
             if (json.has("settings")) {
                 val settingsJson = json.getJSONObject("settings")
                 updateSettings { s ->
@@ -615,34 +831,159 @@ class Repository(
                         autonomyEnabled = settingsJson.optBoolean("autonomyEnabled", s.autonomyEnabled),
                         tickIntervalSeconds = settingsJson.optInt("tickIntervalSeconds", s.tickIntervalSeconds),
                         agentCooldownSeconds = settingsJson.optInt("agentCooldownSeconds", s.agentCooldownSeconds),
+                        autoApproveEnabled = settingsJson.optBoolean("autoApproveEnabled", s.autoApproveEnabled),
+                        autoApproveTypes = settingsJson.optString("autoApproveTypes", s.autoApproveTypes),
+                        agentProfitSharePercent = settingsJson.optInt("agentProfitSharePercent", s.agentProfitSharePercent),
+                        userProfitSharePercent = settingsJson.optInt("userProfitSharePercent", s.userProfitSharePercent),
                     )
                 }
             }
 
-            // Import agents
+            if (json.has("connectors")) {
+                val array = json.getJSONArray("connectors")
+                for (i in 0 until array.length()) {
+                    val c = array.optJSONObject(i) ?: continue
+                    val id = c.optString("id")
+                    if (id.isBlank()) continue
+                    val config = c.optJSONObject("config") ?: JSONObject()
+                    if (config.length() > 0) {
+                        saveConnectorConfig(id, config)
+                    }
+                }
+            }
+
             if (json.has("agents")) {
                 val agentsArray = json.getJSONArray("agents")
                 for (i in 0 until agentsArray.length()) {
-                    val a = agentsArray.getJSONObject(i)
-                    val existing = agent(a.getString("id"))
+                    val a = agentsArray.optJSONObject(i) ?: continue
+                    val id = a.optString("id")
+                    if (id.isBlank()) continue
+                    val existing = agent(id)
                     val now = Time.now()
-                    val agentEntity = com.agoria.app.data.AgentEntity(
-                        id = a.getString("id"),
-                        name = a.getString("name"),
-                        role = a.getString("role"),
-                        persona = a.optString("persona", ""),
-                        goal = a.optString("goal", ""),
-                        avatarIndex = existing?.avatarIndex ?: 0,
+                    val agentEntity = AgentEntity(
+                        id = id,
+                        name = a.optString("name", existing?.name ?: "Agent"),
+                        role = a.optString("role", existing?.role ?: "Generalist"),
+                        persona = a.optString("persona", existing?.persona ?: ""),
+                        goal = a.optString("goal", existing?.goal ?: ""),
+                        avatarIndex = a.optInt("avatarIndex", existing?.avatarIndex ?: 0),
                         status = a.optString("status", "idle"),
                         autonomy = a.optBoolean("autonomy", true),
                         memory = a.optString("memory", ""),
                         lastTickAt = 0L,
                         failureCount = 0,
                         lastError = null,
-                        createdAt = a.optLong("createdAt", now),
+                        createdAt = a.optLong("createdAt", existing?.createdAt ?: now),
                         updatedAt = now,
+                        allowedConnectors = a.optString("allowedConnectors", existing?.allowedConnectors ?: ""),
+                        apiToken = a.optString("apiToken", existing?.apiToken ?: ""),
                     )
                     upsertAgent(agentEntity)
+                }
+            }
+
+            if (json.has("projects")) {
+                val array = json.getJSONArray("projects")
+                for (i in 0 until array.length()) {
+                    val p = array.optJSONObject(i) ?: continue
+                    val id = p.optString("id")
+                    if (id.isBlank()) continue
+                    db.projectDao().insert(
+                        ProjectEntity(
+                            id = id,
+                            name = p.optString("name", "Office project"),
+                            description = p.optString("description", ""),
+                            leadAgentId = p.optString("leadAgentId", ""),
+                            status = p.optString("status", "active"),
+                            folder = p.optString("folder", Files.safeName(id)),
+                            createdAt = p.optLong("createdAt", Time.now()),
+                            updatedAt = p.optLong("updatedAt", Time.now()),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("tasks")) {
+                val array = json.getJSONArray("tasks")
+                for (i in 0 until array.length()) {
+                    val t = array.optJSONObject(i) ?: continue
+                    val id = t.optString("id")
+                    if (id.isBlank()) continue
+                    db.taskDao().insert(
+                        TaskEntity(
+                            id = id,
+                            agentId = t.optString("agentId"),
+                            title = t.optString("title", "Untitled task"),
+                            description = t.optString("description", ""),
+                            status = t.optString("status", "active"),
+                            progress = t.optInt("progress", 0),
+                            createdAt = t.optLong("createdAt", Time.now()),
+                            updatedAt = t.optLong("updatedAt", Time.now()),
+                            projectId = t.optString("projectId", ""),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("builds")) {
+                val array = json.getJSONArray("builds")
+                for (i in 0 until array.length()) {
+                    val b = array.optJSONObject(i) ?: continue
+                    val id = b.optString("id")
+                    if (id.isBlank()) continue
+                    db.buildDao().insert(
+                        BuildEntity(
+                            id = id,
+                            agentId = b.optString("agentId"),
+                            name = b.optString("name", "build"),
+                            description = b.optString("description", ""),
+                            fileCount = b.optInt("fileCount", 0),
+                            zipPath = b.optString("zipPath", ""),
+                            status = b.optString("status", "ready"),
+                            createdAt = b.optLong("createdAt", Time.now()),
+                            completedAt = if (b.has("completedAt")) b.optLong("completedAt") else null,
+                            projectId = b.optString("projectId", ""),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("memories")) {
+                val array = json.getJSONArray("memories")
+                for (i in 0 until array.length()) {
+                    val m = array.optJSONObject(i) ?: continue
+                    val id = m.optString("id")
+                    if (id.isBlank()) continue
+                    db.memoryDao().insert(
+                        MemoryEntity(
+                            id = id,
+                            agentId = m.optString("agentId"),
+                            kind = m.optString("kind", "fact"),
+                            content = m.optString("content", ""),
+                            importance = m.optInt("importance", 2),
+                            createdAt = m.optLong("createdAt", Time.now()),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("diary")) {
+                val array = json.getJSONArray("diary")
+                for (i in 0 until array.length()) {
+                    val d = array.optJSONObject(i) ?: continue
+                    val id = d.optString("id")
+                    if (id.isBlank()) continue
+                    db.diaryDao().insert(
+                        DiaryEntryEntity(
+                            id = id,
+                            agentId = d.optString("agentId"),
+                            kind = d.optString("kind", "thought"),
+                            content = d.optString("content", ""),
+                            importance = d.optInt("importance", 2),
+                            pinned = d.optBoolean("pinned", false),
+                            createdAt = d.optLong("createdAt", Time.now()),
+                        ),
+                    )
                 }
             }
 

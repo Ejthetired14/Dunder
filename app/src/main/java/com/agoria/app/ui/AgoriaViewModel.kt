@@ -173,6 +173,15 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         emptyList(),
     )
 
+    val projects = repo.projects.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
+    /** Live view of every agent's own browser. */
+    val browsers = com.agoria.app.browser.BrowserHub.sessions
+
     val runtimeState = runtime.state
 
     val pendingCount = combine(repo.pendingApprovals, repo.pendingConnectorRequests) { a, c ->
@@ -702,6 +711,85 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    /**
+     * Reads a backup straight from the document the user picked. [android.net.Uri.path] is not a
+     * file path for a document picked by the system, which is why importing used to fail.
+     */
+    fun importDataFromUri(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
+            }
+            if (text.isNullOrBlank()) {
+                withContext(Dispatchers.Main) { onResult(false, "Could not read that file.") }
+                return@launch
+            }
+            val json = try {
+                JSONObject(text)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, "That file is not a Dunder backup.") }
+                return@launch
+            }
+            val success = repo.importSnapshot(json)
+            withContext(Dispatchers.Main) {
+                onResult(
+                    success,
+                    if (success) "Backup restored." else "Import failed: the file could not be applied.",
+                )
+            }
+        }
+    }
+
+    fun autoBackups(): List<File> = repo.autoBackups()
+
+    fun writeAutoBackupNow(onResult: (File?) -> Unit) {
+        viewModelScope.launch {
+            val file = repo.writeAutoBackup(force = true)
+            withContext(Dispatchers.Main) { onResult(file) }
+        }
+    }
+
+    fun restoreAutoBackup(file: File, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val ok = repo.restoreAutoBackup(file)
+            withContext(Dispatchers.Main) {
+                onResult(ok, if (ok) "Restored ${file.name}" else "Could not restore that backup.")
+            }
+        }
+    }
+
+    fun createProject(name: String, description: String, leadAgentId: String) {
+        viewModelScope.launch { repo.createProject(name, description, leadAgentId) }
+    }
+
+    fun setProjectLead(projectId: String, agentId: String) {
+        viewModelScope.launch {
+            val project = repo.project(projectId) ?: return@launch
+            repo.updateProject(project.copy(leadAgentId = agentId))
+        }
+    }
+
+    fun renameProject(projectId: String, name: String, description: String) {
+        viewModelScope.launch {
+            val project = repo.project(projectId) ?: return@launch
+            repo.updateProject(project.copy(name = name, description = description))
+        }
+    }
+
+    fun deleteProject(projectId: String) {
+        viewModelScope.launch { repo.deleteProject(projectId) }
+    }
+
+    fun ensureProject() {
+        viewModelScope.launch { repo.ensureProject() }
+    }
+
+    fun tasksForProject(projectId: String) = repo.tasksForProject(projectId)
+
+    fun buildsForProject(projectId: String) = repo.buildsForProject(projectId)
 
     fun importData(file: File, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {

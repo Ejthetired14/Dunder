@@ -130,8 +130,10 @@ fun SettingsScreen(
         contract = ActivityResultContracts.GetContent(),
     ) { uri: Uri? ->
         uri?.let { fileUri ->
-            viewModel.importData(File(fileUri.path)) { success ->
-                scope.launch { snackbarHostState.showSnackbar(if (success) "Import successful" else "Import failed") }
+            // A document picked through the system picker is not a file path, so it has to be read
+            // through the content resolver.
+            viewModel.importDataFromUri(context, fileUri) { success, message ->
+                scope.launch { snackbarHostState.showSnackbar(message) }
             }
         }
     }
@@ -572,7 +574,50 @@ fun SettingsScreen(
                     ) { Text("Import") }
                 }
 
-
+                Spacer(Modifier.height(12.dp))
+                Text("Automatic backups", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "A full snapshot is written once a day inside the app, so an update or an " +
+                        "accidental reset never leaves you with nothing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val backups = remember { mutableStateOf(viewModel.autoBackups()) }
+                backups.value.take(3).forEach { file ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = android.text.format.DateFormat.format("MMM d, HH:mm", file.lastModified()).toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            viewModel.restoreAutoBackup(file) { _, message ->
+                                backups.value = viewModel.autoBackups()
+                                scope.launch { snackbarHostState.showSnackbar(message) }
+                            }
+                        }) { Text("Restore") }
+                    }
+                }
+                if (backups.value.isEmpty()) {
+                    Text(
+                        text = "No automatic backup yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                TextButton(onClick = {
+                    viewModel.writeAutoBackupNow { file ->
+                        backups.value = viewModel.autoBackups()
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                if (file != null) "Backed up" else "Backup failed",
+                            )
+                        }
+                    }
+                }) { Text("Back up now") }
             }
 
             SectionCard(title = "App Updates") {

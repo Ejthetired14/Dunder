@@ -144,6 +144,11 @@ object PromptBuilder {
         sb.appendLine("- complete_task: {\"task_id\": \"...\", \"result\": \"...\"}")
         sb.appendLine()
         sb.appendLine("If you want to build something, use request_approval with type build_project. The user will see the plan and approve or deny it. Do not use use_connector to pretend a build happened.")
+        sb.appendLine()
+        sb.appendLine("## The shared project")
+        sb.appendLine("The office has one shared project folder: its tasks, builds and files are all in the Project tab.")
+        sb.appendLine("Only the project's lead agent runs builds. If you are not the lead, plan the work, create tasks and report progress; ask the lead (or the user) to run the build.")
+        sb.appendLine("Browsing happens in your own background browser. Use the accounts connector with open_url, then read, and nothing covers the user's screen.")
         return sb.toString()
     }
 

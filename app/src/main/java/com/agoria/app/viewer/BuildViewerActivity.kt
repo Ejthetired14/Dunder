@@ -33,6 +33,12 @@ class BuildViewerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         archive = File(intent.getStringExtra(EXTRA_PATH).orEmpty())
         val name = intent.getStringExtra(EXTRA_NAME).orEmpty()
+        val singlePath = intent.getStringExtra(EXTRA_FILE)
+
+        if (singlePath != null) {
+            showSingleFile(File(singlePath), name)
+            return
+        }
 
         if (!archive.isFile) {
             finish()
@@ -103,6 +109,41 @@ class BuildViewerActivity : ComponentActivity() {
         entries.firstOrNull { it.endsWith(".md") }?.let { showEntry(it) } ?: entries.firstOrNull()?.let { showEntry(it) }
     }
 
+    /** Shows one file of the shared project folder, without going through a ZIP. */
+    private fun showSingleFile(file: File, name: String) {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#11151C"))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
+        root.addView(
+            TextView(this).apply {
+                text = name.ifBlank { file.name }
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                setTypeface(typeface, Typeface.BOLD)
+            },
+        )
+        detail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(
+            ScrollView(this).apply {
+                addView(detail)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f,
+                )
+            },
+        )
+        setContentView(root)
+        val bytes = try {
+            file.readBytes()
+        } catch (_: Exception) {
+            null
+        }
+        renderFile(file.name, bytes)
+    }
+
     private fun renderList() {
         list.removeAllViews()
         if (entries.isEmpty()) {
@@ -138,6 +179,10 @@ class BuildViewerActivity : ComponentActivity() {
         } catch (_: Exception) {
             null
         }
+        renderFile(entry, bytes)
+    }
+
+    private fun renderFile(entry: String, bytes: ByteArray?) {
         if (bytes == null) {
             detail.addView(label("Could not read this file.", "#FF8A80", 14f))
             return
@@ -205,10 +250,16 @@ class BuildViewerActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_PATH = "path"
         private const val EXTRA_NAME = "name"
+        private const val EXTRA_FILE = "file"
 
         fun intent(context: Context, zipPath: String, name: String): Intent =
             Intent(context, BuildViewerActivity::class.java)
                 .putExtra(EXTRA_PATH, zipPath)
+                .putExtra(EXTRA_NAME, name)
+
+        fun fileIntent(context: Context, filePath: String, name: String): Intent =
+            Intent(context, BuildViewerActivity::class.java)
+                .putExtra(EXTRA_FILE, filePath)
                 .putExtra(EXTRA_NAME, name)
     }
 }
