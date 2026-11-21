@@ -110,6 +110,19 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Building $VERSION_NAME ($VERSION_CODE)"
 
+      - name: Test Kotlin compile only
+        run: |
+          set -euo pipefail
+          ./gradlew :app:compileDebugKotlin \
+            --no-daemon \
+            --stacktrace \
+            --console=plain > "$RUNNER_TEMP/compile.log" 2>&1
+          STATUS=$?
+          cat "$RUNNER_TEMP/compile.log"
+          if [ "$STATUS" -ne 0 ]; then
+            exit "$STATUS"
+          fi
+
       - name: Build debug and release APKs
         run: |
           set -euo pipefail
@@ -123,8 +136,10 @@ jobs:
             --console=plain > "$RUNNER_TEMP/gradle.log" 2>&1
           STATUS=$?
           set -e
-          tail -120 "$RUNNER_TEMP/gradle.log"
+          tail -500 "$RUNNER_TEMP/gradle.log"
           if [ "$STATUS" -ne 0 ]; then
+            # Also show full compilation errors if any
+            grep -A 20 "error:" "$RUNNER_TEMP/gradle.log" | head -200
             exit "$STATUS"
           fi
           ls -l app/build/outputs/apk/debug/ app/build/outputs/apk/release/
