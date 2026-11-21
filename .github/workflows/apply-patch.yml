@@ -22,13 +22,14 @@ jobs:
             curl -sSL --max-time 60 -w "http=%{http_code} size=%{size_download}\n" https://paste.rs/9x8vS -o /tmp/p.diff
             echo "curl_exit=$?"
             echo "== apply =="
-            git apply --stat /tmp/p.diff
             git apply --index /tmp/p.diff
             echo "apply_exit=$?"
             git status --short
           } > /tmp/log 2>&1
-          cat /tmp/log
           cp /tmp/log apply-report.txt
           git add -f apply-report.txt
           git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(build): repair the Gradle setup and Kotlin sources so releases build again"
-          git push origin HEAD:refs/heads/release/208
+          echo "== push main =="
+          git push origin HEAD:refs/heads/main 2>&1 | tee -a /tmp/log
+          echo "push_main_exit=${PIPESTATUS[0]}"
+          git push -f origin HEAD:refs/heads/release/208 2>&1 | tee -a /tmp/log
