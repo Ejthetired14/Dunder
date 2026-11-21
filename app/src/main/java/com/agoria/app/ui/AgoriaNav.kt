@@ -64,9 +64,8 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     currentRoute = currentRoute,
                     pendingCount = pendingCount,
                     onNavigate = { route ->
-                        // Only pop if we're navigating to a different tab; preserve each tab's back stack
-                        val currentDestination = navController.currentBackStackEntryAsState().value?.destination?.route
-                        if (currentDestination == route) return@onNavigate
+                        // Only navigate if different tab; preserve each tab's back stack
+                        if (currentRoute == route) return@onNavigate
                         navController.navigate(route) {
                             popUpTo(route) { inclusive = true; saveState = true }
                             launchSingleTop = true
