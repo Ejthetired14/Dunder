@@ -20,10 +20,5 @@ jobs:
           git apply --index /tmp/p.diff
           echo "apply_exit=$?"
           git status --short
-          git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(db): rebuild builds and memories so the v2 database can upgrade to v4
-
-The database written by 1.0.208 (schema version 2) still has a foreign key and two
-indices on builds and memories that version 4 dropped, so Room rejected the upgrade
-and the app crashed on first launch. Both tables are now rebuilt into the version 4
-shape, and a failed upgrade is caught at startup instead of killing the app."
+          git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(db): rebuild builds and memories so a v2 database can upgrade to v4"
           git push origin HEAD:refs/heads/main
