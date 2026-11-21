@@ -84,6 +84,10 @@ fun OfficeScreen(
     onOpenBrowsers: () -> Unit = {},
     onOpenApprovals: () -> Unit = {},
 ) {
+    // Hoist OfficeSim to OfficeScreen level so it survives listMode toggle and navigation
+    val sim = remember { OfficeSim() }
+    val camera = remember { CameraState() }
+
     var listMode by rememberSaveable { mutableStateOf(false) }
     if (listMode) {
         OfficeListScreen(
@@ -94,6 +98,8 @@ fun OfficeScreen(
         )
     } else {
         OfficeWorldScreen(
+            sim = sim,
+            camera = camera,
             viewModel = viewModel,
             onOpenAgent = onOpenAgent,
             onOpenBrowsers = onOpenBrowsers,
@@ -105,6 +111,8 @@ fun OfficeScreen(
 
 @Composable
 private fun OfficeWorldScreen(
+    sim: OfficeSim,
+    camera: CameraState,
     viewModel: AgoriaViewModel,
     onOpenAgent: (String) -> Unit,
     onOpenBrowsers: () -> Unit,
@@ -115,8 +123,6 @@ private fun OfficeWorldScreen(
     val diary by viewModel.diary.collectAsStateWithLifecycle()
     val pending by viewModel.pendingCount.collectAsStateWithLifecycle()
 
-    val sim = remember { OfficeSim() }
-    val camera = remember { CameraState() }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var debug by remember { mutableStateOf(false) }
     var debugTap by remember { mutableStateOf<Offset?>(null) }
