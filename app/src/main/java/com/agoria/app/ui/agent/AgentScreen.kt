@@ -15,22 +15,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.enterExit.fadeIn
-import androidx.compose.animation.enterExit.fadeOut
-import androidx.compose.animation.enterExit.shrinkVertically
-import androidx.compose.animation.enterExit.expandVertically
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -67,25 +59,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
@@ -115,32 +106,46 @@ fun AgentScreen(
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val agent = agents.firstOrNull { it.id == agentId }
 
-    if (agent == null) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Agent") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(agent?.name ?: "Agent") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (agent != null) {
+                        IconButton(
+                            onClick = {
+                                if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (agent.autonomy) "Pause" else "Resume",
+                            )
                         }
-                    },
-                )
-            },
-        ) { padding ->
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        if (agent == null) {
             Box(Modifier.fillMaxSize().padding(padding)) {
                 EmptyState(
                     title = "Agent not found",
                     body = "This agent may have been deleted.",
                 )
             }
+        } else {
+            AgentContent(
+                viewModel = viewModel,
+                agent = agent,
+                onBack = onBack,
+            )
         }
-    } else {
-        AgentContent(
-            viewModel = viewModel,
-            agent = agent,
-            onBack = onBack,
-        )
     }
 }
 
@@ -167,43 +172,19 @@ private fun AgentContent(
     var showDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    // Track header visibility based on scroll direction
-    val headerVisible by remember { mutableStateOf(true) }
-    val lastFirstVisibleIndex = remember { mutableStateOf(0) }
-    
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { index ->
-                if (index > lastFirstVisibleIndex.value && index > 2) {
-                    headerVisible.value = false
-                } else if (index < lastFirstVisibleIndex.value || index <= 2) {
-                    headerVisible.value = true
-                }
-                lastFirstVisibleIndex.value = index
-            }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
-        // Collapsing header that hides on scroll down, shows on scroll up
-        AnimatedVisibility(
-            visible = headerVisible,
-            enter = fadeIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
-            exit = fadeOut(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + shrinkVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
-        ) {
-            AgentHeader(
-                agent = agent,
-                onToggle = {
-                    if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
-                },
-                onEdit = { showEdit = true },
-                onDelete = { showDelete = true },
-            )
-        }
+        AgentHeader(
+            agent = agent,
+            onToggle = {
+                if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
+            },
+            onEdit = { showEdit = true },
+            onDelete = { showDelete = true },
+        )
 
         TabRow(selectedTabIndex = tab) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Chat") })
@@ -271,9 +252,7 @@ private fun AgentContent(
                     onBack()
                 }) { Text("Delete") }
             },
-            dismissButton = {
-                TextButton(onClick = { showDelete = false }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancel") } },
         )
     }
 }
@@ -453,15 +432,16 @@ private fun ChatTab(
                 OutlinedTextField(
                     value = input,
                     onValueChange = onInput,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message ${agent.name}...") },
-                    maxLines = 4,
+                    label = { Text("Message") },
+                    placeholder = { Text("Ask ${agent.name}...") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    singleLine = true,
+                    keyboardActions = KeyboardActions(onDone = { onSend() }),
                 )
                 Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = onSend,
-                    enabled = input.isNotBlank(),
-                ) {
+                IconButton(onClick = onSend, enabled = input.isNotBlank()) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                 }
             }
@@ -511,32 +491,30 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
         "agent" -> {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.Start,
             ) {
-                AgentAvatar(agent, 30.dp, showStatus = false)
-                Spacer(Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.weight(1f, fill = false),
                 ) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        SelectionContainer {
-                            Text(
-                                text = message.content,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(
-                                text = Time.clock(message.createdAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                            CopyMessageButton(message.content)
+                            AgentAvatar(agent, 32.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = message.content,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                CopyMessageButton(message.content)
+                            }
                         }
                     }
                 }
@@ -559,151 +537,19 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(
-                        text = "CONNECTOR RESULT",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
-            }
-        }
-        else -> {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<DiaryEntryEntity>) {
-    val pagedDiary by viewModel.pagedDiary.collectAsStateWithLifecycle()
-    val diaryPagination by viewModel.diaryPagination.collectAsStateWithLifecycle()
-
-    // Load initial data
-    LaunchedEffect(Unit) {
-        viewModel.loadPagedDiary(agentId, refresh = true)
-    }
-
-    if (pagedDiary.isEmpty() && !diaryPagination.isLoading) {
-        EmptyState(
-            title = "No diary yet",
-            body = "Start autonomy or send a message. Every cycle produces a private thought here.",
-        )
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(pagedDiary, key = { it.id }) { entry ->
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Pill(text = entry.kind)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = Time.dateTime(entry.createdAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(entry.content, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "★".repeat(entry.importance.coerceIn(1, 5)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-
-            // Load more indicator
-            if (diaryPagination.hasMore) {
-                item {
-                    if (diaryPagination.isLoading) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else {
-                        TextButton(
-                            onClick = { viewModel.loadPagedDiary(agentId) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        ) {
-                            Text("Load more")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TasksTab(tasks: List<TaskEntity>) {
-    if (tasks.isEmpty()) {
-        EmptyState(
-            title = "No tasks yet",
-            body = "Agents can create tasks when they want to track a plan. They will show up here.",
-        )
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(tasks, key = { it.id }) { task ->
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(task.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            Pill(text = task.status)
-                        }
-                        if (task.description.isNotBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = task.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { (task.progress.coerceIn(0, 100)) / 100f },
-                            modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Tool",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = "${task.progress}% · updated ${Time.relativeTime(task.updatedAt)}",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = message.content,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -714,57 +560,74 @@ private fun TasksTab(tasks: List<TaskEntity>) {
 }
 
 @Composable
-private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        if (memories.isEmpty()) {
+private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<DiaryEntryEntity>) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (diary.isEmpty()) {
             EmptyState(
-                title = "No long-term memory",
-                body = "Agents store facts, values, and plans here. Add one yourself if you want them to remember something.",
+                title = "Diary is empty",
+                body = "${viewModel.agents.collectAsStateWithLifecycle().value.firstOrNull { it.id == agentId }?.name ?: "Agent"} hasn't written anything yet.",
             )
         } else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(16.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(memories, key = { it.id }) { memory ->
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Pill(text = memory.kind)
-                                    Spacer(Modifier.weight(1f))
-                                    Text(
-                                        text = Time.relativeTime(memory.createdAt),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Text(memory.content, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                }
+            diary.forEach { entry ->
+                DiaryEntryCard(entry)
             }
         }
-        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 4.dp) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(onClick = onAdd) { Text("Add") }
+    }
+}
+
+@Composable
+private fun TasksTab(tasks: List<TaskEntity>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (tasks.isEmpty()) {
+            EmptyState(
+                title = "No tasks",
+                body = "Tasks created by agents will appear here.",
+            )
+        } else {
+            tasks.forEach { task ->
+                TaskCard(task)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Memories", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onAdd) {
+                Text("Add")
+            }
+        }
+        if (memories.isEmpty()) {
+            EmptyState(
+                title = "No memories",
+                body = "Memories help agents remember important facts across conversations.",
+            )
+        } else {
+            memories.forEach { memory ->
+                MemoryCard(memory)
             }
         }
     }
@@ -781,17 +644,10 @@ private fun EditAgentDialog(
     var role by remember { mutableStateOf(agent.role) }
     var persona by remember { mutableStateOf(agent.persona) }
     var goal by remember { mutableStateOf(agent.goal) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var token by remember { mutableStateOf(agent.apiToken) }
-    var granted by remember {
-        mutableStateOf(
-            agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }.toSet(),
-        )
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(agent.name) },
+        title = { Text("Edit Agent") },
         text = {
             Column(
                 modifier = Modifier
@@ -817,98 +673,33 @@ private fun EditAgentDialog(
                     value = persona,
                     onValueChange = { persona = it },
                     label = { Text("Persona") },
-                    minLines = 3,
-                    maxLines = 6,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 180.dp),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = goal,
                     onValueChange = { goal = it },
                     label = { Text("Goal") },
-                    minLines = 2,
-                    // Without a ceiling a long goal grows past the dialog and pushes the buttons
-                    // off screen, so the field scrolls internally instead of consuming the sheet.
-                    maxLines = 6,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 180.dp),
-                )
-                Text("Can use", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    text = "Leave every chip off to allow all connectors. Picking any chip limits this agent to those.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Column {
-                    com.agoria.app.core.ConnectorCatalog.all.chunked(2).forEach { pair ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            pair.forEach { def ->
-                                FilterChip(
-                                    selected = def.id in granted,
-                                    onClick = {
-                                        granted = if (def.id in granted) granted - def.id else granted + def.id
-                                    },
-                                    label = { Text(def.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                )
-                            }
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = token,
-                    onValueChange = { token = it },
-                    label = { Text("Agent token (optional)") },
-                    supportingText = { Text("Used by the HTTP connector when its Authentication is set to agent.") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TextButton(onClick = { confirmDelete = !confirmDelete }) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (confirmDelete) "Tap again to delete" else "Delete agent")
-                }
-                if (confirmDelete) {
-                    Text(
-                        text = "This permanently removes the agent and all of its data on this device.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (confirmDelete) {
-                        onDelete()
-                    } else {
-                        onSave(
-                            agent.copy(
-                                name = name.trim().ifBlank { agent.name },
-                                role = role.trim().ifBlank { agent.role },
-                                persona = persona.ifBlank { agent.persona },
-                                goal = goal.ifBlank { agent.goal },
-                                allowedConnectors = granted.sorted().joinToString(","),
-                                apiToken = token.trim(),
-                            ),
-                        )
-                    }
+                    onSave(agent.copy(name = name, role = role, persona = persona, goal = goal))
                 },
-            ) { Text(if (confirmDelete) "Delete" else "Save") }
+            ) { Text("Save") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
 @Composable
 private fun AddMemoryDialog(
     onDismiss: () -> Unit,
-    onAdd: (kind: String, content: String, importance: Int) -> Unit,
+    onAdd: (String, String, Int) -> Unit,
 ) {
     var kind by remember { mutableStateOf("fact") }
     var content by remember { mutableStateOf("") }
