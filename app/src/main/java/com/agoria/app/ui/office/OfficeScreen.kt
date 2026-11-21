@@ -18,12 +18,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Public as PublicIcon
-import androidx.compose.material.icons.filled.MyLocation as MyLocationIcon
-import androidx.compose.material.icons.automirrored.filled.List as ListIcon
-import androidx.compose.material.icons.filled.Close as CloseIcon
-import androidx.compose.material.icons.filled.Map as MapIcon
-import androidx.compose.material.icons.filled.AutoAwesome as AutoAwesomeIcon
+import androidx.compose.material.icons.filled.Public as IconPublic
+import androidx.compose.material.icons.filled.MyLocation as IconMyLocation
+import androidx.compose.material.icons.automirrored.filled.List as IconList
+import androidx.compose.material.icons.filled.Close as IconClose
+import androidx.compose.material.icons.filled.Map as IconMap
+import androidx.compose.material.icons.filled.AutoAwesome as IconAutoAwesome
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -177,9 +177,9 @@ private fun OfficeWorldScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelIconButton(PublicIcon, "Agent browsers", onOpenBrowsers)
-                PixelIconButton(MyLocationIcon, "Reset view", { camera.reset() })
-                PixelIconButton(ListIcon, "List view", onShowList)
+                PixelIconButton(IconPublic, "Agent browsers", onOpenBrowsers)
+                PixelIconButton(IconMyLocation, "Reset view", { camera.reset() })
+                PixelIconButton(IconList, "List view", onShowList)
             }
         }
 
@@ -217,7 +217,7 @@ private fun OfficeWorldScreen(
                                 Text(selectedAgent.name.uppercase(), style = PixelLabel)
                                 Text(selectedAgent.role, style = PixelBody.copy(fontSize = 12.sp))
                             }
-                            PixelIconButton(CloseIcon, "Close", { selectedId = null })
+                            PixelIconButton(IconClose, "Close", { selectedId = null })
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -289,13 +289,13 @@ private fun OfficeListScreen(
                 actions = {
                     IconButton(onClick = onShowMap) {
                         Icon(
-                            MapIcon,
+                            IconMap,
                             contentDescription = "Map view",
                         )
                     }
                     IconButton(onClick = onOpenBrowsers) {
                         Icon(
-                            PublicIcon,
+                            IconPublic,
                             contentDescription = "Agent browsers",
                         )
                     }
@@ -324,7 +324,7 @@ private fun OfficeListScreen(
                         verticalAlignment = Alignment.Top,
                     ) {
                         Icon(
-                            AutoAwesomeIcon,
+                            IconAutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
