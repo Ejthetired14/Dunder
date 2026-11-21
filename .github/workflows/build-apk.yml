@@ -146,7 +146,21 @@ jobs:
           APKSIGNER=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
           [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
           
+          # Try multiple strategies to find the unsigned release APK
           UNSIGNED="${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}"
+          
+          # If the output is empty or file doesn't exist, search broadly
+          if [ -z "$UNSIGNED" ] || [ ! -f "$UNSIGNED" ]; then
+            echo "Primary APK path not found, searching broadly..."
+            UNSIGNED=$(find . -type f -name "*.apk" \
+              -not -name "*debug*" \
+              -not -name "*signed*" \
+              -not -path "*/build/*/intermediates/*" \
+              -not -path "*/build/*/generated/*" \
+              | head -1)
+          fi
+          
+          [ -z "$UNSIGNED" ] && { echo "No release APK found at all"; find . -name "*.apk" 2>/dev/null; exit 1; }
           [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing: $UNSIGNED"; find . -name "*.apk" 2>/dev/null; exit 1; }
           echo "Found unsigned APK: $UNSIGNED"
           
