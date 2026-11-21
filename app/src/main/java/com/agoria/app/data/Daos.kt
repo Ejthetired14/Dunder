@@ -116,7 +116,7 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<ApprovalEntity>>
 
-    @Query("SELECT * FROM approvals WHERE status = 'pending' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM approvals WHERE status IN ('pending', 'auto_pending') ORDER BY createdAt ASC")
     fun observePending(): Flow<List<ApprovalEntity>>
 
     @Query("SELECT * FROM approvals WHERE agentId = :agentId ORDER BY createdAt DESC")
@@ -125,7 +125,7 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals WHERE id = :id")
     suspend fun get(id: String): ApprovalEntity?
 
-    @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status = 'pending'")
+    @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status IN ('pending', 'auto_pending')")
     suspend fun pendingForAgent(agentId: String): List<ApprovalEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

@@ -44,7 +44,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val SPRITE_WORLD = 34f
+private const val SPRITE_WORLD = 51f
 private const val MIN_ZOOM_FIT = 1f
 private const val MAX_SCALE = 5f
 private const val DEFAULT_SCALE = 2.2f

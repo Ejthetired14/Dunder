@@ -65,7 +65,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     pendingCount = pendingCount,
                     onNavigate = { route ->
                         navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
                             launchSingleTop = true
