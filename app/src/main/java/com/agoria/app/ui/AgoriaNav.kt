@@ -67,7 +67,6 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                         // Only navigate if different tab; preserve each tab's back stack
                         if (currentRoute != route) {
                             navController.navigate(route) {
-                                popUpTo(route) { inclusive = true; saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
