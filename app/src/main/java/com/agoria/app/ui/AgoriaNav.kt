@@ -1,8 +1,6 @@
 package com.agoria.app.ui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -24,13 +22,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 import androidx.navigation.compose.NavHost
@@ -69,59 +67,35 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val currentRoute = backStackEntry?.destination?.route
     val isTopDestination = topDestinations.any { it.route == currentRoute }
 
-    // Auto-hide bottom bar state
+    // Auto-hide bottom bar. A counter bumped from the pointer listener restarts this
+    // countdown, so each touch gets the full idle time. Holding the Job in a plain
+    // local var lost it on recomposition, and a detector that ran after the screen
+    // content had consumed the touch could never bring the bar back.
     val bottomBarVisible = remember { mutableStateOf(true) }
-    var hideJob: Job? = null
+    var activityTick by remember { mutableIntStateOf(0) }
     val autoHideDelay = 3000L // 3 seconds
-    val coroutineScope = rememberCoroutineScope()
 
-    // Reset hide timer on any touch, show bar if hidden
+    LaunchedEffect(activityTick, currentRoute) {
+        if (!isTopDestination) return@LaunchedEffect
+        bottomBarVisible.value = true
+        delay(autoHideDelay)
+        bottomBarVisible.value = false
+    }
+
+    // Initial pass: observe every press before maps, lists and buttons consume it.
     val touchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
-            // Detect drag gestures (touch + movement) - onDragStart fires on first movement
-            detectDragGestures(
-                onDragStart = { _ ->
-                    if (!bottomBarVisible.value) {
-                        bottomBarVisible.value = true
-                    }
-                    hideJob?.cancel()
-                    hideJob = coroutineScope.launch {
-                        delay(autoHideDelay)
-                        bottomBarVisible.value = false
-                    }
-                },
-                onDrag = { _, _ -> },
-                onDragEnd = { },
-                onDragCancel = { },
-            )
+            awaitPointerEventScope {
+                var wasPressed = false
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val pressed = event.changes.any { it.pressed }
+                    if (pressed && !wasPressed) activityTick++
+                    wasPressed = pressed
+                }
+            }
         }
-        .pointerInput(Unit) {
-            // Detect tap gestures - onPress fires on touch down for taps
-            detectTapGestures(
-                onTap = { _ -> },
-                onDoubleTap = { _ -> },
-                onLongPress = { _ -> },
-                onPress = { _ ->
-                    if (!bottomBarVisible.value) {
-                        bottomBarVisible.value = true
-                    }
-                    hideJob?.cancel()
-                    hideJob = coroutineScope.launch {
-                        delay(autoHideDelay)
-                        bottomBarVisible.value = false
-                    }
-                },
-            )
-        }
-
-    // Initial hide timer
-    LaunchedEffect(Unit) {
-        hideJob = coroutineScope.launch {
-            delay(autoHideDelay)
-            bottomBarVisible.value = false
-        }
-    }
 
     Scaffold(
         bottomBar = {

@@ -1,7 +1,6 @@
 package com.agoria.app.ui.office
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,7 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,8 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import androidx.compose.ui.input.pointer.PointerEventPass
 import kotlinx.coroutines.delay
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.AgoriaViewModel
@@ -137,11 +135,12 @@ private fun OfficeWorldScreen(
     var debug by remember { mutableStateOf(false) }
     var debugTap by remember { mutableStateOf<Offset?>(null) }
 
-    // Auto-hide top HUD state
+    // Auto-hide top HUD. The activity counter restarts the countdown on every touch;
+    // the previous version kept its Job in a plain var and never applied the detector
+    // to the layout, so once the HUD hid it could not come back.
     val hudVisible = remember { mutableStateOf(true) }
-    var hudHideJob: Job? = null
+    var hudActivityTick by remember { mutableIntStateOf(0) }
     val hudAutoHideDelay = 3000L // 3 seconds
-    val hudCoroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(agents) { sim.sync(agents) }
     LaunchedEffect(selectedId) { sim.holdId = selectedId }
@@ -152,52 +151,34 @@ private fun OfficeWorldScreen(
     val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
     val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
 
-    // Touch detector for auto-hide HUD
+    // Show the HUD, then hide it after a few idle seconds. Every touch bumps the tick,
+    // which cancels the pending countdown and starts a fresh one.
+    LaunchedEffect(hudActivityTick) {
+        hudVisible.value = true
+        delay(hudAutoHideDelay)
+        hudVisible.value = false
+    }
+
+    // The map and its actors consume taps, so listen on the Initial pass.
     val hudTouchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
-            detectDragGestures(
-                onDragStart = { _ ->
-                    if (!hudVisible.value) hudVisible.value = true
-                    hudHideJob?.cancel()
-                    hudHideJob = hudCoroutineScope.launch {
-                        delay(hudAutoHideDelay)
-                        hudVisible.value = false
-                    }
-                },
-                onDrag = { _, _ -> },
-                onDragEnd = { },
-                onDragCancel = { },
-            )
+            awaitPointerEventScope {
+                var wasPressed = false
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val pressed = event.changes.any { it.pressed }
+                    if (pressed && !wasPressed) hudActivityTick++
+                    wasPressed = pressed
+                }
+            }
         }
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onTap = { _ -> },
-                onDoubleTap = { _ -> },
-                onLongPress = { _ -> },
-                onPress = { _ ->
-                    if (!hudVisible.value) hudVisible.value = true
-                    hudHideJob?.cancel()
-                    hudHideJob = hudCoroutineScope.launch {
-                        delay(hudAutoHideDelay)
-                        hudVisible.value = false
-                    }
-                },
-            )
-        }
-
-    // Initial hide timer
-    LaunchedEffect(Unit) {
-        hudHideJob = hudCoroutineScope.launch {
-            delay(hudAutoHideDelay)
-            hudVisible.value = false
-        }
-    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Pal.ink),
+            .background(Pal.ink)
+            .then(hudTouchDetector),
     ) {
         OfficeWorld(
             sim = sim,
@@ -220,10 +201,9 @@ private fun OfficeWorldScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     PixelPanel(
                         modifier = Modifier
-                            .fillMaxWidth()
                             .pointerInput(Unit) {
                                 detectTapGestures(onLongPress = {
                                     debug = !debug
