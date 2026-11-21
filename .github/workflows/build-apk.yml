@@ -120,8 +120,16 @@ jobs:
       - name: Find APKs
         run: |
           echo "=== Finding APKs ==="
+          echo "All APKs found:"
+          find . -name "*.apk" 2>/dev/null | sort
+          
           DEBUG_APK=$(find . -name "*debug*.apk" -not -path "*/build/*/intermediates/*" | head -1)
           RELEASE_APK_UNSIGNED=$(find . -name "*release*.apk" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
+          
+          # Fallback: try broader search if release not found
+          if [ -z "$RELEASE_APK_UNSIGNED" ]; then
+            RELEASE_APK_UNSIGNED=$(find . -name "*.apk" -not -name "*debug*" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
+          fi
           
           echo "DEBUG_APK=$DEBUG_APK" >> $GITHUB_OUTPUT
           echo "RELEASE_APK_UNSIGNED=$RELEASE_APK_UNSIGNED" >> $GITHUB_OUTPUT
