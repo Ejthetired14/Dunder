@@ -1,7 +1,6 @@
 package com.agoria.app.ui
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Home
@@ -42,11 +41,11 @@ private data class TopDestination(
 )
 
 private val topDestinations = listOf(
-    TopDestination("home", "Home", Icons.Default.Home),
-    TopDestination("office", "Office", Icons.Default.Business),
-    TopDestination("project", "Project", Icons.Default.Folder),
-    TopDestination("approvals", "Approvals", Icons.Default.FactCheck),
-    TopDestination("connectors", "Connect", Icons.Default.Hub),
+    TopDestination("home", "Home", Home),
+    TopDestination("office", "Office", Business),
+    TopDestination("project", "Project", Folder),
+    TopDestination("approvals", "Approvals", FactCheck),
+    TopDestination("connectors", "Connect", Hub),
 )
 
 @Composable
@@ -96,6 +95,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     viewModel = viewModel,
                     onOpenAgent = { id -> navController.navigate("agent/$id") },
                     onOpenBrowsers = { navController.navigate("browsers") },
+                    onOpenApprovals = { navController.navigate("approvals") },
                 )
             }
             composable("project") {
