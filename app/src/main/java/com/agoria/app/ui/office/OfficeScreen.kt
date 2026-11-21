@@ -68,7 +68,6 @@ import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
-import com.agoria.app.ui.office.world.statusText
 import com.agoria.app.util.Time
 import kotlin.math.roundToInt
 

@@ -1,6 +1,7 @@
 package com.agoria.app.ui.office.world
 
 import androidx.compose.ui.geometry.Rect
+import kotlin.collections.HashMap
 import kotlin.math.hypot
 
 /** Sprite sheet rows: down, left, right, up. */

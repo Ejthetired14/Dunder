@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.agoria.app.data.AgentEntity
+import kotlin.collections.HashMap
 import kotlin.comparisons.compareBy
 import kotlin.math.abs
 import kotlin.math.hypot
