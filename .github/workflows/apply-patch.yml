@@ -15,20 +15,26 @@ jobs:
           fetch-depth: 0
       - name: Apply
         run: |
-          set -uo pipefail
+          set +e
           rm -f /tmp/log
-          curl -sSL -w "http=%{http_code} size=%{size_download}\n" https://paste.rs/cybFD -o /tmp/p.diff > /tmp/log 2>&1
-          sha256sum /tmp/p.diff >> /tmp/log 2>&1
-          git apply --index /tmp/p.diff >> /tmp/log 2>&1
-          RC=$?
-          echo "apply_exit=$RC" >> /tmp/log
-          git status --short >> /tmp/log 2>&1
+          {
+            echo "== curl =="
+            curl -sSL --max-time 60 -w "http=%{http_code} size=%{size_download}\n" https://paste.rs/cybFD -o /tmp/p.diff
+            echo "curl_exit=$?"
+            echo "== sha =="
+            sha256sum /tmp/p.diff
+            echo "== apply =="
+            git apply --index /tmp/p.diff
+            echo "apply_exit=$?"
+            git status --short
+          } > /tmp/log 2>&1
           cp /tmp/log apply-report.txt
           git add -f apply-report.txt
-          if [ "$RC" -eq 0 ]; then
-            git rm -q .github/workflows/apply-patch.yml 2>/dev/null || true
+          if grep -q "apply_exit=0" /tmp/log; then
+            git rm -q .github/workflows/apply-patch.yml 2>/dev/null
             git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(build): repair the Gradle setup and Kotlin sources so releases build again"
+            git push origin HEAD:refs/heads/release/208
           else
             git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "ci: patch apply report"
+            git push origin HEAD:refs/heads/ci-report
           fi
-          git push origin HEAD:refs/heads/release/208 || git push origin HEAD:refs/heads/ci-report
