@@ -94,7 +94,7 @@ fun OfficeScreen(
     onOpenApprovals: () -> Unit = {},
 ) {
     // Scope OfficeViewModel to the root nav graph so it survives tab switching
-    val rootEntry = navController.getBackStackEntry(navController.graph.startDestinationId)
+    val rootEntry = navController.getBackStackEntry("home")
     val officeViewModel: OfficeViewModel = viewModel(rootEntry)
     val sim = officeViewModel.sim
     val camera = officeViewModel.camera
