@@ -135,7 +135,7 @@ private fun OfficeWorldScreen(
     var debugTap by remember { mutableStateOf<Offset?>(null) }
 
     // Auto-hide top HUD state
-    val hudVisible by remember { mutableStateOf(true) }
+    val hudVisible = remember { mutableStateOf(true) }
     var hudHideJob: Job? = null
     val hudAutoHideDelay = 3000L // 3 seconds
     val hudCoroutineScope = rememberCoroutineScope()
@@ -155,11 +155,11 @@ private fun OfficeWorldScreen(
         .pointerInput(Unit) {
             detectDragGestures(
                 onDragStart = { _ ->
-                    if (!hudVisible) hudVisible = true
+                    if (!hudVisible.value) hudVisible.value = true
                     hudHideJob?.cancel()
                     hudHideJob = hudCoroutineScope.launch {
                         delay(hudAutoHideDelay)
-                        hudVisible = false
+                        hudVisible.value = false
                     }
                 },
                 onDrag = { _, _ -> },
@@ -173,11 +173,11 @@ private fun OfficeWorldScreen(
                 onDoubleTap = { _ -> },
                 onLongPress = { _ -> },
                 onPress = { _ ->
-                    if (!hudVisible) hudVisible = true
+                    if (!hudVisible.value) hudVisible.value = true
                     hudHideJob?.cancel()
                     hudHideJob = hudCoroutineScope.launch {
                         delay(hudAutoHideDelay)
-                        hudVisible = false
+                        hudVisible.value = false
                     }
                 },
             )
@@ -187,7 +187,7 @@ private fun OfficeWorldScreen(
     LaunchedEffect(Unit) {
         hudHideJob = hudCoroutineScope.launch {
             delay(hudAutoHideDelay)
-            hudVisible = false
+            hudVisible.value = false
         }
     }
 
@@ -208,7 +208,7 @@ private fun OfficeWorldScreen(
         )
 
         // Top HUD (auto-hide)
-        if (hudVisible) {
+        if (hudVisible.value) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
