@@ -37,10 +37,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.browser.BrowserHub
@@ -126,7 +128,7 @@ fun BrowsersScreen(
 ) {
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val sessions by BrowserHub.sessions.collectAsStateWithLifecycle()
-    var expanded by remember { mutableStateOf(false) }
+    val expanded = remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -147,20 +149,20 @@ fun BrowsersScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { expanded = !expanded }) {
+                    IconButton(onClick = { expanded.value = !expanded.value }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More options")
                     }
                     DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
+                        expanded = expanded.value,
+                        onDismissRequest = { expanded.value = false },
                     ) {
-                        DropdownMenuItem(onClick = { expanded = false; BrowserHub.reloadAll() }) {
+                        DropdownMenuItem(onClick = { expanded.value = false; BrowserHub.reloadAll() }) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(24.dp).padding(end = 12.dp))
                                 Text("Refresh all")
                             }
                         }
-                        DropdownMenuItem(onClick = { expanded = false }) {
+                        DropdownMenuItem(onClick = { expanded.value = false }) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(24.dp).padding(end = 12.dp))
                                 Text("Settings")
