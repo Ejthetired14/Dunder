@@ -980,7 +980,25 @@ class ConnectorExecutor(
                 val response = http("GET", "https://api.github.com/user/repos?per_page=20&sort=updated", headers)
                 if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
                 val array = jsonArray(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
-                if (array.length() == 0) return ConnectorResult(true, "This token cannot reach any repositories yet.")
+                if (array.length() == 0) {
+                    // /user/repos only lists repositories the token's own account owns or
+                    // collaborates on. A token can still reach a repository outside that list
+                    // ("Ejthetired14/Dunder" answered 200 while this call returned nothing), so
+                    // probe the repository saved in the connector before reporting emptiness.
+                    val saved = cfg(config, "repo")
+                        ?: return ConnectorResult(
+                            true,
+                            "This token's account owns no repositories and is not listed as a " +
+                                "collaborator on any. Save a default repository (owner/name) in this " +
+                                "connector, then list again.",
+                        )
+                    val probe = http("GET", "https://api.github.com/repos/$saved", headers)
+                    return if (probe.ok) {
+                        ConnectorResult(true, "Repositories this token can reach:\n- $saved")
+                    } else {
+                        ConnectorResult(false, "The token cannot read $saved (GitHub ${probe.code}).")
+                    }
+                }
                 val sb = StringBuilder("Repositories this token can reach:\n")
                 for (i in 0 until array.length()) {
                     val repo = array.optJSONObject(i) ?: continue
@@ -994,7 +1012,8 @@ class ConnectorExecutor(
                 val repoName = repoOf()
                     ?: return ConnectorResult(
                         false,
-                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
                 val response = http("GET", "https://api.github.com/repos/$repoName", headers)
                 if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
@@ -1011,7 +1030,8 @@ class ConnectorExecutor(
                 val repoName = repoOf()
                     ?: return ConnectorResult(
                         false,
-                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
                 val state = args.optString("state", "open")
                 val response = http(
@@ -1036,7 +1056,8 @@ class ConnectorExecutor(
                 val repoName = repoOf()
                     ?: return ConnectorResult(
                         false,
-                        "This token reaches more than one repository. Pass \"repo\": \"owner/name\" with the action.",
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val body = args.optString("body", "")

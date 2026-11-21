@@ -212,6 +212,7 @@ object ConnectorCatalog {
             auth = ConnectorAuth.BOT_TOKEN,
             fields = listOf(
                 ConnectorField("token", "Fine-grained token", "The token decides which repositories are reachable, so there is no owner/name to fill in.", true, true, "github_pat_..."),
+                ConnectorField("repo", "Default repository", "Optional. owner/name used by actions that do not pass a repo. Needed when the token reaches a repository the token's own account does not own.", false, false, "Ejthetired14/Dunder"),
             ),
             actions = listOf(
                 ConnectorActionDef("whoami", "Who am I", "Check the token and the account it belongs to.", false, "{}"),
