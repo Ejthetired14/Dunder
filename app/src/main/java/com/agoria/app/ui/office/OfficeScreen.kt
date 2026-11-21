@@ -172,8 +172,8 @@ private fun OfficeWorldScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
-                PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
+                PixelIconButton(Icons.Filled.Public, "Agent browsers", onOpenBrowsers)
+                PixelIconButton(Icons.Filled.MyLocation, "Reset view", { camera.reset() })
                 PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
             }
         }
@@ -212,7 +212,7 @@ private fun OfficeWorldScreen(
                                 Text(selectedAgent.name.uppercase(), style = PixelLabel)
                                 Text(selectedAgent.role, style = PixelBody.copy(fontSize = 12.sp))
                             }
-                            PixelIconButton(Icons.Default.Close, "Close", { selectedId = null })
+                            PixelIconButton(Icons.Filled.Close, "Close", { selectedId = null })
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -284,13 +284,13 @@ private fun OfficeListScreen(
                 actions = {
                     IconButton(onClick = onShowMap) {
                         Icon(
-                            Icons.Default.Map,
+                            Icons.Filled.Map,
                             contentDescription = "Map view",
                         )
                     }
                     IconButton(onClick = onOpenBrowsers) {
                         Icon(
-                            Icons.Default.Public,
+                            Icons.Filled.Public,
                             contentDescription = "Agent browsers",
                         )
                     }
@@ -319,7 +319,7 @@ private fun OfficeListScreen(
                         verticalAlignment = Alignment.Top,
                     ) {
                         Icon(
-                            Icons.Default.AutoAwesome,
+                            Icons.Filled.AutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
