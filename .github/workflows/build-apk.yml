@@ -146,6 +146,10 @@ jobs:
           APKSIGNER=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
           [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
           
+          # Debug: list ALL APKs in the workspace
+          echo "=== ALL APKs in workspace ==="
+          find . -type f -name "*.apk" 2>/dev/null | sort
+          
           # Try multiple strategies to find the unsigned release APK
           UNSIGNED="${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}"
           
@@ -157,6 +161,15 @@ jobs:
               -not -name "*signed*" \
               -not -path "*/build/*/intermediates/*" \
               -not -path "*/build/*/generated/*" \
+              | head -1)
+          fi
+          
+          # Final fallback: any APK that's not debug or signed
+          if [ -z "$UNSIGNED" ] || [ ! -f "$UNSIGNED" ]; then
+            echo "Still not found, trying any non-debug non-signed APK..."
+            UNSIGNED=$(find . -type f -name "*.apk" \
+              -not -name "*debug*" \
+              -not -name "*signed*" \
               | head -1)
           fi
           
