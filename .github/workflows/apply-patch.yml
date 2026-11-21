@@ -26,9 +26,9 @@ jobs:
           cp /tmp/log apply-report.txt
           git add -f apply-report.txt
           if [ "$RC" -eq 0 ]; then
-            git rm -q .github/workflows/apply-patch.yml
+            git rm -q .github/workflows/apply-patch.yml 2>/dev/null || true
             git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(build): repair the Gradle setup and Kotlin sources so releases build again"
           else
             git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "ci: patch apply report"
           fi
-          git push origin HEAD:main
+          git push origin HEAD:refs/heads/release/208 || git push origin HEAD:refs/heads/ci-report
