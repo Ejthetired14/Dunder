@@ -1,6 +1,8 @@
 package com.agoria.app.ui.agent
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.isScrollInProgress
+import androidx.compose.foundation.gestures.NestedScrollConnection
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.enterExit.fadeIn
+import androidx.compose.animation.enterExit.fadeOut
+import androidx.compose.animation.enterExit.shrinkVertically
+import androidx.compose.animation.enterExit.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -59,24 +69,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import android.net.Uri
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
@@ -106,46 +117,32 @@ fun AgentScreen(
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val agent = agents.firstOrNull { it.id == agentId }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(agent?.name ?: "Agent") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (agent != null) {
-                        IconButton(
-                            onClick = {
-                                if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (agent.autonomy) "Pause" else "Resume",
-                            )
+    if (agent == null) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Agent") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        if (agent == null) {
+                    },
+                )
+            },
+        ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 EmptyState(
                     title = "Agent not found",
                     body = "This agent may have been deleted.",
                 )
             }
-        } else {
-            AgentContent(
-                viewModel = viewModel,
-                agent = agent,
-                onBack = onBack,
-            )
         }
+    } else {
+        AgentContent(
+            viewModel = viewModel,
+            agent = agent,
+            onBack = onBack,
+        )
     }
 }
 
@@ -175,16 +172,26 @@ private fun AgentContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding(),
+            .imePadding()
+            .nestedScroll(rememberHideHeaderNestedScrollConnection().first),
     ) {
-        AgentHeader(
-            agent = agent,
-            onToggle = {
-                if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
-            },
-            onEdit = { showEdit = true },
-            onDelete = { showDelete = true },
-        )
+        // Collapsing header that hides on scroll down, shows on scroll up
+        val headerVisible = rememberHideHeaderNestedScrollConnection().second
+
+        AnimatedVisibility(
+            visible = headerVisible.value,
+            enter = fadeIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
+            exit = fadeOut(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + shrinkVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
+        ) {
+            AgentHeader(
+                agent = agent,
+                onToggle = {
+                    if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
+                },
+                onEdit = { showEdit = true },
+                onDelete = { showDelete = true },
+            )
+        }
 
         TabRow(selectedTabIndex = tab) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Chat") })
@@ -930,4 +937,26 @@ private fun AddMemoryDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun rememberHideHeaderNestedScrollConnection(): Pair<NestedScrollConnection, androidx.compose.runtime.State<Boolean>> {
+    val accumulatedScroll = remember { mutableStateOf(0f) }
+    val headerVisible = remember { mutableStateOf(true) }
+    val connection = remember {
+        NestedScrollConnection(
+            onPostScroll = { dy, available ->
+                accumulatedScroll.value = (accumulatedScroll.value + dy).coerceAtLeast(0f)
+                
+                // Hide header when scrolling down past 80px, show when scrolling up near top
+                if (accumulatedScroll.value > 80.dp.toPx()) {
+                    headerVisible.value = false
+                } else if (accumulatedScroll.value < 20.dp.toPx()) {
+                    headerVisible.value = true
+                }
+                Offset.Zero
+            },
+        )
+    }
+    return connection to headerVisible
 }
