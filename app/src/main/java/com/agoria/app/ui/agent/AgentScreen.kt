@@ -1,7 +1,6 @@
 package com.agoria.app.ui.agent
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.NestedScrollConnection
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.nestedScroll
-import androidx.compose.foundation.layout.dp
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.enterExit.fadeIn
@@ -79,9 +75,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toPx
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
@@ -171,17 +165,31 @@ private fun AgentContent(
     var showDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    val (nestedScrollConnection, headerVisible) = rememberHideHeaderNestedScrollConnection()
+    // Track header visibility based on scroll direction
+    val headerVisible by remember { mutableStateOf(true) }
+    val lastFirstVisibleIndex = remember { mutableStateOf(0) }
+    
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { index ->
+                if (index > lastFirstVisibleIndex.value && index > 2) {
+                    headerVisible.value = false
+                } else if (index < lastFirstVisibleIndex.value || index <= 2) {
+                    headerVisible.value = true
+                }
+                lastFirstVisibleIndex.value = index
+            }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
-            .nestedScroll(nestedScrollConnection),
+            .imePadding(),
     ) {
         // Collapsing header that hides on scroll down, shows on scroll up
         AnimatedVisibility(
-            visible = headerVisible.value,
+            visible = headerVisible,
             enter = fadeIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
             exit = fadeOut(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + shrinkVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
         ) {
@@ -939,26 +947,4 @@ private fun AddMemoryDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
-}
-
-@Composable
-private fun rememberHideHeaderNestedScrollConnection(): Pair<NestedScrollConnection, androidx.compose.runtime.State<Boolean>> {
-    val accumulatedScroll = remember { mutableStateOf(0f) }
-    val headerVisible = remember { mutableStateOf(true) }
-    val connection = remember {
-        NestedScrollConnection(
-            onPostScroll = { dy, available ->
-                accumulatedScroll.value = (accumulatedScroll.value + dy).coerceAtLeast(0f)
-                
-                // Hide header when scrolling down past 80px, show when scrolling up near top
-                if (accumulatedScroll.value > 80.dp.toPx()) {
-                    headerVisible.value = false
-                } else if (accumulatedScroll.value < 20.dp.toPx()) {
-                    headerVisible.value = true
-                }
-                androidx.compose.ui.geometry.Offset.Zero
-            },
-        )
-    }
-    return connection to headerVisible
 }
