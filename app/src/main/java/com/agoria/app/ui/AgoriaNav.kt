@@ -1,6 +1,6 @@
 package com.agoria.app.ui
 
-import androidx.compose.foundation.Box
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -70,7 +70,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
 
     // Auto-hide bottom bar state
     val bottomBarVisible by remember { mutableStateOf(true) }
-    val hideJob = remember { mutableStateOf<Job?>(null) }
+    val hideJob: androidx.compose.runtime.MutableState<Job?> = remember { mutableStateOf<Job?>(null) }
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
 
