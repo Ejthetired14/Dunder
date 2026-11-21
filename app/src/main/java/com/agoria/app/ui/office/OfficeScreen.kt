@@ -18,10 +18,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List as ListIcon
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Map as MapIcon
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.statusText
 import com.agoria.app.util.Time
 import kotlin.math.roundToInt
 
@@ -178,7 +180,7 @@ private fun OfficeWorldScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PixelIconButton(Public, "Agent browsers", onOpenBrowsers)
                 PixelIconButton(MyLocation, "Reset view", { camera.reset() })
-                PixelIconButton(List, "List view", onShowList)
+                PixelIconButton(ListIcon, "List view", onShowList)
             }
         }
 
@@ -288,7 +290,7 @@ private fun OfficeListScreen(
                 actions = {
                     IconButton(onClick = onShowMap) {
                         Icon(
-                            Map,
+                            MapIcon,
                             contentDescription = "Map view",
                         )
                     }

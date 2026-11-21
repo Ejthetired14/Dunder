@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawCircle
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
@@ -356,7 +355,8 @@ private fun DrawScope.drawDebug(cam: CameraState) {
     }
     for (s in g.spots) {
         val p = cam.worldToScreen(s.x, s.y)
-        drawCircle(Color(0xFFFF8A00), radius = 5.dp.toPx(), center = p, style = Stroke(2.dp.toPx()))
+        val r = 5.dp.toPx()
+        drawOval(Color(0xFFFF8A00), topLeft = Offset(p.x - r, p.y - r), size = Size(r * 2f, r * 2f), style = Stroke(2.dp.toPx()))
     }
     val d = OfficeLayout.userDesk
     val dTl = cam.worldToScreen(d.left, d.top)
