@@ -69,7 +69,6 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                             navController.navigate(route) {
                                 launchSingleTop = true
                                 restoreState = true
-                                saveState = true
                             }
                         }
                     },

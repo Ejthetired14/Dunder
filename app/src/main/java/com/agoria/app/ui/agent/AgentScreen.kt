@@ -1,7 +1,6 @@
 package com.agoria.app.ui.agent
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.isScrollInProgress
 import androidx.compose.foundation.gestures.NestedScrollConnection
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,22 +16,23 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.nestedScroll
+import androidx.compose.foundation.layout.dp
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.enterExit.fadeIn
 import androidx.compose.animation.enterExit.fadeOut
 import androidx.compose.animation.enterExit.shrinkVertically
 import androidx.compose.animation.enterExit.expandVertically
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -78,6 +78,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toPx
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -169,15 +171,15 @@ private fun AgentContent(
     var showDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
+    val (nestedScrollConnection, headerVisible) = rememberHideHeaderNestedScrollConnection()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
-            .nestedScroll(rememberHideHeaderNestedScrollConnection().first),
+            .nestedScroll(nestedScrollConnection),
     ) {
         // Collapsing header that hides on scroll down, shows on scroll up
-        val headerVisible = rememberHideHeaderNestedScrollConnection().second
-
         AnimatedVisibility(
             visible = headerVisible.value,
             enter = fadeIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
@@ -954,7 +956,7 @@ private fun rememberHideHeaderNestedScrollConnection(): Pair<NestedScrollConnect
                 } else if (accumulatedScroll.value < 20.dp.toPx()) {
                     headerVisible.value = true
                 }
-                Offset.Zero
+                androidx.compose.ui.geometry.Offset.Zero
             },
         )
     }
