@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
@@ -80,32 +79,39 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val touchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
-            // Detect any pointer down event (touch, click, etc.) for immediate response
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitFirstDown(requireUnconsumed = false)
-                    // Show bar if hidden
+            // Detect drag gestures (touch + movement) - onDragStart fires on first movement
+            detectDragGestures(
+                onDragStart = { _ ->
                     if (!bottomBarVisible.value) {
                         bottomBarVisible.value = true
                     }
-                    // Reset hide timer
                     hideJob?.cancel()
                     hideJob = coroutineScope.launch {
                         delay(autoHideDelay)
                         bottomBarVisible.value = false
                     }
-                    // Consume the event to allow normal gesture processing
-                    // We don't actually consume it, just react to it
-                }
-            }
+                },
+                onDrag = { _, _ -> },
+                onDragEnd = { },
+                onDragCancel = { },
+            )
         }
         .pointerInput(Unit) {
-            // Also handle tap gestures for normal tap behavior
+            // Detect tap gestures - onPress fires on touch down for taps
             detectTapGestures(
                 onTap = { _ -> },
                 onDoubleTap = { _ -> },
                 onLongPress = { _ -> },
-                onPress = { _ -> },
+                onPress = { _ ->
+                    if (!bottomBarVisible.value) {
+                        bottomBarVisible.value = true
+                    }
+                    hideJob?.cancel()
+                    hideJob = coroutineScope.launch {
+                        delay(autoHideDelay)
+                        bottomBarVisible.value = false
+                    }
+                },
             )
         }
 
