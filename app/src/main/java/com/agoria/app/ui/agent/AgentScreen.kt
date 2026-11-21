@@ -442,10 +442,7 @@ private fun ChatTab(
                         .weight(1f)
                         .fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Done
-                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     onDone = { onSend() },
                 )
                 Spacer(Modifier.width(8.dp))
