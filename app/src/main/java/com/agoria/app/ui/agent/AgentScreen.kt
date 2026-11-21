@@ -75,6 +75,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -435,13 +436,16 @@ private fun ChatTab(
                 OutlinedTextField(
                     value = input,
                     onValueChange = onInput,
-                    label = { androidx.compose.material3.Text("Message") },
-                    placeholder = { androidx.compose.material3.Text("Ask ${agent.name}...") },
+                    label = { Text("Message") },
+                    placeholder = { Text("Ask ${agent.name}...") },
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done
+                    ),
                     onDone = { onSend() },
                 )
                 Spacer(Modifier.width(8.dp))
@@ -662,28 +666,28 @@ private fun EditAgentDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { androidx.compose.material3.Text("Name") },
+                    label = { Text("Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = role,
                     onValueChange = { role = it },
-                    label = { androidx.compose.material3.Text("Role") },
+                    label = { Text("Role") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = persona,
                     onValueChange = { persona = it },
-                    label = { androidx.compose.material3.Text("Persona") },
+                    label = { Text("Persona") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = goal,
                     onValueChange = { goal = it },
-                    label = { androidx.compose.material3.Text("Goal") },
+                    label = { Text("Goal") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -717,13 +721,13 @@ private fun AddMemoryDialog(
                 OutlinedTextField(
                     value = kind,
                     onValueChange = { kind = it },
-                    label = { androidx.compose.material3.Text("Kind (fact, value, plan...)") },
+                    label = { Text("Kind (fact, value, plan...)") },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { androidx.compose.material3.Text("What should the agent remember?") },
+                    label = { Text("What should the agent remember?") },
                     minLines = 3,
                 )
                 Text("Importance: ${importance.toInt()}")
