@@ -47,14 +47,6 @@ jobs:
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
-      - name: Verify SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la $ANDROID_HOME/platforms/
-          ls -la $ANDROID_HOME/build-tools/
-          which apksigner || echo "apksigner not in PATH"
-          find $ANDROID_HOME -name "apksigner" -type f 2>/dev/null | head -5
-
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -72,17 +64,6 @@ jobs:
           java -version
           ./gradlew --version
 
-      - name: Pre-build environment check
-        run: |
-          echo "=== Environment ==="
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "GRADLE_OPTS=$GRADLE_OPTS"
-          echo "=== Disk space ==="
-          df -h .
-          echo "=== Memory ==="
-          free -h
-
       - name: Extract version
         id: version
         run: |
@@ -93,7 +74,6 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          set -e
           ok=0
           for i in 1 2 3; do
             echo "=== Build Debug APK attempt $i ==="
@@ -112,7 +92,6 @@ jobs:
 
       - name: Build Release APK
         run: |
-          set -e
           ok=0
           for i in 1 2 3; do
             echo "=== Build Release APK attempt $i ==="
@@ -132,25 +111,37 @@ jobs:
       - name: Find APKs
         id: find-apks
         run: |
-          echo "=== Finding APKs ==="
-          echo "All APKs found:"
-          find . -name "*.apk" 2>/dev/null | sort
+          set +e
+          echo "=== debug outputs ==="
+          ls -la app/build/outputs/apk/debug
+          echo "=== release outputs ==="
+          ls -la app/build/outputs/apk/release
+          echo "=== every apk under app/build ==="
+          find app/build -name '*.apk' | sort
 
-          DEBUG_APK=$(find . -name "*debug*.apk" -not -path "*/build/*/intermediates/*" | head -1)
-          RELEASE_APK_UNSIGNED=$(find . -name "*release*.apk" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
-
-          if [ -z "$RELEASE_APK_UNSIGNED" ]; then
-            RELEASE_APK_UNSIGNED=$(find . -name "*.apk" -not -name "*debug*" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$DEBUG_APK" ]; then
+            DEBUG_APK=$(find app/build -name '*debug*.apk' | head -1)
           fi
 
-          [ -n "$DEBUG_APK" ] || { echo "::error::No debug APK found after assembleDebug"; find . -name "*.apk"; exit 1; }
-          [ -n "$RELEASE_APK_UNSIGNED" ] || { echo "::error::No unsigned release APK found after assembleRelease"; find . -name "*.apk"; exit 1; }
+          RELEASE_APK_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
+          if [ ! -f "$RELEASE_APK_UNSIGNED" ]; then
+            RELEASE_APK_UNSIGNED=$(find app/build -name '*.apk' -not -name '*debug*' -not -name '*signed*' | head -1)
+          fi
+
+          if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
+            echo "::error::No debug APK was produced"
+            exit 1
+          fi
+          if [ -z "$RELEASE_APK_UNSIGNED" ] || [ ! -f "$RELEASE_APK_UNSIGNED" ]; then
+            echo "::error::No unsigned release APK was produced"
+            exit 1
+          fi
 
           echo "DEBUG_APK=$DEBUG_APK" >> $GITHUB_OUTPUT
           echo "RELEASE_APK_UNSIGNED=$RELEASE_APK_UNSIGNED" >> $GITHUB_OUTPUT
-
-          echo "Found debug APK: $DEBUG_APK"
-          echo "Found release unsigned APK: $RELEASE_APK_UNSIGNED"
+          echo "debug APK: $DEBUG_APK"
+          echo "release APK: $RELEASE_APK_UNSIGNED"
 
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
@@ -158,24 +149,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          APKSIGNER=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
-          [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
+          APKSIGNER=$(find "$ANDROID_HOME" -name "apksigner" -type f | head -1)
+          [ -n "$APKSIGNER" ] || { echo "::error::apksigner not found"; exit 1; }
 
           UNSIGNED="${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}"
-
-          if [ -z "$UNSIGNED" ] || [ ! -f "$UNSIGNED" ]; then
-            echo "Primary APK path not found, searching broadly..."
-            UNSIGNED=$(find . -type f -name "*.apk" \
-              -not -name "*debug*" \
-              -not -name "*signed*" \
-              -not -path "*/build/*/intermediates/*" \
-              -not -path "*/build/*/generated/*" \
-              | head -1)
-          fi
-
-          [ -z "$UNSIGNED" ] && { echo "::error::No release APK found at all"; find . -name "*.apk" 2>/dev/null; exit 1; }
-          [ ! -f "$UNSIGNED" ] && { echo "::error::Unsigned APK missing: $UNSIGNED"; find . -name "*.apk" 2>/dev/null; exit 1; }
-          echo "Found unsigned APK: $UNSIGNED"
+          [ -n "$UNSIGNED" ] && [ -f "$UNSIGNED" ] || { echo "::error::Unsigned APK missing: $UNSIGNED"; exit 1; }
+          echo "Signing $UNSIGNED"
 
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
@@ -183,7 +162,7 @@ jobs:
             ALIAS="${{ secrets.KEY_ALIAS }}"
             KPASS="${{ secrets.KEY_PASSWORD }}"
           else
-            echo "Generating temporary keystore..."
+            echo "::warning::No keystore secret configured, signing with a temporary key (updates will not install over the previous build)"
             PASS=$(openssl rand -base64 24 | tr -d "=+/")
             ALIAS="dunder-release"
             KPASS="$PASS"
@@ -191,30 +170,30 @@ jobs:
           fi
 
           SIGNED="app/build/outputs/apk/release/app-release-signed.apk"
-          mkdir -p "$(dirname "$SIGNED")"
           "$APKSIGNER" sign --ks release-key.jks --ks-pass pass:"$PASS" --ks-key-alias "$ALIAS" --key-pass pass:"$KPASS" --out "$SIGNED" "$UNSIGNED"
-          echo "Signed OK"
           echo "SIGNED_APK=$SIGNED" >> $GITHUB_OUTPUT
+          echo "Signed OK: $SIGNED"
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         id: release
         run: |
+          set -euo pipefail
           DEBUG_APK="${{ steps.find-apks.outputs.DEBUG_APK }}"
           SIGNED_APK="${{ steps.sign-apk.outputs.SIGNED_APK }}"
 
-          [ ! -f "$DEBUG_APK" ] && { echo "Debug APK not found: $DEBUG_APK"; exit 1; }
-          [ ! -f "$SIGNED_APK" ] && { echo "Signed APK not found: $SIGNED_APK"; exit 1; }
+          [ -f "$DEBUG_APK" ] || { echo "::error::Debug APK not found: $DEBUG_APK"; exit 1; }
+          [ -f "$SIGNED_APK" ] || { echo "::error::Signed APK not found: $SIGNED_APK"; exit 1; }
 
-          gh release delete ${{ github.ref_name }} --yes 2>/dev/null || true
-          gh release create ${{ github.ref_name }} \
+          gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || true
+          gh release create "${{ github.ref_name }}" \
             "$DEBUG_APK" \
             "$SIGNED_APK" \
             --title "Dunder ${{ github.ref_name }}" \
             --notes "Debug and release APKs for ${{ github.ref_name }}"
 
-          URL=$(gh release view ${{ github.ref_name }} --json url --jq .url)
-          BODY=$(gh release view ${{ github.ref_name }} --json body --jq .body | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+          URL=$(gh release view "${{ github.ref_name }}" --json url --jq .url)
+          BODY=$(gh release view "${{ github.ref_name }}" --json body --jq .body | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
           echo "html_url=$URL" >> $GITHUB_OUTPUT
           echo "body=$BODY" >> $GITHUB_OUTPUT
         env:
@@ -225,17 +204,15 @@ jobs:
         id: apk_url
         run: |
           SIGNED_APK="${{ steps.sign-apk.outputs.SIGNED_APK }}"
-          NAME=$(basename "$SIGNED_APK")
-          echo "url=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$NAME" >> $GITHUB_OUTPUT
+          echo "url=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$SIGNED_APK")" >> $GITHUB_OUTPUT
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: apks
           path: |
-            ${{ steps.find-apks.outputs.DEBUG_APK }}
-            ${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}
-            ${{ steps.sign-apk.outputs.SIGNED_APK }}
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/*.apk
           retention-days: 30
 
   deploy-pages:
@@ -247,7 +224,8 @@ jobs:
     steps:
       - name: Create latest-release.json
         run: |
-          cat > latest-release.json << 'EOF'
+          mkdir site
+          cat > site/latest-release.json << EOF
           {
             "versionName": "${{ needs.build.outputs.version_name }}",
             "versionCode": ${{ needs.build.outputs.version_code }},
@@ -258,7 +236,7 @@ jobs:
             "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           }
           EOF
-          cat latest-release.json
+          cat site/latest-release.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -266,7 +244,7 @@ jobs:
       - name: Upload Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: site
           name: latest-release
 
       - name: Deploy Pages
