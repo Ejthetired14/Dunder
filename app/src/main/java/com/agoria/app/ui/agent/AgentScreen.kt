@@ -454,7 +454,7 @@ private fun ChatTab(
 private fun CopyMessageButton(text: String) {
     val clipboard = LocalClipboardManager.current
     IconButton(
-        onClick = { clipboard.setText(text) },
+        onClick = { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) },
         modifier = Modifier.size(28.dp),
     ) {
         Icon(
