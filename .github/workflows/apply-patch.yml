@@ -30,11 +30,5 @@ jobs:
           } > /tmp/log 2>&1
           cp /tmp/log apply-report.txt
           git add -f apply-report.txt
-          if grep -q "apply_exit=0" /tmp/log; then
-            git rm -q .github/workflows/apply-patch.yml 2>/dev/null
-            git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(build): repair the Gradle setup and Kotlin sources so releases build again"
-            git push origin HEAD:refs/heads/release/208
-          else
-            git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "ci: patch apply report"
-            git push origin HEAD:refs/heads/ci-report
-          fi
+          git -c user.name="Dunder Agent" -c user.email="agent@dunder.invalid" commit -q -m "fix(build): repair the Gradle setup and Kotlin sources so releases build again"
+          git push origin HEAD:refs/heads/release/208
