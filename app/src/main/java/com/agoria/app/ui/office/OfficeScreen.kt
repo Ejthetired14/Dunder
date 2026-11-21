@@ -19,6 +19,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Public as IcoPublic
+import androidx.compose.material.icons.filled.MyLocation as IcoMyLocation
+import androidx.compose.material.icons.automirrored.filled.List as IcoList
+import androidx.compose.material.icons.filled.Close as IcoClose
+import androidx.compose.material.icons.filled.Map as IcoMap
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -172,9 +177,9 @@ private fun OfficeWorldScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelIconButton(Icons.Filled.Public, "Agent browsers", onOpenBrowsers)
-                PixelIconButton(Icons.Filled.MyLocation, "Reset view", { camera.reset() })
-                PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
+                PixelIconButton(IcoPublic, "Agent browsers", onOpenBrowsers)
+                PixelIconButton(IcoMyLocation, "Reset view", { camera.reset() })
+                PixelIconButton(IcoList, "List view", onShowList)
             }
         }
 
@@ -212,7 +217,7 @@ private fun OfficeWorldScreen(
                                 Text(selectedAgent.name.uppercase(), style = PixelLabel)
                                 Text(selectedAgent.role, style = PixelBody.copy(fontSize = 12.sp))
                             }
-                            PixelIconButton(Icons.Filled.Close, "Close", { selectedId = null })
+                            PixelIconButton(IcoClose, "Close", { selectedId = null })
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -284,13 +289,13 @@ private fun OfficeListScreen(
                 actions = {
                     IconButton(onClick = onShowMap) {
                         Icon(
-                            Icons.Filled.Map,
+                            IcoMap,
                             contentDescription = "Map view",
                         )
                     }
                     IconButton(onClick = onOpenBrowsers) {
                         Icon(
-                            Icons.Filled.Public,
+                            IcoPublic,
                             contentDescription = "Agent browsers",
                         )
                     }
