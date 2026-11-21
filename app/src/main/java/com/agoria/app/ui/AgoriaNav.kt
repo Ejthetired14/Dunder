@@ -20,11 +20,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,7 +69,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
 
     // Auto-hide bottom bar state
     val bottomBarVisible by remember { mutableStateOf(true) }
-    var hideJob: Job? by remember { mutableStateOf<Job?>(null) }
+    val hideJob = remember { mutableStateOf<Job?>(null) }
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
 
@@ -83,8 +81,8 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 onTap = { _ ->
                     if (!bottomBarVisible) return@detectTapGestures
                     // Reset hide timer
-                    hideJob?.cancel()
-                    hideJob = coroutineScope.launch {
+                    hideJob.value?.cancel()
+                    hideJob.value = coroutineScope.launch {
                         delay(autoHideDelay)
                         bottomBarVisible = false
                     }
@@ -97,7 +95,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
 
     // Initial hide timer
     LaunchedEffect(Unit) {
-        hideJob = coroutineScope.launch {
+        hideJob.value = coroutineScope.launch {
             delay(autoHideDelay)
             bottomBarVisible = false
         }
