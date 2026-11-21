@@ -138,6 +138,7 @@ object ConnectorCatalog {
             fields = emptyList(),
             actions = listOf(
                 ConnectorActionDef("info", "Device info", "Return model, Android version, battery, and time.", false, "{}"),
+                ConnectorActionDef("get_info", "Device info (alias)", "Alias for 'info' action.", false, "{}"),
                 ConnectorActionDef("notify", "Local notification", "Post a local notification on this device.", true, "{\"title\": \"...\", \"body\": \"...\"}"),
             ),
             setupHelp = "No setup needed. This connector only touches this device.",

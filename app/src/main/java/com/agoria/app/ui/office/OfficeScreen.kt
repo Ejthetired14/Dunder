@@ -1,6 +1,7 @@
 package com.agoria.app.ui.office
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
@@ -129,6 +134,12 @@ private fun OfficeWorldScreen(
     var debug by remember { mutableStateOf(false) }
     var debugTap by remember { mutableStateOf<Offset?>(null) }
 
+    // Auto-hide top HUD state
+    val hudVisible by remember { mutableStateOf(true) }
+    var hudHideJob: Job? = null
+    val hudAutoHideDelay = 3000L // 3 seconds
+    val hudCoroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(agents) { sim.sync(agents) }
     LaunchedEffect(selectedId) { sim.holdId = selectedId }
 
@@ -137,6 +148,48 @@ private fun OfficeWorldScreen(
     // Reading sim.revision here makes the card refresh when the agent changes activity.
     val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
     val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
+
+    // Touch detector for auto-hide HUD
+    val hudTouchDetector = Modifier
+        .fillMaxSize()
+        .pointerInput(Unit) {
+            detectDragGestures(
+                onDragStart = { _ ->
+                    if (!hudVisible) hudVisible = true
+                    hudHideJob?.cancel()
+                    hudHideJob = hudCoroutineScope.launch {
+                        delay(hudAutoHideDelay)
+                        hudVisible = false
+                    }
+                },
+                onDrag = { _, _ -> },
+                onDragEnd = { },
+                onDragCancel = { },
+            )
+        }
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { _ -> },
+                onDoubleTap = { _ -> },
+                onLongPress = { _ -> },
+                onPress = { _ ->
+                    if (!hudVisible) hudVisible = true
+                    hudHideJob?.cancel()
+                    hudHideJob = hudCoroutineScope.launch {
+                        delay(hudAutoHideDelay)
+                        hudVisible = false
+                    }
+                },
+            )
+        }
+
+    // Initial hide timer
+    LaunchedEffect(Unit) {
+        hudHideJob = hudCoroutineScope.launch {
+            delay(hudAutoHideDelay)
+            hudVisible = false
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -154,43 +207,49 @@ private fun OfficeWorldScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Top HUD
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column {
-                PixelPanel(
-                    modifier = Modifier.pointerInput(Unit) {
-                        detectTapGestures(onLongPress = {
-                            debug = !debug
-                            debugTap = null
-                        })
-                    },
-                ) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        Text("THE OFFICE", style = PixelLabel)
-                        Text(
-                            text = "${agents.size} agents · demo mode",
-                            style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
-                        )
+        // Top HUD (auto-hide)
+        if (hudVisible) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column {
+                    PixelPanel(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures(onLongPress = {
+                                    debug = !debug
+                                    debugTap = null
+                                })
+                            },
+                    ) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text("THE OFFICE", style = PixelLabel)
+                            Text(
+                                text = "${agents.size} agents · demo mode",
+                                style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
+                            )
+                        }
+                    }
+                    if (pending > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        PixelButton(text = "! $pending to approve", onClick = onOpenApprovals)
                     }
                 }
-                if (pending > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    PixelButton(text = "! $pending to approve", onClick = onOpenApprovals)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
+                    PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
+                    PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
-                PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
-                PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
-            }
         }
+
+        // Selected agent card
 
         if (debug) {
             PixelPanel(

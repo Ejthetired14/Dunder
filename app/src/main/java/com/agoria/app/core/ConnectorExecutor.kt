@@ -597,7 +597,7 @@ class ConnectorExecutor(
 
     private fun device(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
         return when (action) {
-            "info" -> {
+            "info", "get_info" -> {
                 val batteryManager = context.getSystemService(BatteryManager::class.java)
                 val level = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
                 ConnectorResult(

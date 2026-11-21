@@ -412,7 +412,8 @@ class AgentRuntime(
             "request_connector" -> {
                 val draft = AgentPolicy.connectorRequestFor(processed)
                 if (draft != null) {
-                    repo.addConnectorRequest(agentId, draft.connectorId, draft.reason, draft.scopes)
+                    val request = repo.addConnectorRequest(agentId, draft.connectorId, draft.reason, draft.scopes)
+                    // Connector requests don't have auto-approve, always waiting_approval
                     nextStatus = "waiting_approval"
                     log("${agent.name} requested connector ${draft.connectorId}.")
                 } else {
@@ -441,7 +442,7 @@ class AgentRuntime(
                     log("${agent.name} used $connectorId.$actionName")
                 } else {
                     val def = ConnectorCatalog.get(connectorId)
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to use ${def?.name ?: connectorId}",
@@ -449,14 +450,14 @@ class AgentRuntime(
                         details = input.toString(2),
                         risk = def?.risk ?: "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                     log("${agent.name} requested approval for $connectorId.$actionName.")
                 }
             }
 
             "request_approval" -> {
                 val draft = AgentPolicy.approvalFor(processed, agent.name)
-                repo.addApproval(
+                val approval = repo.addApproval(
                     agentId = agentId,
                     type = draft.type,
                     title = draft.title,
@@ -464,13 +465,15 @@ class AgentRuntime(
                     details = draft.details,
                     risk = draft.risk,
                 )
-                nextStatus = "waiting_approval"
+                nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 log("${agent.name} requested approval: ${draft.title}")
-                Notifier.notifyApproval(
-                    context,
-                    "Approval needed: ${draft.title}",
-                    "${agent.name}: ${draft.summary}",
-                )
+                if (approval.status != "auto_pending") {
+                    Notifier.notifyApproval(
+                        context,
+                        "Approval needed: ${draft.title}",
+                        "${agent.name}: ${draft.summary}",
+                    )
+                }
             }
 
             "record_revenue" -> {
@@ -505,7 +508,7 @@ class AgentRuntime(
                     repo.addMessage(agentId, "tool", summary)
                 } else {
                     val def = ConnectorCatalog.get("cloudflare_workers")
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to deploy service '$name'",
@@ -513,7 +516,7 @@ class AgentRuntime(
                         details = JSONObject().put("name", name).put("code", code.take(2000)).put("routes", routes).toString(2),
                         risk = "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 }
             }
 
@@ -544,7 +547,7 @@ class AgentRuntime(
                     }
                 } else {
                     val def = ConnectorCatalog.get("stripe")
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to create Stripe product '$productName'",
@@ -552,7 +555,7 @@ class AgentRuntime(
                         details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
                         risk = "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 }
             }
 
