@@ -117,14 +117,14 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Settings, contentDescription = "Settings")
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Add, contentDescription = "Add agent")
+                Icon(Icons.Filled.Add, contentDescription = "Add agent")
             }
         },
     ) { padding ->
@@ -172,7 +172,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                FactCheck,
+                                Icons.Filled.FactCheck,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onErrorContainer,
                             )
@@ -385,7 +385,7 @@ private fun RuntimeCard(
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    AutoAwesome,
+                    Icons.Filled.AutoAwesome,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
@@ -424,12 +424,12 @@ private fun RuntimeCard(
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRunNow) {
-                    Icon(PlayArrow, contentDescription = null)
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Run one cycle")
                 }
                 TextButton(onClick = onNudge) {
-                    Icon(Bolt, contentDescription = null)
+                    Icon(Icons.Filled.Bolt, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Nudge everyone")
                 }

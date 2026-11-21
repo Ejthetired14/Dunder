@@ -319,7 +319,7 @@ private fun ConnectorLogRow(log: ConnectorLogEntity) {
     ) {
         Row(Modifier.padding(12.dp)) {
             Icon(
-                imageVector = if (log.status == "ok") CheckCircle else ErrorOutline,
+                imageVector = if (log.status == "ok") Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
                 contentDescription = null,
                 tint = if (log.status == "ok") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
             )
@@ -434,14 +434,14 @@ private fun ConnectorSetupDialog(
  */
 private fun sanitizeConfigValue(input: String): String {
     return input.trim().filter { ch ->
-        val cp = ch.codePointAt(0)
+        val cp = ch.code
         // Allow ASCII printable range
         if (cp in 0x20..0x7E) return@filter true
         // Block known problematic invisible/control characters
         when (cp) {
-            0x00..0x1F -> false // C0 controls
-            0x7F..0x9F -> false // DEL + C1 controls
-            0x00A0 -> false     // Non-breaking space
+            in 0x00..0x1F -> false // C0 controls
+            in 0x7F..0x9F -> false // DEL + C1 controls
+            in 0x00A0..0x00A0 -> false     // Non-breaking space
             0x1680 -> false     // Ogham space mark
             in 0x2000..0x200A -> false // En quad, em quad, en space, em space, etc.
             in 0x200B..0x200D -> false // Zero-width space, ZWNJ, ZWJ

@@ -1,19 +1,33 @@
 package com.agoria.app.ui.agent
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -105,7 +119,7 @@ fun AgentScreen(
                 title = { Text(agent?.name ?: "Agent") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -116,7 +130,7 @@ fun AgentScreen(
                             },
                         ) {
                             Icon(
-                                imageVector = if (agent.autonomy) Pause else PlayArrow,
+                                imageVector = if (agent.autonomy) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (agent.autonomy) "Pause" else "Resume",
                             )
                         }
@@ -285,7 +299,7 @@ private fun AgentHeader(
                     )
                 }
                 TextButton(onClick = onEdit) {
-                    Icon(Edit, contentDescription = "Edit")
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     Spacer(Modifier.width(6.dp))
                     Text("Edit")
                 }
@@ -379,7 +393,7 @@ private fun ChatTab(
                     onClick = onSend,
                     enabled = input.isNotBlank(),
                 ) {
-                    Icon(Send, contentDescription = "Send")
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                 }
             }
         }
@@ -391,7 +405,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
     val context = LocalContext.current
     val copyToClipboard = { text: String ->
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.primaryClip = ClipData.newPlainText("Agent Message", text)
+        clipboard.setPrimaryClip(ClipData.newPlainText("Agent Message", text))
         // Could add a toast here, but keeping it simple
     }
 
@@ -441,7 +455,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             IconButton(onClick = { copyToClipboard(message.content) }) {
-                                Icon(ContentCopy, contentDescription = "Copy message")
+                                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy message")
                             }
                         }
                         Text(
@@ -491,7 +505,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
                         IconButton(onClick = { copyToClipboard(message.content) }) {
-                            Icon(ContentCopy, contentDescription = "Copy result")
+                            Icon(Icons.Filled.ContentCopy, contentDescription = "Copy result")
                         }
                     }
                     Text(
@@ -670,7 +684,7 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
                 horizontalArrangement = Arrangement.End,
             ) {
                 Button(onClick = onAdd) {
-                    Icon(Add, contentDescription = null)
+                    Icon(Icons.Filled.Add, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add memory")
                 }
@@ -759,7 +773,7 @@ private fun BuildsTab(
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { onShare(build) }) {
-                                    Icon(Share, contentDescription = null)
+                                    Icon(Icons.Filled.Share, contentDescription = null)
                                     Spacer(Modifier.width(6.dp))
                                     Text("Share ZIP")
                                 }
@@ -778,7 +792,7 @@ private fun BuildsTab(
                                         Spacer(Modifier.width(6.dp))
                                         Text("Saving...")
                                     } else {
-                                        Icon(Download, contentDescription = null)
+                                        Icon(Icons.Filled.Download, contentDescription = null)
                                         Spacer(Modifier.width(6.dp))
                                         Text("Save to Device")
                                     }
@@ -918,7 +932,7 @@ private fun EditAgentDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 TextButton(onClick = { confirmDelete = !confirmDelete }) {
-                    Icon(Delete, contentDescription = null)
+                    Icon(Icons.Filled.Delete, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(if (confirmDelete) "Tap again to delete" else "Delete agent")
                 }

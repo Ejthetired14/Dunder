@@ -313,7 +313,7 @@ fun EmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = AutoAwesome,
+            imageVector = Icons.Filled.AutoAwesome,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
@@ -331,23 +331,23 @@ fun EmptyState(
 
 fun connectorIcon(iconKey: String): ImageVector {
     return when (iconKey) {
-        "wikipedia" -> Language
-        "hn" -> Newspaper
-        "search" -> Search
-        "weather" -> Cloud
-        "currency" -> AttachMoney
-        "device" -> PhoneAndroid
-        "files" -> Folder
-        "http" -> Hub
-        "gmail" -> Email
-        "calendar" -> CalendarMonth
-        "github" -> Code
-        "slack", "discord", "telegram" -> Chat
-        "notion" -> Description
-        "paypal", "polar" -> AttachMoney
-        "agentmail" -> Email
-        "gdrive" -> Folder
-        else -> Hub
+        "wikipedia" -> Icons.Filled.Language
+        "hn" -> Icons.Filled.Newspaper
+        "search" -> Icons.Filled.Search
+        "weather" -> Icons.Filled.Cloud
+        "currency" -> Icons.Filled.AttachMoney
+        "device" -> Icons.Filled.PhoneAndroid
+        "files" -> Icons.Filled.Folder
+        "http" -> Icons.Filled.Hub
+        "gmail" -> Icons.Filled.Email
+        "calendar" -> Icons.Filled.CalendarMonth
+        "github" -> Icons.Filled.Code
+        "slack", "discord", "telegram" -> Icons.Filled.Chat
+        "notion" -> Icons.Filled.Description
+        "paypal", "polar" -> Icons.Filled.AttachMoney
+        "agentmail" -> Icons.Filled.Email
+        "gdrive" -> Icons.Filled.Folder
+        else -> Icons.Filled.Hub
     }
 }
 
@@ -359,7 +359,7 @@ fun OfficeThumbnail(modifier: Modifier = Modifier) {
             .background(colors.primaryContainer)
     ) {
         Icon(
-            imageVector = Hub,
+            imageVector = Icons.Filled.Hub,
             contentDescription = null,
             tint = colors.onPrimaryContainer.copy(alpha = 0.3f),
             modifier = Modifier

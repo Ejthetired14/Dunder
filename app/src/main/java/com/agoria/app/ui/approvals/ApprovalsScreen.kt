@@ -108,7 +108,7 @@ fun ApprovalsScreen(
                 },
                 actions = {
                     IconButton(onClick = { showAutoApproveDialog = true }) {
-                        Icon(Settings, contentDescription = "Auto-approve settings")
+                        Icon(Icons.Filled.Settings, contentDescription = "Auto-approve settings")
                     }
                 },
             )

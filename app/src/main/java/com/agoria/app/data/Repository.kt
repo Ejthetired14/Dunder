@@ -318,12 +318,12 @@ private fun sanitizeJsonConfig(json: JSONObject): JSONObject {
 
 private fun sanitizeConfigValue(input: String): String {
     return input.trim().filter { ch ->
-        val cp = ch.codePointAt(0)
+        val cp = ch.code
         if (cp in 0x20..0x7E) return@filter true
         when (cp) {
-            0x00..0x1F -> false
-            0x7F..0x9F -> false
-            0x00A0 -> false
+            in 0x00..0x1F -> false
+            in 0x7F..0x9F -> false
+            in 0x00A0..0x00A0 -> false
             0x1680 -> false
             in 0x2000..0x200A -> false
             in 0x200B..0x200D -> false

@@ -91,7 +91,7 @@ fun OfficeScreen(
                         verticalAlignment = Alignment.Top,
                     ) {
                         Icon(
-                            AutoAwesome,
+                            Icons.Filled.AutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )

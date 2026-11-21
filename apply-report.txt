@@ -1,0 +1,20 @@
+== curl ==
+http=200 size=27257
+curl_exit=0
+== apply ==
+apply_exit=0
+M  app/build.gradle.kts
+M  app/src/main/java/com/agoria/app/core/ConnectorExecutor.kt
+M  app/src/main/java/com/agoria/app/data/Repository.kt
+M  app/src/main/java/com/agoria/app/ui/AgoriaNav.kt
+M  app/src/main/java/com/agoria/app/ui/OnboardingScreen.kt
+M  app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt
+M  app/src/main/java/com/agoria/app/ui/approvals/ApprovalsScreen.kt
+M  app/src/main/java/com/agoria/app/ui/components/Common.kt
+M  app/src/main/java/com/agoria/app/ui/connectors/ConnectorsScreen.kt
+M  app/src/main/java/com/agoria/app/ui/diary/DiaryScreen.kt
+M  app/src/main/java/com/agoria/app/ui/home/HomeScreen.kt
+M  app/src/main/java/com/agoria/app/ui/office/OfficeScreen.kt
+M  app/src/main/java/com/agoria/app/ui/settings/SettingsScreen.kt
+M  gradle/wrapper/gradle-wrapper.properties
+M  settings.gradle.kts
