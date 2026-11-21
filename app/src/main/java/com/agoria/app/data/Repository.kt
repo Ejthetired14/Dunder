@@ -377,7 +377,9 @@ class Repository(
         risk: String,
     ): ApprovalEntity {
         val s = settings()
-        val autoApprove = s.autoApproveEnabled && s.autoApproveTypes.isNotBlank() && type in s.autoApproveTypes.split(",").map { it.trim() }
+        val normalizedType = type.lowercase().trim()
+        val autoApproveTypes = s.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val autoApprove = s.autoApproveEnabled && autoApproveTypes.contains(normalizedType)
         
         val approval = ApprovalEntity(
             id = UUID.randomUUID().toString(),

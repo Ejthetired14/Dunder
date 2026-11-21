@@ -260,9 +260,9 @@ class AgentRuntime(
         val settings = repo.settings()
         if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
 
-        val autoApproveTypes = settings.autoApproveTypes.split(",").map { it.trim() }.toSet()
+        val autoApproveTypes = settings.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val autoPending = repo.approvals.first()
-            .filter { it.status == "auto_pending" && it.type in autoApproveTypes }
+            .filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
 
         autoPending.forEach { approval ->
             val decided = approval.copy(

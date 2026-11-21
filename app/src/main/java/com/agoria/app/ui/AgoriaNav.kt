@@ -1,6 +1,7 @@
 package com.agoria.app.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
@@ -78,8 +80,10 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val touchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
-            detectTapGestures(
-                onTap = { _ ->
+            // Detect any pointer down event (touch, click, etc.) for immediate response
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitFirstDown(requireUnconsumed = false)
                     // Show bar if hidden
                     if (!bottomBarVisible.value) {
                         bottomBarVisible.value = true
@@ -90,7 +94,15 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                         delay(autoHideDelay)
                         bottomBarVisible.value = false
                     }
-                },
+                    // Consume the event to allow normal gesture processing
+                    // We don't actually consume it, just react to it
+                }
+            }
+        }
+        .pointerInput(Unit) {
+            // Also handle tap gestures for normal tap behavior
+            detectTapGestures(
+                onTap = { _ -> },
                 onDoubleTap = { _ -> },
                 onLongPress = { _ -> },
                 onPress = { _ -> },

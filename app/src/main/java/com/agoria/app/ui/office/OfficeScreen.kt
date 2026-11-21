@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
@@ -84,9 +85,10 @@ fun OfficeScreen(
     onOpenBrowsers: () -> Unit = {},
     onOpenApprovals: () -> Unit = {},
 ) {
-    // Hoist OfficeSim to OfficeScreen level so it survives listMode toggle and navigation
-    val sim = remember { OfficeSim() }
-    val camera = remember { CameraState() }
+    // Use OfficeViewModel to persist sim/camera across navigation
+    val officeViewModel: OfficeViewModel = viewModel()
+    val sim = officeViewModel.sim
+    val camera = officeViewModel.camera
 
     var listMode by rememberSaveable { mutableStateOf(false) }
     if (listMode) {
