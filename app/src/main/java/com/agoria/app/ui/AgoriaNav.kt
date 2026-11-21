@@ -75,8 +75,8 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
 
-    // Reset hide timer on any touch, show bar if hidden
-    val touchDetector = Modifier
+    // Reset hide timer on any touch in content area, show bar if hidden
+    val contentTouchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
             // Detect drag gestures (touch + movement) - onDragStart fires on first movement
@@ -102,6 +102,23 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 onTap = { _ -> },
                 onDoubleTap = { _ -> },
                 onLongPress = { _ -> },
+                onPress = { _ ->
+                    if (!bottomBarVisible.value) {
+                        bottomBarVisible.value = true
+                    }
+                    hideJob?.cancel()
+                    hideJob = coroutineScope.launch {
+                        delay(autoHideDelay)
+                        bottomBarVisible.value = false
+                    }
+                },
+            )
+        }
+
+    // Simple tap detector for bottom bar - only shows bar, doesn't hide
+    val bottomBarTapDetector = Modifier
+        .pointerInput(Unit) {
+            detectTapGestures(
                 onPress = { _ ->
                     if (!bottomBarVisible.value) {
                         bottomBarVisible.value = true
@@ -142,12 +159,12 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                             }
                         }
                     },
-                    modifier = touchDetector, // Apply touch detector to bottom bar too
+                    modifier = bottomBarTapDetector,
                 )
             }
         },
     ) { innerPadding ->
-        Box(modifier = touchDetector) {
+        Box(modifier = contentTouchDetector) {
             NavHost(
                 navController = navController,
                 startDestination = "home",

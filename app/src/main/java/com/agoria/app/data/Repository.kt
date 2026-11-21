@@ -9,6 +9,7 @@ import com.agoria.app.core.ProviderSpec
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.util.Files
 import com.agoria.app.util.Json
+import com.agoria.app.util.Notifier
 import com.agoria.app.util.SecretCipher
 import com.agoria.app.util.Time
 import org.json.JSONArray
@@ -319,6 +320,12 @@ class Repository(
             createdAt = Time.now(),
         )
         db.messageDao().insert(message)
+        if (role == "agent") {
+            val agent = db.agentDao().get(agentId)
+            if (agent != null) {
+                Notifier.notifyAgentMessage(context, agent.name, content)
+            }
+        }
         return message
     }
 

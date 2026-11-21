@@ -29,8 +29,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +46,10 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.util.Time
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 
 /**
  * The visible window onto an agent's browser. The browser itself keeps running in the background;
@@ -121,6 +128,7 @@ fun BrowsersScreen(
 ) {
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val sessions by BrowserHub.sessions.collectAsStateWithLifecycle()
+    var expanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -138,6 +146,26 @@ fun BrowsersScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { expanded = !expanded }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Refresh all") },
+                            onClick = { expanded = false; BrowserHub.reloadAll() },
+                            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = { expanded = false },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        )
                     }
                 },
             )

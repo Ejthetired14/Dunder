@@ -15,6 +15,7 @@ object Notifier {
     const val CHANNEL_AUTONOMY = "autonomy"
     const val CHANNEL_APPROVALS = "approvals"
     const val CHANNEL_BUILDS = "builds"
+    const val CHANNEL_AGENT_MESSAGES = "agent_messages"
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -38,6 +39,13 @@ object Notifier {
                 "Builds",
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply { description = "A build artifact is ready to download." },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_AGENT_MESSAGES,
+                "Agent Messages",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "When an agent sends you a message in chat." },
         )
     }
 
@@ -90,5 +98,15 @@ object Notifier {
 
     fun cancelApproval(context: Context, title: String) {
         NotificationManagerCompat.from(context).cancel(title.hashCode())
+    }
+
+    fun notifyAgentMessage(context: Context, agentName: String, message: String) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        val notification = base(context, CHANNEL_AGENT_MESSAGES)
+            .setContentTitle(agentName)
+            .setContentText(message.take(100))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message.take(4000)))
+            .build()
+        NotificationManagerCompat.from(context).notify(agentName.hashCode(), notification)
     }
 }

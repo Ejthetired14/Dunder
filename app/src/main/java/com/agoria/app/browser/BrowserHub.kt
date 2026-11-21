@@ -90,6 +90,10 @@ object BrowserHub {
         main.post { view.reload() }
     }
 
+    fun reloadAll() {
+        views.keys.forEach { main.post { views[it]?.reload() } }
+    }
+
     /** Runs [onText] with the visible text of the agent's current page, or null if it has none. */
     fun readPage(agentId: String, onText: (String?) -> Unit) {
         val view = views[agentId]
