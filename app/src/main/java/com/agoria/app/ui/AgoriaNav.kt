@@ -74,13 +74,16 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
 
-    // Reset hide timer on any touch
+    // Reset hide timer on any touch, show bar if hidden
     val touchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
             detectTapGestures(
                 onTap = { _ ->
-                    if (!bottomBarVisible.value) return@detectTapGestures
+                    // Show bar if hidden
+                    if (!bottomBarVisible.value) {
+                        bottomBarVisible.value = true
+                    }
                     // Reset hide timer
                     hideJob?.cancel()
                     hideJob = coroutineScope.launch {
