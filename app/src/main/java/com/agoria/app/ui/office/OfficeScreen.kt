@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.getBackStackEntry
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -86,12 +87,14 @@ import kotlin.math.roundToInt
 @Composable
 fun OfficeScreen(
     viewModel: AgoriaViewModel,
+    navController: NavHostController,
     onOpenAgent: (String) -> Unit,
     onOpenBrowsers: () -> Unit = {},
     onOpenApprovals: () -> Unit = {},
 ) {
-    // Use OfficeViewModel to persist sim/camera across navigation
-    val officeViewModel: OfficeViewModel = viewModel()
+    // Scope OfficeViewModel to the root nav graph so it survives tab switching
+    val rootEntry = navController.getBackStackEntry(navController.graph.startDestinationId)
+    val officeViewModel: OfficeViewModel = viewModel(rootEntry)
     val sim = officeViewModel.sim
     val camera = officeViewModel.camera
 

@@ -142,6 +142,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                             }
                         }
                     },
+                    modifier = touchDetector, // Apply touch detector to bottom bar too
                 )
             }
         },
@@ -165,6 +166,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 composable("office") {
                     OfficeScreen(
                         viewModel = viewModel,
+                        navController = navController,
                         onOpenAgent = { id -> navController.navigate("agent/$id") },
                         onOpenBrowsers = { navController.navigate("browsers") },
                         onOpenApprovals = { navController.navigate("approvals") },
@@ -222,8 +224,9 @@ private fun AgoriaBottomBar(
     currentRoute: String?,
     pendingCount: Int,
     onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface, modifier = modifier) {
         topDestinations.forEach { destination ->
             NavigationBarItem(
                 selected = currentRoute == destination.route,
