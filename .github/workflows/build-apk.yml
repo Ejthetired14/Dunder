@@ -118,12 +118,11 @@ jobs:
             --stacktrace \
             --console=plain > "$RUNNER_TEMP/compile.log" 2>&1
           STATUS=$?
-          # Show full log on failure
+          # Always show error lines
+          grep -n "error:" "$RUNNER_TEMP/compile.log" | head -50 || true
           if [ "$STATUS" -ne 0 ]; then
-            echo "=== FULL COMPILE LOG ==="
-            cat "$RUNNER_TEMP/compile.log"
-            echo "=== ERROR LINES ONLY ==="
-            grep -n "error:" "$RUNNER_TEMP/compile.log" | head -50
+            echo "=== FULL COMPILE LOG (tail 200) ==="
+            tail -200 "$RUNNER_TEMP/compile.log"
             exit "$STATUS"
           fi
           # On success, just show summary
