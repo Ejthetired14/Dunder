@@ -18,8 +18,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,10 +48,6 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.util.Time
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 
 /**
  * The visible window onto an agent's browser. The browser itself keeps running in the background;
@@ -156,16 +154,18 @@ fun BrowsersScreen(
                         expanded = expanded,
                         onDismissRequest = { expanded = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Refresh all") },
-                            onClick = { expanded = false; BrowserHub.reloadAll() },
-                            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            onClick = { expanded = false },
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        )
+                        DropdownMenuItem(onClick = { expanded = false; BrowserHub.reloadAll() }) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(24.dp).padding(end = 12.dp))
+                                Text("Refresh all")
+                            }
+                        }
+                        DropdownMenuItem(onClick = { expanded = false }) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(24.dp).padding(end = 12.dp))
+                                Text("Settings")
+                            }
+                        }
                     }
                 },
             )
