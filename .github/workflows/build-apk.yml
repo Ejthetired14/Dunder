@@ -125,9 +125,13 @@ jobs:
           APKSIGNER=$(find $ANDROID_HOME -name "apksigner" -type f | head -1)
           [ -z "$APKSIGNER" ] && { echo "apksigner not found"; exit 1; }
           
-          # Find the unsigned release APK (AGP 8.2+ may put it in different locations)
-          UNSIGNED=$(find app/build -name "*release*.apk" -not -name "*signed*" | head -1)
-          [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing"; find app/build -name "*.apk" 2>/dev/null; exit 1; }
+          # Debug: list all APKs
+          echo "=== All APKs ==="
+          find . -name "*.apk" 2>/dev/null
+          
+          # Find the unsigned release APK (AGP 8.4+ may put it in different locations)
+          UNSIGNED=$(find . -name "*release*.apk" -not -name "*signed*" -not -path "*/build/*/intermediates/*" | head -1)
+          [ ! -f "$UNSIGNED" ] && { echo "Unsigned APK missing"; find . -name "*.apk" 2>/dev/null; exit 1; }
           echo "Found unsigned APK: $UNSIGNED"
           
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
@@ -143,7 +147,9 @@ jobs:
             keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias "$ALIAS" -storepass "$PASS" -keypass "$KPASS" -dname "CN=Dunder,O=Dunder,L=Local,ST=State,C=US"
           fi
           
-          "$APKSIGNER" sign --ks release-key.jks --ks-pass pass:"$PASS" --ks-key-alias "$ALIAS" --key-pass pass:"$KPASS" --out app/build/outputs/apk/release/app-release-signed.apk "$UNSIGNED"
+          SIGNED="app/build/outputs/apk/release/app-release-signed.apk"
+          mkdir -p "$(dirname "$SIGNED")"
+          "$APKSIGNER" sign --ks release-key.jks --ks-pass pass:"$PASS" --ks-key-alias "$ALIAS" --key-pass pass:"$KPASS" --out "$SIGNED" "$UNSIGNED"
           echo "Signed OK"
 
       - name: Create Release
