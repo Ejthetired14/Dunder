@@ -80,7 +80,7 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
             savedConfig = viewModel.getConnectorConfig(id)
             val def = ConnectorCatalog.get(id)
             values = def?.fields?.associate { field ->
-                field.key to if (field.secret) "" else (savedConfig?.optString(field.key) ?: "")
+                field.key to (savedConfig?.optString(field.key) ?: "")
             } ?: emptyMap()
             error = ""
         }
