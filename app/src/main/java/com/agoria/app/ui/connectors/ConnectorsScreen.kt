@@ -164,7 +164,12 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
             def = def,
             values = values,
             error = error,
-            onValue = { key, value -> values = values + (key to value) },
+            onValue = { key, value ->
+                val sanitized = value
+                    .replace(Regex("[\\u200e\\u200f\\u202a-\\u202e\\u0000-\\u001f\\u007f]"), "")
+                    .trim()
+                values = values + (key to sanitized)
+            },
             onDismiss = { selectedId = null },
             onSave = {
                 val id = selectedId

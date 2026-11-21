@@ -1,5 +1,6 @@
 package com.agoria.app.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
@@ -16,10 +17,17 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -55,16 +63,48 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = topDestinations.any { it.route == currentRoute }
+    val isTopDestination = topDestinations.any { it.route == currentRoute }
+
+    // Auto-hide bottom bar state
+    val bottomBarVisible by remember { mutableStateOf(true) }
+    val hideJob = remember { mutableStateOf<Job?>(null) }
+    val autoHideDelay = 3000L // 3 seconds
+
+    // Reset hide timer on any touch
+    val touchDetector = Modifier
+        .fillMaxSize()
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { _ ->
+                    if (!bottomBarVisible) return@detectTapGestures
+                    // Reset hide timer
+                    hideJob.value?.cancel()
+                    hideJob.value = launch {
+                        delay(autoHideDelay)
+                        bottomBarVisible = false
+                    }
+                },
+                onDoubleTap = { _ -> },
+                onLongPress = { _ -> },
+                onPress = { _ -> },
+            )
+        }
+
+    // Initial hide timer
+    LaunchedEffect(Unit) {
+        hideJob.value = launch {
+            delay(autoHideDelay)
+            bottomBarVisible = false
+        }
+    }
 
     Scaffold(
         bottomBar = {
-            if (showBottomBar) {
+            if (isTopDestination && bottomBarVisible) {
                 AgoriaBottomBar(
                     currentRoute = currentRoute,
                     pendingCount = pendingCount,
                     onNavigate = { route ->
-                        // Only navigate if different tab; preserve each tab's back stack
                         if (currentRoute != route) {
                             navController.navigate(route) {
                                 launchSingleTop = true
@@ -76,29 +116,30 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
             }
         },
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = "home",
-            modifier = Modifier.padding(innerPadding),
-        ) {
-            composable("home") {
-                HomeScreen(
-                    viewModel = viewModel,
-                    onOpenAgent = { id -> navController.navigate("agent/$id") },
-                    onOpenSettings = { navController.navigate("settings") },
-                    onOpenApprovals = { navController.navigate("approvals") },
-                    onOpenDiary = { navController.navigate("diary") },
-                    onOpenOffice = { navController.navigate("office") },
-                )
-            }
-            composable("office") {
-                OfficeScreen(
-                    viewModel = viewModel,
-                    onOpenAgent = { id -> navController.navigate("agent/$id") },
-                    onOpenBrowsers = { navController.navigate("browsers") },
-                    onOpenApprovals = { navController.navigate("approvals") },
-                )
-            }
+        Box(modifier = touchDetector) {
+            NavHost(
+                navController = navController,
+                startDestination = "home",
+                modifier = Modifier.padding(innerPadding),
+            ) {
+                composable("home") {
+                    HomeScreen(
+                        viewModel = viewModel,
+                        onOpenAgent = { id -> navController.navigate("agent/$id") },
+                        onOpenSettings = { navController.navigate("settings") },
+                        onOpenApprovals = { navController.navigate("approvals") },
+                        onOpenDiary = { navController.navigate("diary") },
+                        onOpenOffice = { navController.navigate("office") },
+                    )
+                }
+                composable("office") {
+                    OfficeScreen(
+                        viewModel = viewModel,
+                        onOpenAgent = { id -> navController.navigate("agent/$id") },
+                        onOpenBrowsers = { navController.navigate("browsers") },
+                        onOpenApprovals = { navController.navigate("approvals") },
+                    )
+                }
             composable("project") {
                 ProjectScreen(
                     viewModel = viewModel,
