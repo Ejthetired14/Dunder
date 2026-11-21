@@ -96,6 +96,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     viewModel = viewModel,
                     onOpenAgent = { id -> navController.navigate("agent/$id") },
                     onOpenBrowsers = { navController.navigate("browsers") },
+                    onOpenApprovals = { navController.navigate("approvals") },
                 )
             }
             composable("project") {

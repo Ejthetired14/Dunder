@@ -110,6 +110,35 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Building $VERSION_NAME ($VERSION_CODE)"
 
+      - name: Test Kotlin compile only
+        run: |
+          set -euo pipefail
+          ./gradlew :app:compileDebugKotlin \
+            --no-daemon \
+            --stacktrace \
+            --console=plain 2>&1 | tee "$RUNNER_TEMP/compile.log"
+          STATUS=$?
+          # Always show error lines
+          grep -n "error:" "$RUNNER_TEMP/compile.log" | head -50 || true
+          if [ "$STATUS" -ne 0 ]; then
+            echo "=== FULL COMPILE LOG (tail 200) ==="
+            tail -200 "$RUNNER_TEMP/compile.log"
+            # Also save for artifact
+            cp "$RUNNER_TEMP/compile.log" "$RUNNER_TEMP/compile-errors.log"
+            exit "$STATUS"
+          fi
+          # On success, just show summary
+          tail -20 "$RUNNER_TEMP/compile.log"
+
+      - name: Upload compile error log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-errors
+          path: ${{ runner.temp }}/compile-errors.log
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Build debug and release APKs
         run: |
           set -euo pipefail
@@ -123,8 +152,10 @@ jobs:
             --console=plain > "$RUNNER_TEMP/gradle.log" 2>&1
           STATUS=$?
           set -e
-          tail -120 "$RUNNER_TEMP/gradle.log"
+          tail -500 "$RUNNER_TEMP/gradle.log"
           if [ "$STATUS" -ne 0 ]; then
+            # Also show full compilation errors if any
+            grep -A 20 "error:" "$RUNNER_TEMP/gradle.log" | head -200
             exit "$STATUS"
           fi
           ls -l app/build/outputs/apk/debug/ app/build/outputs/apk/release/
@@ -269,3 +300,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+# Build trigger Sat Nov 21 03:29:22 AM UTC 2026
