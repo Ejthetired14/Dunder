@@ -1,6 +1,8 @@
 package com.agoria.app.ui
 
+import androidx.compose.foundation.Box
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
@@ -21,13 +23,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -69,6 +70,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
     val bottomBarVisible by remember { mutableStateOf(true) }
     val hideJob = remember { mutableStateOf<Job?>(null) }
     val autoHideDelay = 3000L // 3 seconds
+    val coroutineScope = rememberCoroutineScope()
 
     // Reset hide timer on any touch
     val touchDetector = Modifier
@@ -79,7 +81,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     if (!bottomBarVisible) return@detectTapGestures
                     // Reset hide timer
                     hideJob.value?.cancel()
-                    hideJob.value = launch {
+                    hideJob.value = coroutineScope.launch {
                         delay(autoHideDelay)
                         bottomBarVisible = false
                     }
@@ -92,7 +94,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
 
     // Initial hide timer
     LaunchedEffect(Unit) {
-        hideJob.value = launch {
+        hideJob.value = coroutineScope.launch {
             delay(autoHideDelay)
             bottomBarVisible = false
         }
