@@ -19,12 +19,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,9 +38,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,16 +57,18 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.ui.components.statusLabel
-import com.agoria.app.ui.office.world.Activity
 import com.agoria.app.ui.office.world.CameraState
+import com.agoria.app.ui.office.world.DeskPanel
+import com.agoria.app.ui.office.world.HotspotDef
 import com.agoria.app.ui.office.world.OfficeSim
 import com.agoria.app.ui.office.world.OfficeWorld
 import com.agoria.app.ui.office.world.Pal
@@ -74,6 +77,7 @@ import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.buildSignals
 import com.agoria.app.ui.office.world.statusText
 import com.agoria.app.util.Time
 import kotlin.math.roundToInt
@@ -112,6 +116,7 @@ fun OfficeScreen(
             onOpenAgent = onOpenAgent,
             onOpenBrowsers = onOpenBrowsers,
             onOpenApprovals = onOpenApprovals,
+            onNavigate = { route -> navController.navigate(route) },
             onShowList = { listMode = true },
         )
     }
@@ -125,24 +130,50 @@ private fun OfficeWorldScreen(
     onOpenAgent: (String) -> Unit,
     onOpenBrowsers: () -> Unit,
     onOpenApprovals: () -> Unit,
+    onNavigate: (String) -> Unit,
     onShowList: () -> Unit,
 ) {
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val diary by viewModel.diary.collectAsStateWithLifecycle()
     val pending by viewModel.pendingCount.collectAsStateWithLifecycle()
+    val pendingApprovals by viewModel.pendingApprovals.collectAsStateWithLifecycle()
+    val pendingRequests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
+    val logs by viewModel.connectorLogs.collectAsStateWithLifecycle()
+    val builds by viewModel.builds.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var hotspot by remember { mutableStateOf<HotspotDef?>(null) }
+    var deskOpen by remember { mutableStateOf(false) }
     var debug by remember { mutableStateOf(false) }
     var debugTap by remember { mutableStateOf<Offset?>(null) }
 
-    // Auto-hide top HUD. The activity counter restarts the countdown on every touch;
-    // the previous version kept its Job in a plain var and never applied the detector
-    // to the layout, so once the HUD hid it could not come back.
+    // Auto-hide top HUD: shows on any touch, hides 3 s after the last one.
     val hudVisible = remember { mutableStateOf(true) }
-    var hudActivityTick by remember { mutableIntStateOf(0) }
-    val hudAutoHideDelay = 3000L // 3 seconds
+    val hudJob = remember { arrayOfNulls<Job>(1) }
+    val hudScope = rememberCoroutineScope()
+    fun pokeHud() {
+        hudVisible.value = true
+        hudJob[0]?.cancel()
+        hudJob[0] = hudScope.launch {
+            delay(3000L)
+            hudVisible.value = false
+        }
+    }
 
-    LaunchedEffect(agents) { sim.sync(agents) }
+    // Live data: agents get bodies, then what they are really doing decides where they stand.
+    // The tick re-checks every few seconds so "recently used" connectors age out on their own.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(4000)
+            tick++
+        }
+    }
+    LaunchedEffect(agents, pendingApprovals, pendingRequests, logs, builds, tick) {
+        sim.sync(agents)
+        sim.applySignals(buildSignals(agents, pendingApprovals, pendingRequests, logs, builds, Time.now()))
+    }
     LaunchedEffect(selectedId) { sim.holdId = selectedId }
 
     val selectedAgent = agents.firstOrNull { it.id == selectedId }
@@ -151,42 +182,44 @@ private fun OfficeWorldScreen(
     val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
     val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
 
-    // Show the HUD, then hide it after a few idle seconds. Every touch bumps the tick,
-    // which cancels the pending countdown and starts a fresh one.
-    LaunchedEffect(hudActivityTick) {
-        hudVisible.value = true
-        delay(hudAutoHideDelay)
-        hudVisible.value = false
-    }
-
-    // The map and its actors consume taps, so listen on the Initial pass.
-    val hudTouchDetector = Modifier
-        .fillMaxSize()
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                var wasPressed = false
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val pressed = event.changes.any { it.pressed }
-                    if (pressed && !wasPressed) hudActivityTick++
-                    wasPressed = pressed
-                }
-            }
-        }
+    LaunchedEffect(Unit) { pokeHud() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Pal.ink)
-            .then(hudTouchDetector),
+            .pointerInput(Unit) {
+                // Observes touches without consuming them, so the map still pans and zooms.
+                detectTapGestures(onPress = { pokeHud() })
+            },
     ) {
         OfficeWorld(
             sim = sim,
             camera = camera,
             selectedId = selectedId,
+            selectedHotspotId = hotspot?.id,
+            deskAlert = pending > 0,
             debug = debug,
-            onSelect = { selectedId = it },
-            onDeskTap = onOpenApprovals,
+            onSelect = {
+                selectedId = it
+                if (it != null) {
+                    hotspot = null
+                    deskOpen = false
+                }
+            },
+            onHotspot = { hs ->
+                if (hs == null) {
+                    hotspot = null
+                } else if (hs.id == "desk") {
+                    hotspot = null
+                    selectedId = null
+                    deskOpen = true
+                } else {
+                    hotspot = hs
+                    selectedId = null
+                    deskOpen = false
+                }
+            },
             onDebugTap = { debugTap = it },
             modifier = Modifier.fillMaxSize(),
         )
@@ -201,7 +234,7 @@ private fun OfficeWorldScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                Column(modifier = Modifier.weight(1f, fill = false)) {
+                Column {
                     PixelPanel(
                         modifier = Modifier
                             .pointerInput(Unit) {
@@ -214,14 +247,21 @@ private fun OfficeWorldScreen(
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             Text("THE OFFICE", style = PixelLabel)
                             Text(
-                                text = "${agents.size} agents · demo mode",
+                                text = "${agents.size} agents · live",
                                 style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
                             )
                         }
                     }
                     if (pending > 0) {
                         Spacer(Modifier.height(8.dp))
-                        PixelButton(text = "! $pending to approve", onClick = onOpenApprovals)
+                        PixelButton(
+                            text = "! $pending to approve",
+                            onClick = {
+                                selectedId = null
+                                hotspot = null
+                                deskOpen = true
+                            },
+                        )
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -231,8 +271,6 @@ private fun OfficeWorldScreen(
                 }
             }
         }
-
-        // Selected agent card
 
         if (debug) {
             PixelPanel(
@@ -251,15 +289,31 @@ private fun OfficeWorldScreen(
             }
         }
 
-        // Selected agent card
-        if (selectedAgent != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(12.dp),
-            ) {
-                PixelPanel(modifier = Modifier.fillMaxWidth()) {
+        // Bottom card: your desk, a selected agent, or a selected room. Only one at a time.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            when {
+                deskOpen -> DeskPanel(
+                    approvals = pendingApprovals,
+                    requests = pendingRequests,
+                    agents = agents,
+                    settings = settings,
+                    onApprove = { viewModel.approve(it) },
+                    onDeny = { viewModel.deny(it) },
+                    onSetAuto = { on, types ->
+                        viewModel.updateSettings {
+                            it.copy(autoApproveEnabled = on, autoApproveTypes = types.joinToString(","))
+                        }
+                    },
+                    onOpenApprovals = onOpenApprovals,
+                    onClose = { deskOpen = false },
+                )
+
+                selectedAgent != null -> PixelPanel(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             AgentAvatar(selectedAgent, 44.dp)
@@ -293,12 +347,33 @@ private fun OfficeWorldScreen(
                                 text = "Diary & chat",
                                 onClick = { onOpenAgent(selectedAgent.id) },
                             )
-                            if (actor?.activity == Activity.APPROVAL) {
+                            if (pendingApprovals.any { it.agentId == selectedAgent.id } ||
+                                pendingRequests.any { it.agentId == selectedAgent.id }
+                            ) {
                                 PixelButton(
                                     text = "Approvals",
-                                    onClick = onOpenApprovals,
+                                    onClick = { deskOpen = true; selectedId = null },
                                     fill = Pal.cream,
                                 )
+                            }
+                        }
+                    }
+                }
+
+                hotspot != null -> {
+                    val hs = hotspot
+                    if (hs != null) {
+                        PixelPanel(modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(hs.label, style = PixelLabel)
+                                        Text(hs.blurb, style = PixelBody.copy(fontSize = 12.sp))
+                                    }
+                                    PixelIconButton(Icons.Default.Close, "Close", { hotspot = null })
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                PixelButton(text = "Open", onClick = { onNavigate(hs.route) })
                             }
                         }
                     }
