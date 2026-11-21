@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -171,9 +172,9 @@ private fun OfficeWorldScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelIconButton(androidx.compose.material.icons.filled.Public, "Agent browsers", onOpenBrowsers)
-                PixelIconButton(androidx.compose.material.icons.filled.MyLocation, "Reset view", { camera.reset() })
-                PixelIconButton(androidx.compose.material.icons.automirrored.filled.List, "List view", onShowList)
+                PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
+                PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
+                PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
             }
         }
 
@@ -211,7 +212,7 @@ private fun OfficeWorldScreen(
                                 Text(selectedAgent.name.uppercase(), style = PixelLabel)
                                 Text(selectedAgent.role, style = PixelBody.copy(fontSize = 12.sp))
                             }
-                            PixelIconButton(androidx.compose.material.icons.filled.Close, "Close", { selectedId = null })
+                            PixelIconButton(Icons.Default.Close, "Close", { selectedId = null })
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -283,13 +284,13 @@ private fun OfficeListScreen(
                 actions = {
                     IconButton(onClick = onShowMap) {
                         Icon(
-                            androidx.compose.material.icons.filled.Map,
+                            Icons.Default.Map,
                             contentDescription = "Map view",
                         )
                     }
                     IconButton(onClick = onOpenBrowsers) {
                         Icon(
-                            androidx.compose.material.icons.filled.Public,
+                            Icons.Default.Public,
                             contentDescription = "Agent browsers",
                         )
                     }
@@ -318,7 +319,7 @@ private fun OfficeListScreen(
                         verticalAlignment = Alignment.Top,
                     ) {
                         Icon(
-                            androidx.compose.material.icons.filled.AutoAwesome,
+                            Icons.Default.AutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
