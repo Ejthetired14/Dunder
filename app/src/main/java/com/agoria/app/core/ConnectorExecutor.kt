@@ -307,7 +307,7 @@ class ConnectorExecutor(
     }
 
     private fun cfg(config: JSONObject?, key: String): String? =
-        config?.optString(key)?.trim()?.ifBlank { null }
+        config?.optString(key)?.trim()?.replace(Regex("[\\u200e\\u200f\\u202a-\\u202e\\u0000-\\u001f\\u007f]"), "")?.ifBlank { null }
 
     private fun enc(value: String): String =
         URLEncoder.encode(value, "UTF-8").replace("+", "%20")

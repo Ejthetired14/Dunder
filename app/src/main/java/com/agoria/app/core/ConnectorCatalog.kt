@@ -219,7 +219,7 @@ object ConnectorCatalog {
                 ConnectorActionDef("list_issues", "List issues", "List open or closed issues. repo is optional when the token reaches one repository.", false, "{\"repo\": \"owner/name\", \"state\": \"open\"}"),
                 ConnectorActionDef("create_issue", "Create issue", "Open a new issue. Requires approval.", true, "{\"repo\": \"owner/name\", \"title\": \"...\", \"body\": \"...\"}"),
             ),
-            setupHelp = "Create a fine-grained personal access token at github.com/settings/tokens, give it the repositories you want, and paste it here. Nothing else is needed: the token already knows its owner and repositories.",
+            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (read/write to code, issues, metadata, administration), and paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed.",
             docsUrl = "https://docs.github.com/en/rest",
             risk = "high",
             iconKey = "github",
