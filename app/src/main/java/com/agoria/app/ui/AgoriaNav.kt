@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,7 +70,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
 
     // Auto-hide bottom bar state
     val bottomBarVisible by remember { mutableStateOf(true) }
-    var hideJob: Job? by remember { mutableStateOf<Job?>(null) }
+    var hideJob: Job? = null
     val autoHideDelay = 3000L // 3 seconds
     val coroutineScope = rememberCoroutineScope()
 
