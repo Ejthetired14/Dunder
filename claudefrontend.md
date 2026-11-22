@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026.
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 10:25 UTC.
 
 ---
 
@@ -112,7 +112,7 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | ID | What | Notes |
 | --- | --- | --- |
 | T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. |
-| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | PARTIAL: `ui/components/PixelScaffold.kt` written; Diary and Browsers converted. CODE WRITTEN, not compiled. Needs a green CI build. |
+| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
 | T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | TODO (NEXT). Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) and Approvals (24 KB) are big: do them one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
@@ -180,6 +180,7 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 10:25  Claude  T-BACK  PR #8 merged to main (commit b6b7efb). Build APK run 45068973188 green, Backup guard run 45068973197 green. `PixelScaffold` + `PixelTopBar` compiled and CI passes. Diary & Browsers converted; AgoriaNav hides floating button on scaffolded routes. [verified]
 - 2026-11-23 10:15  Claude  T-BACK  CODE WRITTEN (not compiled, not pushed: the chat's GitHub token was read-only, branch creation returned 403). Added `ui/components/PixelScaffold.kt` (`PixelScaffold`, `PixelTopBar`), converted `DiaryScreen` (new `onBack` param) and `BrowsersScreen`, `AgoriaNav` passes `popBackStack("office", false)` and hides the floating button on scaffolded routes. Compile suspects: `Icons.AutoMirrored.Filled.ArrowBack` (already used in BrowsersScreen, so should be fine), `PixelLabel.copy(...)`, `Scaffold(content = ...)` named argument. [untested]
 - 2026-11-22 20:22  Claude  T-NAV, T-DIR, T-THEME, T-COMMON, T-SOUND, T-NIGHT, T-SEASON  PR #7 opened, Build APK run 45065987758 green, Backup guard run 45065987749 green. Fixed one compile error: `OfficeSound.setEnabled` platform declaration clash -> renamed to `setSoundEnabled`. All Phase 5 code compiles and CI passes. [verified]
 - 2026-11-22  Claude  T-THEME, T-COMMON  CODE WRITTEN (not compiled): `AgoriaTheme.kt` is one fixed pixel scheme (ink/navy/cream/amber/teal, square shapes, monospace headings, no surface tint); `Common.kt` rewritten with the same public API (crisp square avatar showing the standing frame, solid ink-bordered chips, `PixelCard`). Every page that uses the theme or these components changes look at once. Per-screen leftovers (explicit RoundedCornerShape, Material buttons/switches/text fields) are T-SCREENS. [untested]
