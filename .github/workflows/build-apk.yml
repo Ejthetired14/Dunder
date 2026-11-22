@@ -8,16 +8,18 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# SEC-3: least privilege by default; jobs that need more declare it themselves.
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   build:
     name: Build Debug & Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Needed only by the release step on tags (gh release create).
+    permissions:
+      contents: write
     outputs:
       version_name: ${{ steps.version.outputs.version_name }}
       version_code: ${{ steps.version.outputs.version_code }}
@@ -139,67 +141,78 @@ jobs:
           echo "debug APK: $DEBUG_APK"
           echo "release APK: $RELEASE_APK_UNSIGNED"
 
+      # SEC-3: signing fails closed. No keystore secrets -> the release job fails.
+      # It never generates a temporary key (each release would get a different
+      # signature and Android would refuse in-place updates). See docs/release-signing.md.
       - name: Sign Release APK
         if: startsWith(github.ref, 'refs/tags/v')
         id: sign-apk
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          UNSIGNED: ${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}
         run: |
           set -euo pipefail
+
+          missing=""
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS; do
+            if [ -z "${!v:-}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Release signing secrets missing:$missing. Add them as repository secrets (see docs/release-signing.md). Refusing to sign with a temporary key."
+            exit 1
+          fi
+          # Key password defaults to the store password (PKCS12 keystores use one password).
+          export KEY_PASSWORD="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
 
           APKSIGNER=$(find "$ANDROID_HOME" -name "apksigner" -type f | head -1)
           [ -n "$APKSIGNER" ] || { echo "::error::apksigner not found"; exit 1; }
-
-          UNSIGNED="${{ steps.find-apks.outputs.RELEASE_APK_UNSIGNED }}"
           [ -n "$UNSIGNED" ] && [ -f "$UNSIGNED" ] || { echo "::error::Unsigned APK missing: $UNSIGNED"; exit 1; }
 
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
-            PASS="${{ secrets.KEYSTORE_PASSWORD }}"
-            ALIAS="${{ secrets.KEY_ALIAS }}"
-            KPASS="${{ secrets.KEY_PASSWORD }}"
-          else
-            echo "::warning::No keystore secret configured, signing with a temporary key"
-            PASS=$(openssl rand -base64 24 | tr -d "=+/")
-            ALIAS="dunder-release"
-            KPASS="$PASS"
-            keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias "$ALIAS" -storepass "$PASS" -keypass "$KPASS" -dname "CN=Dunder,O=Dunder,L=Local,ST=State,C=US"
-          fi
+          KS="$RUNNER_TEMP/release-key.jks"
+          trap 'rm -f "$KS"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
 
           SIGNED="app/build/outputs/apk/release/app-release-signed.apk"
-          "$APKSIGNER" sign --ks release-key.jks --ks-pass pass:"$PASS" --ks-key-alias "$ALIAS" --key-pass pass:"$KPASS" --out "$SIGNED" "$UNSIGNED"
+          "$APKSIGNER" sign --ks "$KS" --ks-pass env:KEYSTORE_PASSWORD --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD --out "$SIGNED" "$UNSIGNED"
+          "$APKSIGNER" verify --print-certs "$SIGNED"
           echo "SIGNED_APK=$SIGNED" >> $GITHUB_OUTPUT
           echo "Signed OK: $SIGNED"
 
+      # SEC-3: only the signed release APK is published; the debug APK stays a CI artifact.
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         id: release
-        run: |
-          set -euo pipefail
-          DEBUG_APK="${{ steps.find-apks.outputs.DEBUG_APK }}"
-          SIGNED_APK="${{ steps.sign-apk.outputs.SIGNED_APK }}"
-
-          [ -f "$DEBUG_APK" ] || { echo "::error::Debug APK not found: $DEBUG_APK"; exit 1; }
-          [ -f "$SIGNED_APK" ] || { echo "::error::Signed APK not found: $SIGNED_APK"; exit 1; }
-
-          gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || true
-          gh release create "${{ github.ref_name }}" \
-            "$DEBUG_APK" \
-            "$SIGNED_APK" \
-            --title "Dunder ${{ github.ref_name }}" \
-            --notes "Debug and release APKs for ${{ github.ref_name }}"
-
-          URL=$(gh release view "${{ github.ref_name }}" --json url --jq .url)
-          BODY=$(gh release view "${{ github.ref_name }}" --json body --jq .body | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
-          echo "html_url=$URL" >> $GITHUB_OUTPUT
-          echo "body=$BODY" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          SIGNED_APK: ${{ steps.sign-apk.outputs.SIGNED_APK }}
+        run: |
+          set -euo pipefail
+          [ -f "$SIGNED_APK" ] || { echo "::error::Signed APK not found: $SIGNED_APK"; exit 1; }
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            "$SIGNED_APK" \
+            --title "Dunder $TAG" \
+            --notes "Release APK for $TAG"
+
+          URL=$(gh release view "$TAG" --json url --jq .url)
+          BODY=$(gh release view "$TAG" --json body --jq .body | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+          echo "html_url=$URL" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
 
       - name: APK URL
         if: startsWith(github.ref, 'refs/tags/v')
         id: apk_url
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          SIGNED_APK: ${{ steps.sign-apk.outputs.SIGNED_APK }}
         run: |
-          SIGNED_APK="${{ steps.sign-apk.outputs.SIGNED_APK }}"
-          echo "url=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$SIGNED_APK")" >> $GITHUB_OUTPUT
+          echo "url=https://github.com/$REPO/releases/download/$TAG/$(basename "$SIGNED_APK")" >> $GITHUB_OUTPUT
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
@@ -216,6 +229,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Create latest-release.json
         run: |

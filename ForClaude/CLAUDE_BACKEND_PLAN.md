@@ -35,8 +35,8 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | Data | `data/*` | Room DB v4 (14 entities), `Repository.kt` (~41 KB), seed data, export/import JSON snapshot, daily auto-backup. |
 | Service | `service/AutonomyService.kt`, `BootReceiver.kt`, `BootStatus.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`; since RUN-5 it reads settings read-only with a timeout and reports failures through `BootStatus` + a notification. Explicit stops persist `autonomyEnabled=false` (RUN-3). |
 | Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON. |
-| CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13) checks the backup config and exported components on every push/PR. |
-| Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/office_gen` | Backup-config and exported-component regression guards + their self-tests (stdlib Python only). |
+| CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13, SEC-3) checks the backup config, exported components and workflow hygiene on every push/PR. Release signing fails closed without keystore secrets (SEC-3). |
+| Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/check_workflows.py`, `tools/test_check_workflows.py`, `tools/office_gen` | Backup-config, exported-component and workflow-hygiene regression guards + their self-tests (stdlib Python only). |
 
 ### What is already solid (keep it)
 - Approval-gate architecture: the model can only auto-run a small allowlist; mutating connector actions create an `ApprovalEntity`.
@@ -86,13 +86,21 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: unit test proves exported JSON contains no token/secret strings; auto-backup excludes secrets.
 
 ### SEC-3 - CI supply-chain and signing problems
-- Status: TODO | Effort: S-M
+- Status: IN-PROGRESS (2026-11-22) - implemented, **CI run pending, owner actions pending (see Remaining)**. Effort: S-M
 - Evidence:
   - `.github/workflows/apply-phase2.yml`: with `contents: write`, downloads a patch from `https://paste.rs/...` (mutable, public) and pushes it. Anyone who can edit that paste, or a commit message containing the trigger token, controls the branch.
   - `.github/workflows/generate-keystore.yml`: prints keystore base64 and both passwords into the Actions log and uploads the `.jks` as an artifact. If the repo is public (likely, since updates use GitHub Pages), anything generated this way is exposed.
   - `build-apk.yml`: if `KEYSTORE_*` secrets are missing it silently signs the release with a **random temporary key**. Each release then has a different signature, so Android refuses in-place updates (breaks `UpdateManager` and loses data on reinstall). Also publishes the debug APK in the release, and uses `permissions: contents/pages/id-token: write` for every job.
 - Fix: delete `apply-phase2.yml`; delete or lock `generate-keystore.yml` (and **rotate any keystore created with it**); fail the release job if signing secrets are absent; pin actions by SHA; per-job minimal permissions; do not attach the debug APK to releases.
 - Done when: no workflow fetches remote patches; release job fails without secrets; keystore creation is documented as a local one-time step.
+- Implemented (2026-11-22):
+  - Deleted `.github/workflows/apply-phase2.yml` (remote patch from paste.rs with `contents: write`) and `.github/workflows/generate-keystore.yml` (printed keystore/passwords to the log, uploaded the `.jks`). Their contents were not read before deletion; the plan's fix was "delete".
+  - `.github/workflows/build-apk.yml`: top-level `permissions: contents: read`; `build` job `contents: write` (release on tags only); `deploy-pages` job `contents: read, pages: write, id-token: write`. Signing step now reads the four secrets through `env:` (not interpolated into the script), **fails with `::error::` if `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD` or `KEY_ALIAS` is missing** (`KEY_PASSWORD` defaults to the store password), never runs `keytool`, deletes the decoded keystore on exit, passes passwords to `apksigner` as `env:` refs, and runs `apksigner verify --print-certs`. Release publishes **only the signed APK** (debug APK stays a CI artifact). `github.ref_name`/repository are passed via `env:` instead of script interpolation.
+  - New `tools/check_workflows.py` + `tools/test_check_workflows.py` (13 `unittest` cases; stdlib only; textual checks so no YAML library is needed): fails on the removed files, paste/transfer hosts, `curl|wget | sh`, `keytool -genkey*`, keystore uploads as artifacts, missing/`write-all`/top-level-write `permissions:`, `${{ secrets.* }}` inside script lines, debug APK in `gh release create`. Wired into `.github/workflows/backup-guard.yml` (self-tests + guard).
+  - New `docs/release-signing.md`: local one-time keystore creation and the four secret names.
+- Verified (2026-11-22, local sandbox): 13/13 self-tests pass; `check_workflows.py` exits 0 on the new `build-apk.yml` and `backup-guard.yml`.
+- NOT verified: a GitHub Actions run of the edited workflows (the signing step only runs on `v*` tags, so it needs a test tag with real secrets); a red check on a throwaway PR.
+- Remaining to close this task: (1) push and confirm `Backup config guard` and `Build APK` are green on `main`; (2) **owner**: confirm the four signing secrets exist, then push a test tag and confirm the signed release; (3) **owner**: decide DEC-6 (rotate any keystore made by `generate-keystore.yml`; also check the Actions run logs/artifacts of past runs and delete them); (4) pinning actions by SHA, splitting signing into its own job and Dependabot are tracked as SEC-14; (5) flip to `DONE`.
 
 ### SEC-4 - Money and config actions run with no approval
 - Status: TODO | Effort: S
@@ -179,6 +187,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - ✅ GitHub Actions run 45038393115 ("Backup config guard") green on `main` commit `7536d44`.
   - ✅ GitHub Actions run 45038393077 ("Build APK") green on `main` commit `7536d44`.
 - Remaining to close this task: (1) on a device/emulator: enable autonomy, reboot, confirm the service restarts; disable autonomy, reboot, confirm it does not; from `adb shell`, `am broadcast -a android.intent.action.BOOT_COMPLETED -n com.agoria.app/.service.BootReceiver` should be refused/not start the service on a non-rooted device; (2) throwaway-PR red check like SEC-12; (3) flip to `DONE`.
+
+### SEC-14 - Pin GitHub Actions by SHA, split signing job, Dependabot for Actions
+- Status: TODO | Effort: S-M | Depends on: SEC-3 verified | Added 2026-11-22 (split out of SEC-3: needs network access to resolve SHAs)
+- Evidence: `build-apk.yml`, `backup-guard.yml` use mutable tags (`actions/checkout@v4`, `setup-java@v4`, `cache@v4`, `upload-artifact@v4`, `upload-pages-artifact@v3`, `deploy-pages@v4`, `configure-pages@v4`). The `build` job holds `contents: write` and the signing secrets in the same job that runs Gradle on repository code.
+- Fix: pin every `uses:` to a full commit SHA with a `# vX.Y.Z` comment (resolve SHAs from the official action repos, never guess); move signing + release into a separate `release` job (`needs: build`, tags only, `contents: write`) that downloads the unsigned APK artifact, so PR/branch builds never see secrets; add `.github/dependabot.yml` for `github-actions` and `gradle`; extend `tools/check_workflows.py` to fail on `uses:` without a 40-hex SHA.
+- Done when: the guard fails on a tag-pinned action and `main` is green with all actions SHA-pinned.
 
 ---
 
@@ -392,6 +406,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - **DEC-3 - Backup policy.** Cloud backup on or off? Is a passphrase-encrypted export acceptable? (Interim state since 2026-11-22: backup and device transfer are fully **off** via SEC-1, and guarded by SEC-12. If the owner decides to turn backup on, update `tools/check_backup_config.py` and its tests in the same change, or CI will fail on purpose.)
 - **DEC-4 - Product name and package.** Agoria or Dunder (affects strings, User-Agent, release names, package id).
 - **DEC-5 - Free-tier budget.** Target number of agent cycles per hour across all agents.
+- **DEC-6 - Rotate the release keystore?** Status: NEEDS-DECISION. If the keystore in the `KEYSTORE_*` secrets was created by the deleted `generate-keystore.yml`, its base64 and passwords were printed to public-repo Actions logs and the `.jks` was a downloadable artifact: treat it as exposed. Rotating means a new signing key, so installed copies cannot update in place (users must uninstall/reinstall and lose local data unless exported first). Options: (A) rotate now, accept the one-time break; (B) keep the key, delete old runs/artifacts, accept the risk; (C) check whether the key was ever created that way and decide. Also delete old workflow runs and artifacts either way.
 
 ---
 
@@ -425,7 +440,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 
 ## 9. Suggested order of work
 
-1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3, SEC-4, SEC-5, SEC-7.
+1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3 (implemented, verify CI + owner actions, DEC-6), SEC-14, SEC-4, SEC-5, SEC-7.
 2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5 (implemented, verify), RUN-3 (part 1 done), RUN-6.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
 4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-10, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
@@ -447,6 +462,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-13 CI verified (GitHub Actions run 45038393115, commit `7536d44`); updated SEC-13 status with commit link and "CI green on main". Build also green (run 45038393077). |
 | 2026-11-22 | Claude | RUN-5 implemented (`BootReceiver` read-only bounded settings read + visible failure reporting, new `BootStatus.kt`, `AutonomyService` clears stale status) and RUN-3 part 1 implemented (stop path persists `autonomyEnabled=false`); both IN-PROGRESS pending CI build and device check. Added RUN-6 (show boot failure in the UI). Updated section 1 (Service row), DATA-1 note, TEST-1, sections 7 (paged-query names), 8 and 9. Added work-log entry. Not compiled in the session. |
 | 2026-11-22 | Claude | RUN-5 and RUN-3 part 1 CI verified (Build APK run 45039776580, Backup config guard run 45039776621, commit `7c990ec`); updated RUN-3 and RUN-5 status with commit link and run IDs. |
+| 2026-11-22 | Claude | SEC-3 implemented (removed `apply-phase2.yml` and `generate-keystore.yml`; `build-apk.yml` least-privilege permissions, fail-closed signing via `env:`, signed APK only in releases; new `tools/check_workflows.py` guard + tests wired into `backup-guard.yml`; `docs/release-signing.md`); IN-PROGRESS pending CI and owner actions. Added SEC-14 (SHA-pin actions, split signing job, Dependabot) and DEC-6 (rotate keystore?). Updated section 1 (CI/Tools rows), section 9, work log. Not run in GitHub Actions. |
 
 ---
 
@@ -519,3 +535,14 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified: compilation (no `kotlinc`/Gradle here), `Build APK` on GitHub Actions, any device or emulator behavior. In particular `SettingsDao.get()` was not read (`Daos.kt` unreviewed); it is used as a suspend function returning a nullable `SettingsEntity` in `Repository.seedIfNeeded`/`settings()`, which the new code relies on.
 - Found: nothing blocking. Added RUN-6 (UI banner for `BootStatus.lastFailure`), and a note under DATA-1 that RUN-3's stop write adds another `updateSettings` writer.
 - Next for whoever continues: push these files and confirm `Build APK` and `Backup config guard` are green on `main`; fix any compile error first (most likely spots: the `withTimeout` block return type and the `catch (_: TimeoutCancellationException)` syntax); then do the device checks listed under RUN-5 and RUN-3, flip RUN-5 to `DONE`, and take RUN-6 (S) or SEC-2 (M).
+
+### 2026-11-22 - SEC-3 (CI supply chain and signing) - Claude (free-tier session, GitHub connector + sandbox)
+- Picked SEC-3: P0, mostly YAML, fits one free-tier session and needs none of the large unreviewed Kotlin files (SEC-4/5/7 need `AgentRuntime.kt` ~42 KB or `ConnectorExecutor.kt` ~129 KB).
+- Note on inputs: the brief said `ForClaude/claudebackend.md`; the repo file is `ForClaude/CLAUDE_BACKEND_PLAN.md` (kept its name). Read via the GitHub connector at repo commit `c865b19`. The sandbox had no network or git, so repo changes were delivered as a zip plus a copy-paste prompt for another AI to commit and push, and **this plan file is updated by `APPLY_PLAN_UPDATE.py` (anchor-checked string edits) rather than re-typed in full**. A reviewer should diff the plan against `main` and confirm only SEC-3, new SEC-14, DEC-6, section 1 (CI/Tools rows), section 9, changelog and this entry changed.
+- Read: this plan, `.github/workflows/build-apk.yml`, `.github/workflows/backup-guard.yml`, the workflows directory listing. Not read: `apply-phase2.yml`, `generate-keystore.yml` (deleted as the plan specified).
+- Changed: see SEC-3 "Implemented". Files: `.github/workflows/build-apk.yml` (rewritten), `.github/workflows/backup-guard.yml` (guard step added), deleted `apply-phase2.yml` and `generate-keystore.yml`, new `tools/check_workflows.py`, `tools/test_check_workflows.py`, `docs/release-signing.md`, this plan file.
+- Design choices: textual checks instead of a YAML parser (runner has no guaranteed PyYAML; guard stays stdlib-only like SEC-12/13); `KEY_PASSWORD` falls back to the store password so an existing setup without that secret does not break; SHA pinning split into SEC-14 because the SHAs cannot be resolved offline and must not be guessed; signing kept in the `build` job for now (splitting it is a bigger restructure that could not be CI-tested here).
+- Verified (local sandbox): 13/13 guard self-tests pass; guard exits 0 on the new workflows.
+- NOT verified: Actions runs, the tag-only signing/release path, throwaway-PR red check.
+- Risk to flag: the first `v*` tag after this lands will **fail** if the keystore secrets are not set; that is intended.
+- Next for whoever continues: push, confirm both workflows green on `main`; owner answers DEC-6 and confirms secrets; then SEC-14 (S-M) or SEC-2 (M).

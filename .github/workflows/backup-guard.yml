@@ -3,6 +3,8 @@ name: Backup config guard
 # SEC-12: fail fast if Android backup / device transfer is ever re-enabled.
 # SEC-13: fail fast if a service/receiver/provider is exported or the boot receiver
 #         listens for LOCKED_BOOT_COMPLETED.
+# SEC-3:  fail fast if a workflow fetches remote patches, generates/uploads a keystore,
+#         lacks least-privilege permissions, or interpolates secrets into scripts.
 # Cheap (a few seconds, no Gradle, no Android SDK), so it runs on every push and PR.
 
 on:
@@ -28,9 +30,13 @@ jobs:
         run: |
           python3 tools/test_check_backup_config.py
           python3 tools/test_check_manifest_exports.py
+          python3 tools/test_check_workflows.py
 
       - name: Check backup config
         run: python3 tools/check_backup_config.py
 
       - name: Check exported components and boot receiver
         run: python3 tools/check_manifest_exports.py
+
+      - name: Check workflow hygiene
+        run: python3 tools/check_workflows.py
