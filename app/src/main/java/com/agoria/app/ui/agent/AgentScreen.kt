@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
@@ -51,14 +50,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -95,6 +92,7 @@ import com.agoria.app.ui.PaginationState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.util.Share
 import com.agoria.app.util.Time
@@ -111,30 +109,23 @@ fun AgentScreen(
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val agent = agents.firstOrNull { it.id == agentId }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(agent?.name ?: "Agent") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (agent != null) {
-                        IconButton(
-                            onClick = {
-                                if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (agent.autonomy) "Pause" else "Resume",
-                            )
-                        }
-                    }
-                },
-            )
+    PixelScaffold(
+        title = agent?.name ?: "Agent",
+        subtitle = agent?.role,
+        onBack = onBack,
+        actions = {
+            if (agent != null) {
+                IconButton(
+                    onClick = {
+                        if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
+                    },
+                ) {
+                    Icon(
+                        imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (agent.autonomy) "Pause" else "Resume",
+                    )
+                }
+            }
         },
     ) { padding ->
         if (agent == null) {
