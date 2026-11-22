@@ -52,26 +52,6 @@ object ProviderCatalog {
             category = "Gateway",
         ),
         ProviderSpec(
-            id = "freellmapi",
-            name = "FreeLLMAPI (local)",
-            baseUrl = "http://localhost:3001/v1",
-            keyRequired = true,
-            keyLabel = "FreeLLMAPI unified key",
-            keyHint = "Install FreeLLMAPI app from Play Store, run it, copy unified key from dashboard (freellmapi-...)",
-            docsUrl = "https://freellmapi.co",
-            freeNote = "Runs on phone via FreeLLMAPI Android app (Play Store), or Docker/desktop. Aggregates 87+ free LLM providers behind one OpenAI-compatible endpoint.",
-            models = listOf(
-                ModelSpec("auto", "Auto (router picks best free model)", "Varies", "Text"),
-                ModelSpec("gpt-oss-120b", "gpt-oss-120b", "131K", "Text"),
-                ModelSpec("gpt-oss-20b", "gpt-oss-20b", "131K", "Text"),
-                ModelSpec("nemotron-3-ultra", "Nemotron 3 Ultra", "1M", "Text"),
-                ModelSpec("qwen3-235b", "Qwen3 235B", "131K", "Text"),
-                ModelSpec("llama-3.3-70b", "Llama 3.3 70B", "128K", "Text"),
-            ),
-            defaultModel = "auto",
-            category = "Gateway",
-        ),
-        ProviderSpec(
             id = "ovh",
             name = "OVHcloud AI Endpoints",
             baseUrl = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
@@ -454,14 +434,13 @@ object ProviderCatalog {
     val keylessDefaultIds: Set<String> = setOf("kilo", "ovh", "llm7", "pollinations")
 
     val defaultEnabledIds: Set<String> = setOf(
-        "kilo", "freellmapi", "ovh", "llm7", "pollinations", "groq", "openrouter", "gemini", "cohere", "cloudflare", "nvidia", "zai",
+        "kilo", "ovh", "llm7", "pollinations", "groq", "openrouter", "gemini", "cohere", "cloudflare", "nvidia", "zai",
         "hf-router", "sambanova", "ollama-cloud", "chutes", "alibaba", "nebius", "vercel",
     )
 
     fun defaultPriority(id: String): Int {
         val order = listOf(
             "kilo" to 10,
-            "freellmapi" to 15,
             "groq" to 20,
             "openrouter" to 30,
             "gemini" to 40,
