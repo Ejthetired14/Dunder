@@ -1,7 +1,5 @@
 package com.agoria.app.util
 
-import android.app.Activity
-import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
@@ -19,11 +17,16 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Manages checking for updates from GitHub Releases and installing APKs.
+ * Manages checking for updates from GitHub Pages / Releases and installing APKs.
+ *
+ * SEC-10: the APK URL must be a GitHub release asset of this repo (see [UpdatePolicy]), every
+ * redirect hop is re-checked, the download goes to a .part file, its SHA-256 must match the one
+ * published in latest-release.json, and partial/mismatching files are deleted.
  */
 class UpdateManager(
     private val context: Context,
@@ -53,28 +56,21 @@ class UpdateManager(
         val releaseNotes: String,
         val apkUrl: String,
         val publishedAt: String,
+        val sha256: String? = null,
     )
 
     companion object {
         private const val TAG = "UpdateManager"
         private const val PAGES_URL = "https://ejthetired14.github.io/Dunder/latest-release.json"
-        
-        fun compareVersions(v1: String, v2: String): Int {
-            val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
-            val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
-            val maxSize = maxOf(parts1.size, parts2.size)
-            for (i in 0 until maxSize) {
-                val p1 = parts1.getOrElse(i) { 0 }
-                val p2 = parts2.getOrElse(i) { 0 }
-                if (p1 != p2) return p1.compareTo(p2)
-            }
-            return 0
-        }
+
+        fun compareVersions(v1: String, v2: String): Int = UpdatePolicy.compareVersions(v1, v2)
     }
 
     fun isNewerRelease(release: ReleaseInfo): Boolean {
-        val result = compareVersions(release.versionName, currentVersionName) > 0
-        Log.d(TAG, "isNewerRelease: installed=${currentVersionName} (code=$currentVersionCode), remote=${release.versionName} (code=${release.versionCode}), result=$result")
+        val result = UpdatePolicy.isNewer(
+            release.versionName, release.versionCode, currentVersionName, currentVersionCode,
+        )
+        Log.d(TAG, "isNewerRelease: installed=$currentVersionName (code=$currentVersionCode), remote=${release.versionName} (code=${release.versionCode}), result=$result")
         return result
     }
 
@@ -102,9 +98,8 @@ class UpdateManager(
         try {
             val responseCode = connection.responseCode
             if (responseCode == 200) {
-                val response = connection.inputStream.bufferedReader().readText()
-                val json = JSONObject(response)
-                return parsePagesJson(json)
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                return parsePagesJson(JSONObject(response))
             } else {
                 Log.w(TAG, "fetchLatestRelease: Pages returned $responseCode")
                 return null
@@ -124,83 +119,151 @@ class UpdateManager(
         val apkUrl = json.optString("apkUrl", "")
         val tagName = json.optString("tagName", "")
         val publishedAt = json.optString("publishedAt", "")
+        val sha256 = UpdatePolicy.normalizeSha256(json.optString("sha256", ""))
 
         if (apkUrl.isEmpty()) {
             Log.w(TAG, "parsePagesJson: apkUrl is empty")
             return null
         }
+        if (!UpdatePolicy.isTrustedReleaseUrl(apkUrl, repoOwner, repoName)) {
+            Log.w(TAG, "parsePagesJson: refusing untrusted apkUrl")
+            return null
+        }
+        if (sha256 == null && UpdatePolicy.REQUIRE_SHA256) {
+            Log.w(TAG, "parsePagesJson: refusing release without a valid sha256")
+            return null
+        }
 
-        Log.d(TAG, "parsePagesJson: versionName=$versionName, versionCode=$versionCode, apkUrl=$apkUrl")
-        return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt)
-    }
-
-    private fun parseVersionCode(versionName: String): Int {
-        // Keep for ReleaseInfo.versionCode field, but comparison uses compareVersions
-        val parts = versionName.split(".")
-        return parts.lastOrNull()?.toIntOrNull() ?: 1
+        Log.d(TAG, "parsePagesJson: versionName=$versionName, versionCode=$versionCode")
+        return ReleaseInfo(tagName, versionName, versionCode, releaseNotes, apkUrl, publishedAt, sha256)
     }
 
     /**
-     * Downloads and installs the APK.
+     * Downloads, verifies and installs the APK.
      * Requires REQUEST_INSTALL_PACKAGES permission.
      */
     fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (Boolean) -> Unit) {
         scope.launch {
-            val success = withContext(Dispatchers.IO) {
-                downloadApk(release.apkUrl, release.tagName, onProgress)
-            }
+            val success = withContext(Dispatchers.IO) { downloadApk(release, onProgress) }
             withContext(Dispatchers.Main) { onComplete(success) }
         }
     }
 
-    private fun downloadApk(urlString: String, tagName: String, onProgress: (Int) -> Unit): Boolean {
-        val url = URL(urlString)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 30_000
-        connection.readTimeout = 30_000
-        connection.instanceFollowRedirects = true
+    /** Follows redirects by hand so every hop is checked. Returns a 200 connection or null. */
+    private fun openFollowingRedirects(startUrl: String): HttpURLConnection? {
+        var current = URL(startUrl)
+        repeat(UpdatePolicy.MAX_REDIRECTS + 1) {
+            if (!UpdatePolicy.isAllowedDownloadUrl(current.toString())) {
+                Log.w(TAG, "openFollowingRedirects: host not allowed: ${current.host}")
+                return null
+            }
+            val c = current.openConnection() as HttpURLConnection
+            c.requestMethod = "GET"
+            c.connectTimeout = 30_000
+            c.readTimeout = 30_000
+            c.instanceFollowRedirects = false
+            c.setRequestProperty("User-Agent", "Dunder-Android")
+            val code = c.responseCode
+            when (code) {
+                200 -> return c
+                301, 302, 303, 307, 308 -> {
+                    val location = c.getHeaderField("Location")
+                    c.disconnect()
+                    if (location.isNullOrBlank()) return null
+                    current = try {
+                        URL(current, location)
+                    } catch (e: Exception) {
+                        return null
+                    }
+                }
+                else -> {
+                    Log.w(TAG, "openFollowingRedirects: HTTP $code")
+                    c.disconnect()
+                    return null
+                }
+            }
+        }
+        return null
+    }
+
+    private fun downloadApk(release: ReleaseInfo, onProgress: (Int) -> Unit): Boolean {
+        if (!UpdatePolicy.isTrustedReleaseUrl(release.apkUrl, repoOwner, repoName)) {
+            Log.w(TAG, "downloadApk: refusing untrusted apkUrl")
+            return false
+        }
+        val expectedSha = release.sha256
+        if (expectedSha == null && UpdatePolicy.REQUIRE_SHA256) {
+            Log.w(TAG, "downloadApk: no sha256 for this release")
+            return false
+        }
+
+        val downloadsDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        } else {
+            context.getExternalFilesDir(null)
+        } ?: return false
+
+        // Remove leftovers from earlier attempts or older versions.
+        downloadsDir.listFiles { f -> f.name.startsWith("dunder-") && (f.name.endsWith(".apk") || f.name.endsWith(".part")) }
+            ?.forEach { it.delete() }
+
+        val safeTag = UpdatePolicy.safeFileComponent(release.tagName)
+        val partFile = File(downloadsDir, "dunder-$safeTag.apk.part")
+        val apkFile = File(downloadsDir, "dunder-$safeTag.apk")
+        var connection: HttpURLConnection? = null
 
         try {
-            if (connection.responseCode != 200) return false
+            connection = openFollowingRedirects(release.apkUrl) ?: return false
+            val totalSize = connection.contentLengthLong
+            if (totalSize > UpdatePolicy.MAX_APK_BYTES) {
+                Log.w(TAG, "downloadApk: APK larger than allowed")
+                return false
+            }
 
-            val totalSize = connection.contentLength
-            val input = connection.inputStream
-
-            val downloadsDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            } else {
-                context.getExternalFilesDir(null)
-            } ?: return false
-
-            val apkFile = File(downloadsDir, "dunder-$tagName.apk")
-            val output = FileOutputStream(apkFile)
-
-            val buffer = ByteArray(8192)
-            var downloaded = 0
-            var len: Int
-
-            while (input.read(buffer).also { len = it } != -1) {
-                output.write(buffer, 0, len)
-                downloaded += len
-                if (totalSize > 0) {
-                    val progress = (downloaded * 100 / totalSize)
-                    onProgress(progress)
+            connection.inputStream.use { input ->
+                FileOutputStream(partFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var downloaded = 0L
+                    var lastProgress = -1
+                    while (true) {
+                        val len = input.read(buffer)
+                        if (len == -1) break
+                        downloaded += len
+                        if (downloaded > UpdatePolicy.MAX_APK_BYTES) throw IOException("APK larger than allowed size")
+                        output.write(buffer, 0, len)
+                        if (totalSize > 0) {
+                            val progress = (downloaded * 100 / totalSize).toInt()
+                            if (progress != lastProgress) {
+                                lastProgress = progress
+                                onProgress(progress)
+                            }
+                        }
+                    }
+                    output.flush()
                 }
             }
 
-            output.flush()
-            output.close()
-            input.close()
+            if (totalSize > 0 && partFile.length() != totalSize) {
+                Log.w(TAG, "downloadApk: truncated download")
+                return false
+            }
+            if (expectedSha != null && !UpdatePolicy.fileMatchesSha256(partFile, expectedSha)) {
+                Log.w(TAG, "downloadApk: SHA-256 mismatch, refusing to install")
+                return false
+            }
+            if (apkFile.exists()) apkFile.delete()
+            if (!partFile.renameTo(apkFile)) {
+                Log.w(TAG, "downloadApk: could not finalize file")
+                return false
+            }
 
-            // Install APK
             return installApk(apkFile)
-
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "downloadApk error", e)
             return false
         } finally {
-            connection.disconnect()
+            connection?.disconnect()
+            partFile.delete() // no-op after a successful rename; removes partial/mismatching data otherwise
         }
     }
 

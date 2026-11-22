@@ -34,7 +34,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | Builds | `core/BuildRunner.kt` | LLM generates a file list, written under the project workspace, zipped. |
 | Data | `data/*` | Room DB v4 (14 entities), `Repository.kt` (~41 KB), seed data, export/import JSON snapshot, daily auto-backup. |
 | Service | `service/AutonomyService.kt`, `BootReceiver.kt`, `BootStatus.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`; since RUN-5 it reads settings read-only with a timeout and reports failures through `BootStatus` + a notification. Explicit stops persist `autonomyEnabled=false` (RUN-3). |
-| Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON. |
+| Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON (URL/host allowlist and SHA-256 check in UpdatePolicy since SEC-10). |
 | CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13, SEC-3) checks the backup config, exported components and workflow hygiene on every push/PR. Release signing fails closed without keystore secrets (SEC-3). |
 | Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/check_workflows.py`, `tools/test_check_workflows.py`, `tools/office_gen` | Backup-config, exported-component and workflow-hygiene regression guards + their self-tests (stdlib Python only). |
 
@@ -143,10 +143,17 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: tests with a fake cipher cover failure paths and UI state shows "re-enter secret".
 
 ### SEC-10 - Self-updater accepts any URL and does no integrity check
-- Status: TODO | Effort: M
-- Evidence: `UpdateManager` downloads `apkUrl` from Pages JSON with no https/host check, no SHA-256, ignores `versionCode` (`parseVersionCode` unused), leaves partial files on failure. Android's same-signature rule limits damage, but see SEC-3 (random signing keys).
-- Fix: require https and `github.com/<owner>/<repo>/releases/` host/path; publish `sha256` in `latest-release.json` from CI and verify before install; compare `versionCode`; delete partial downloads.
-- Done when: install refuses mismatched hash or wrong host.
+- Status: IN-PROGRESS (2026-11-23) - implemented, **CI + first tagged release + device check pending** | Effort: M
+- Evidence (original): `UpdateManager` downloaded `apkUrl` from Pages JSON with no https/host check, no SHA-256, ignored `versionCode`, built the file name from the JSON `tagName` (path traversal risk), left partial files on failure, and followed redirects automatically.
+- Implemented (2026-11-23):
+  - New `util/UpdatePolicy.kt` (pure Kotlin, no Android classes): `isTrustedReleaseUrl` accepts only `https://github.com/<owner>/<repo>/releases/download/<tag>/<file>.apk` (no userinfo, port, query, fragment, `%`, `..`; owner/repo compared case-insensitively); `isAllowedDownloadUrl` for redirect hops (https + `github.com`, `objects.githubusercontent.com`, `github-releases.githubusercontent.com`, `release-assets.githubusercontent.com`); `normalizeSha256`, `sha256Hex`, constant-time `fileMatchesSha256`; `safeFileComponent`; `isNewer` (higher versionName, or equal name + higher versionCode); `MAX_APK_BYTES` 250 MB; `REQUIRE_SHA256 = true`.
+  - `util/UpdateManager.kt`: `ReleaseInfo.sha256`; `parsePagesJson` refuses an untrusted URL or a missing/invalid sha256; manual redirect following (max 5) re-checking every hop; size cap and truncation check; download to `dunder-<safeTag>.apk.part`, SHA-256 verified, then renamed; partial/mismatching files deleted; old `dunder-*.apk/.part` cleaned before a download; unused `parseVersionCode` removed; Pages JSON reader now closes its stream.
+  - CI: `build-apk.yml` publishes `sha256` of the signed APK in `latest-release.json` (new `APK SHA-256` step + job output) and runs `testDebugUnitTest`.
+  - Tests: `app/src/test/java/com/agoria/app/util/UpdatePolicyTest.kt` (JUnit 4, `testImplementation("junit:junit:4.13.2")`).
+- Design choices: sha256 is **required** (REQUIRE_SHA256) because every release built after this change carries it and old apps never run this code; the Pages JSON still has the same trust root as the release, so this protects against a wrong/tampered download, not a compromised repo owner (Android's same-signer rule covers the rest); only `/releases/download/` URLs are accepted (matches what CI publishes).
+- Verified: NOT yet. Written without a Kotlin compiler; see the Work log for the exact checks to run.
+- Remaining to close this task: (1) CI `Build APK` green incl. the new `Unit tests` step; `Backup config guard` green; (2) push a test `v*` tag and confirm `latest-release.json` contains `sha256` and the app accepts the update; (3) device check: a tampered APK (or edited sha256 in a local copy of the JSON) is refused and no `dunder-*.apk*` file remains; (4) flip to `DONE` with commit link.
+- Done when: install refuses mismatched hash or wrong host (unit-tested) and an end-to-end update from a tagged release works.
 
 ### SEC-11 - Stripe webhook secret flow is fake
 - Status: TODO | Effort: M | Depends on: BUG-1
@@ -194,6 +201,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Evidence: `build-apk.yml`, `backup-guard.yml` use mutable tags (`actions/checkout@v4`, `setup-java@v4`, `cache@v4`, `upload-artifact@v4`, `upload-pages-artifact@v3`, `deploy-pages@v4`, `configure-pages@v4`). The `build` job holds `contents: write` and the signing secrets in the same job that runs Gradle on repository code.
 - Fix: pin every `uses:` to a full commit SHA with a `# vX.Y.Z` comment (resolve SHAs from the official action repos, never guess); move signing + release into a separate `release` job (`needs: build`, tags only, `contents: write`) that downloads the unsigned APK artifact, so PR/branch builds never see secrets; add `.github/dependabot.yml` for `github-actions` and `gradle`; extend `tools/check_workflows.py` to fail on `uses:` without a 40-hex SHA.
 - Done when: the guard fails on a tag-pinned action and `main` is green with all actions SHA-pinned.
+
+### SEC-15 - Tell the user why an update was refused (and verify the update path end to end)
+- Status: TODO | Effort: S | Depends on: SEC-10 | Added 2026-11-23
+- Evidence: `UpdateManager.downloadAndInstall` reports only `Boolean`. After SEC-10 there are several distinct refusals (untrusted URL, missing sha256, hash mismatch, too large, permission not granted) but the UI can show only a generic failure. `checkForUpdates` also returns `null` both for "up to date" and for "refused/invalid JSON".
+- Fix: return a sealed `UpdateResult` (Installed, NeedsPermission, Refused(reason), NetworkError) and a `CheckResult` (UpToDate, Available, Invalid(reason), NetworkError); surface the reason in the update dialog; never include exception messages or URLs with tokens. UI files were not reviewed (section 8): find the caller of `UpdateManager` first.
+- Done when: a tampered hash shows "Update refused: file did not match its checksum" in the app, and "up to date" is distinguishable from "update info invalid".
 
 ---
 
@@ -377,7 +390,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 ### TEST-1 - There are no tests
 - Status: TODO | Effort: L
-- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.)
+- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.) Since 2026-11-23 there is one JUnit file, `UpdatePolicyTest` (SEC-10), and `build-apk.yml` runs `testDebugUnitTest`.
 - Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved). Boot path (RUN-5) and stop path (RUN-3) are good early candidates once a fake `SettingsDao` exists.
 
 ### CI-1 - CI hygiene
@@ -441,10 +454,10 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 
 ## 9. Suggested order of work
 
-1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3 (implemented, verify CI + owner actions, DEC-6), SEC-14, SEC-4, SEC-5, SEC-7.
+1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3 (implemented, verify CI + owner actions, DEC-6), SEC-14, SEC-10 (implemented, verify), SEC-4, SEC-5, SEC-7.
 2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5 (implemented, verify), RUN-3 (part 1 done), RUN-6.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
-4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-10, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
+4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-15, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
 5. **Quality:** TEST-1 (start alongside step 1), CI-1, OBS-1, ARCH-1, DOC-1.
 
 ---
@@ -465,6 +478,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | RUN-5 and RUN-3 part 1 CI verified (Build APK run 45039776580, Backup config guard run 45039776621, commit `7c990ec`); updated RUN-3 and RUN-5 status with commit link and run IDs. |
 | 2026-11-22 | Claude | SEC-3 implemented (removed `apply-phase2.yml` and `generate-keystore.yml`; `build-apk.yml` least-privilege permissions, fail-closed signing via `env:`, signed APK only in releases; new `tools/check_workflows.py` guard + tests wired into `backup-guard.yml`; `docs/release-signing.md`); IN-PROGRESS pending CI and owner actions. Added SEC-14 (SHA-pin actions, split signing job, Dependabot) and DEC-6 (rotate keystore?). Updated section 1 (CI/Tools rows), section 9, work log. Not run in GitHub Actions. |
 | 2026-11-22 | Claude | SEC-3 CI verified (Backup config guard run 45041539979, Build APK run 45041540039, commit `231f84a`); updated SEC-3 status with commit link and run IDs. |
+| 2026-11-23 | Claude | SEC-10 implemented (new `UpdatePolicy.kt`, hardened `UpdateManager.kt`, SHA-256 published by CI in `latest-release.json`, `UpdatePolicyTest`, `testDebugUnitTest` CI step); IN-PROGRESS pending CI, a tagged release and a device check. Added SEC-15 (surface update refusal reasons). Updated section 1 (Util row), TEST-1, section 9, work log. Not compiled in the session (no Kotlin toolchain). |
 
 ---
 
@@ -548,3 +562,13 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified: Actions runs, the tag-only signing/release path, throwaway-PR red check.
 - Risk to flag: the first `v*` tag after this lands will **fail** if the keystore secrets are not set; that is intended.
 - Next for whoever continues: push, confirm both workflows green on `main`; owner answers DEC-6 and confirms secrets; then SEC-14 (S-M) or SEC-2 (M).
+
+### 2026-11-23 - SEC-10 (self-updater hardening) - Claude (free-tier session, GitHub connector + sandbox)
+- Picked SEC-10: P0, self-contained in two small files (`UpdateManager.kt`, `build-apk.yml`) and needs none of the large unreviewed files (SEC-4/5/7 need `AgentRuntime.kt` ~42 KB or `ConnectorExecutor.kt` ~129 KB; SEC-14 needs network to resolve action SHAs; SEC-2 and SEC-9 ripple through `Repository.kt` and the UI).
+- Note on inputs: the brief said `ForClaude/claudebackend.md`; the repo file is `ForClaude/CLAUDE_BACKEND_PLAN.md` (kept its name). Read via the GitHub connector at repo commit `eb6e1e8`; the sandbox had no network and no Kotlin compiler, so changes were delivered as a copy-paste prompt for a second agent to apply, commit and push. **A reviewer should diff the plan against `main` and confirm only SEC-10, new SEC-15, section 1 (Util row), TEST-1, section 9, the changelog and this entry changed.**
+- Read: this plan, `util/UpdateManager.kt`, `.github/workflows/build-apk.yml`, `app/build.gradle.kts`.
+- Changed: see SEC-10 "Implemented". Files: new `util/UpdatePolicy.kt`, rewritten `util/UpdateManager.kt`, new `app/src/test/.../UpdatePolicyTest.kt`, `app/build.gradle.kts` (JUnit dep), `.github/workflows/build-apk.yml` (sha256 + unit-test step), this plan.
+- Verified: the SHA-256 test vector for "abc" was checked with Python `hashlib`; apkUrl format (`https://github.com/<repo>/releases/download/<tag>/<signed apk name>`) was checked against the `APK URL` step in `build-apk.yml`.
+- NOT verified: compilation, the unit tests, GitHub Actions, a tagged release, any device. Most likely compile spots: `repeat(...)` with non-local `return` and `when (val code = ...)` in `openFollowingRedirects`; `trim('.', '_')` in `safeFileComponent`; the unused `android.app.DownloadManager` import (delete it if the compiler complains).
+- Risk to flag: the first release after this lands must go out as a **new tag** so `latest-release.json` carries `sha256`; until then the in-app updater of the new build refuses the (old) JSON, which is intended. If GitHub changes its release-asset redirect host, the update is refused with a log line (`host not allowed`): add the new host to `DOWNLOAD_HOSTS`.
+- Next for whoever continues: confirm CI green, run the tag + device checks under SEC-10, then take SEC-15 (S) or SEC-2 (M).

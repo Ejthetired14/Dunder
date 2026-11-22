@@ -26,6 +26,7 @@ jobs:
       release_url: ${{ steps.release.outputs.html_url }}
       release_notes: ${{ steps.release.outputs.body }}
       apk_url: ${{ steps.apk_url.outputs.url }}
+      apk_sha256: ${{ steps.apk_sha.outputs.sha256 }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -91,6 +92,9 @@ jobs:
             echo "::error::assembleDebug failed on all 3 attempts"
             exit 1
           fi
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build Release APK
         run: |
@@ -214,6 +218,16 @@ jobs:
         run: |
           echo "url=https://github.com/$REPO/releases/download/$TAG/$(basename "$SIGNED_APK")" >> $GITHUB_OUTPUT
 
+      # SEC-10: publish the SHA-256 of the signed APK so the app can verify the download.
+      - name: APK SHA-256
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: apk_sha
+        env:
+          SIGNED_APK: ${{ steps.sign-apk.outputs.SIGNED_APK }}
+        run: |
+          set -euo pipefail
+          echo "sha256=$(sha256sum \"$SIGNED_APK\" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
@@ -244,6 +258,7 @@ jobs:
             "releaseUrl": "${{ needs.build.outputs.release_url }}",
             "releaseNotes": "${{ needs.build.outputs.release_notes }}",
             "apkUrl": "${{ needs.build.outputs.apk_url }}",
+            "sha256": "${{ needs.build.outputs.apk_sha256 }}",
             "tagName": "${{ github.ref_name }}",
             "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           }
