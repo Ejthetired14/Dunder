@@ -1,412 +1,418 @@
 package com.agoria.app.ui.office.world
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.offset
-import androidx.compose.ui.unit.padSize
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
-import androidx.compose.foundation.gestures.detectTransformGestures
-import kotlinx.coroutines.delay
-import com.agoria.app.data.AgentEntity
-import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.components.AgentAvatar
-import com.agoria.app.ui.components.Pill
-import com.agoria.app.ui.components.StatusPill
-import com.agoria.app.ui.components.statusLabel
-import com.agoria.app.ui.office.world.CameraState
-import com.agoria.app.ui.office.world.DeskPanel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.agoria.app.R
 import com.agoria.app.ui.office.world.HotspotDef
-import com.agoria.app.ui.office.world.OfficeSim
-import com.agoria.app.ui.office.world.OfficeWorld
-import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.ui.office.world.PixelBody
-import com.agoria.app.ui.office.world.PixelButton
-import com.agoria.app.ui.office.world.PixelIconButton
-import com.agoria.app.ui.office.world.PixelLabel
-import com.agoria.app.ui.office.world.PixelPanel
-import com.agoria.app.ui.office.world.buildSignals
-import com.agoria.app.ui.office.world.statusText
-import com.agoria.app.util.Time
+import com.agoria.app.ui.office.world.rememberResBitmap
+import kotlin.collections.HashMap
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
+
+private const val SPRITE_WORLD = 51f
+private const val MIN_ZOOM_FIT = 1f
+private const val MAX_SCALE = 5f
+private const val DEFAULT_SCALE = 2.2f
+
+/** Redraw at most ~30 times a second. Plenty for 8 sprites, and kind to a Helio G36. */
+private const val FRAME_NS = 30_000_000L
+
+private val TagStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Bold,
+    fontSize = 10.sp,
+    color = Pal.ink,
+)
 
 /**
- * The office is a pixel-art world by default. The old card grid stays available as a list view
- * (also the accessible fallback, since a canvas cannot be read by TalkBack).
+ * Viewport over the world. Screen = (world - center) * scale + viewport / 2.
+ * State is read only inside the Canvas draw block, so panning and zooming redraw without recomposing.
  */
-@Composable
-fun OfficeScreen(
-    viewModel: AgoriaViewModel,
-    navController: NavHostController,
-    onOpenAgent: (String) -> Unit,
-    onOpenBrowsers: () -> Unit = {},
-    onOpenApprovals: () -> Unit = {},
-) {
-    // Scope OfficeViewModel to the root nav graph so it survives tab switching
-    val rootEntry = navController.getBackStackEntry("home")
-    val officeViewModel: OfficeViewModel = viewModel(rootEntry)
-    val sim = officeViewModel.sim
-    val camera = officeViewModel.camera
+@Stable
+class CameraState {
+    var scale by mutableFloatStateOf(DEFAULT_SCALE)
+    var cx by mutableFloatStateOf(420f)
+    var cy by mutableFloatStateOf(300f)
+    var viewW by mutableFloatStateOf(0f)
+    var viewH by mutableFloatStateOf(0f)
+    private var placed = false
 
-    var listMode by rememberSaveable { mutableStateOf(false) }
-    if (listMode) {
-        OfficeListScreen(
-            viewModel = viewModel,
-            onOpenAgent = onOpenAgent,
-            onOpenBrowsers = onOpenBrowsers,
-            onShowMap = { listMode = false },
-        )
-    } else {
-        OfficeWorldScreen(
-            sim = sim,
-            camera = camera,
-            viewModel = viewModel,
-            onOpenAgent = onOpenAgent,
-            onOpenBrowsers = onOpenBrowsers,
-            onOpenApprovals = onOpenApprovals,
-            onNavigate = { route -> navController.navigate(route) },
-            onShowList = { listMode = true },
-        )
+    private fun minScale(): Float =
+        if (viewW <= 0f) MIN_ZOOM_FIT else viewW / OfficeLayout.bounds.width
+
+    fun onResize() {
+        if (viewW <= 0f || viewH <= 0f) return
+        if (!placed) {
+            placed = true
+            reset()
+        } else {
+            clamp()
+        }
+    }
+
+    fun reset() {
+        scale = max(minScale(), DEFAULT_SCALE)
+        cx = 420f
+        cy = 300f
+        clamp()
+    }
+
+    fun worldToScreen(x: Float, y: Float): Offset =
+        Offset((x - cx) * scale + viewW / 2f, (y - cy) * scale + viewH / 2f)
+
+    fun screenToWorld(p: Offset): Offset =
+        Offset((p.x - viewW / 2f) / scale + cx, (p.y - viewH / 2f) / scale + cy)
+
+    /** Sprite edge in pixels: always a whole multiple of 32 so pixel art stays crisp. */
+    fun spritePx(): Float = 32f * (scale * SPRITE_WORLD / 32f).roundToInt().coerceIn(1, 8)
+
+    fun transform(centroid: Offset, pan: Offset, zoom: Float) {
+        val before = screenToWorld(centroid)
+        scale = (scale * zoom).coerceIn(minScale(), MAX_SCALE)
+        cx = before.x - (centroid.x - viewW / 2f) / scale - pan.x / scale
+        cy = before.y - (centroid.y - viewH / 2f) / scale - pan.y / scale
+        clamp()
+    }
+
+    fun clamp() {
+        val b = OfficeLayout.bounds
+        scale = scale.coerceIn(minScale(), MAX_SCALE)
+        val halfW = viewW / 2f / scale
+        val halfH = viewH / 2f / scale
+        cx = if (halfW * 2f >= b.width) b.center.x else cx.coerceIn(b.left + halfW, b.right - halfW)
+        cy = if (halfH * 2f >= b.height) b.center.y else cy.coerceIn(b.top + halfH, b.bottom - halfH)
     }
 }
 
 @Composable
-private fun OfficeWorldScreen(
+fun OfficeWorld(
     sim: OfficeSim,
     camera: CameraState,
-    viewModel: AgoriaViewModel,
-    onOpenAgent: (String) -> Unit,
-    onOpenBrowsers: () -> Unit,
-    onOpenApprovals: () -> Unit,
-    onNavigate: (String) -> Unit,
-    onShowList: () -> Unit,
+    selectedId: String?,
+    selectedHotspotId: String? = null,
+    deskAlert: Boolean = false,
+    debug: Boolean = false,
+    onSelect: (String?) -> Unit = {},
+    onHotspot: (HotspotDef?) -> Unit = {},
+    onDebugTap: (Offset) -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
-    val agents by viewModel.agents.collectAsStateWithLifecycle()
-    val diary by viewModel.diary.collectAsStateWithLifecycle()
-    val pending by viewModel.pendingCount.collectAsStateWithLifecycle()
-    val pendingApprovals by viewModel.pendingApprovals.collectAsStateWithLifecycle()
-    val pendingRequests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
-    val logs by viewModel.connectorLogs.collectAsStateWithLifecycle()
-    val builds by viewModel.builds.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val map = rememberResBitmap(R.drawable.office_pixel_base, 2048)
+    val objects = rememberResBitmap(R.drawable.office_pixel_objects, 2048)
+    val sheet = rememberResBitmap(R.drawable.office_sprites, 4096)
+    var frame by remember { mutableLongStateOf(0L) }
 
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var hotspot by remember { mutableStateOf<HotspotDef?>(null) }
-    var deskOpen by remember { mutableStateOf(false) }
-    var debug by remember { mutableStateOf(false) }
-    var debugTap by remember { mutableStateOf<Offset?>(null) }
+    val onSelectNow by rememberUpdatedState(onSelect)
+    val onHotspotNow by rememberUpdatedState(onHotspot)
+    val onDebugTapNow by rememberUpdatedState(onDebugTap)
+    val debugNow by rememberUpdatedState(debug)
+    val selectedHotspotIdNow by rememberUpdatedState(selectedHotspotId)
+    val deskAlertNow by rememberUpdatedState(deskAlert)
 
-    // Auto-hide top HUD. The activity counter restarts the countdown on every touch;
-    // the previous version kept its Job in a plain var and never applied the detector
-    // to the layout, so once the HUD hid it could not come back.
-    val hudVisible = remember { mutableStateOf(true) }
-    var hudActivityTick by remember { mutableIntStateOf(0) }
-    val hudAutoHideDelay = 3000L // 3 seconds
+    val textMeasurer = rememberTextMeasurer()
+    val tagCache = remember { HashMap<String, TextLayoutResult>() }
 
-    // Live data: agents get bodies, then what they are really doing decides where they stand.
-    // The tick re-checks every few seconds so "recently used" connectors age out on their own.
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(4000)
-            tick++
-        }
-    }
-    LaunchedEffect(agents, pendingApprovals, pendingRequests, logs, builds, tick) {
-        sim.sync(agents)
-        sim.applySignals(buildSignals(agents, pendingApprovals, pendingRequests, logs, builds, Time.now()))
-    }
-    LaunchedEffect(selectedId) { sim.holdId = selectedId }
-
-    val selectedAgent = agents.firstOrNull { it.id == selectedId }
-    val actor = sim.actors.firstOrNull { it.agentId == selectedId }
-    // Reading sim.revision here makes the card refresh when the agent changes activity.
-    val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
-    val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
-
-    // Show the HUD, then hide it after a few idle seconds. Every touch bumps the tick,
-    // which cancels the pending countdown and starts a fresh one.
-    LaunchedEffect(hudActivityTick) {
-        hudVisible.value = true
-        delay(hudAutoHideDelay)
-        hudVisible.value = false
-    }
-
-    // The map and its actors consume taps, so listen on the Initial pass.
-    val hudTouchDetector = Modifier
-        .fillMaxSize()
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                var wasPressed = false
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val pressed = event.changes.any { it.pressed }
-                    if (pressed && !wasPressed) hudActivityTick++
-                    wasPressed = pressed
+    // Game loop. Only runs while the screen is visible, and redraws at ~30 fps.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, sim) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var last = 0L
+            while (true) {
+                val now = withFrameNanos { it }
+                if (last == 0L) {
+                    last = now
+                    continue
                 }
+                val dtNs = now - last
+                if (dtNs < FRAME_NS) continue
+                last = now
+                sim.update((dtNs / 1_000_000_000f).coerceAtMost(0.1f))
+                frame = now
             }
         }
+    }
 
-    Box(
-        modifier = Modifier
+    Canvas(
+        modifier = modifier
             .fillMaxSize()
-            .background(Pal.ink)
-            .then(hudTouchDetector),
+            .onSizeChanged { size ->
+                camera.viewW = size.width.toFloat()
+                camera.viewH = size.height.toFloat()
+                camera.onResize()
+            }
+            .pointerInput(camera) {
+                detectTransformGestures { centroid, pan, zoom, _ ->
+                    camera.transform(centroid, pan, zoom)
+                }
+            }
+            .pointerInput(sim, camera, selectedHotspotIdNow, deskAlertNow) {
+                detectTapGestures { tap ->
+                    val hit = hitActor(sim, camera, tap, 26.dp.toPx())
+                    if (hit != null) {
+                        onSelectNow(hit.agentId)
+                    } else if (OfficeLayout.deskHotspot.rect.contains(camera.screenToWorld(tap))) {
+                        // Check hotspot
+                        val worldPos = camera.screenToWorld(tap)
+                        val hs = OfficeLayout.hotspots.firstOrNull { it.contains(worldPos) }
+                        if (hs != null) {
+                            onHotspotNow(hs)
+                        } else {
+                            onHotspotNow(null)
+                        }
+                    } else {
+                        onSelectNow(null)
+                        onHotspotNow(null)
+                    }
+                    if (debugNow) onDebugTapNow(camera.screenToWorld(tap))
+                }
+            },
     ) {
-        OfficeWorld(
-            sim = sim,
-            camera = camera,
-            selectedId = selectedId,
-            selectedHotspotId = hotspot?.id,
-            deskAlert = pending > 0,
-            debug = debug,
-            onSelect = {
-                selectedId = it
-                if (it != null) {
-                    hotspot = null
-                    deskOpen = false
-                }
-            },
-            onHotspot = { hs ->
-                if (hs == null) {
-                    hotspot = null
-                } else if (hs.id == "desk") {
-                    hotspot = null
-                    selectedId = null
-                    deskOpen = true
-                } else {
-                    hotspot = hs
-                    selectedId = null
-                    deskOpen = false
-                }
-            },
-            onDebugTap = { debugTap = it },
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (frame == Long.MIN_VALUE) return@Canvas // reading `frame` is what schedules each redraw
 
-        // Top HUD (auto-hide)
-        if (hudVisible.value) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(modifier = Modifier.weight(1f, fill = false)) {
-                    PixelPanel(
-                        modifier = Modifier
-                            .pointerInput(Unit) {
-                                detectTapGestures(onLongPress = {
-                                    debug = !debug
-                                    debugTap = null
-                                })
-                            },
-                    ) {
-                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text("THE OFFICE", style = PixelLabel)
-                            Text(
-                                text = "${agents.size} agents · live",
-                                style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
-                            )
-                        }
-                    }
-                    if (pending > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        PixelButton(
-                            text = "! $pending to approve",
-                            onClick = {
-                                selectedId = null
-                                hotspot = null
-                                deskOpen = true
-                            },
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
-                    PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
-                    PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
-                }
-            }
+        drawRect(Pal.ink)
+
+        val baseImage = map
+        if (baseImage != null) {
+            val topLeft = camera.worldToScreen(0f, 0f)
+            val side = OfficeLayout.WORLD * camera.scale
+            drawImage(
+                image = baseImage,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(baseImage.width, baseImage.height),
+                dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
+                dstSize = IntSize(side.roundToInt(), side.roundToInt()),
+                filterQuality = FilterQuality.Medium,
+            )
         }
 
-        if (debug) {
-            PixelPanel(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 10.dp),
-            ) {
-                val tap = debugTap
-                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    Text("DEBUG", style = PixelLabel)
-                    Text(
-                        text = if (tap == null) "tap the map" else "x=${tap.x.roundToInt()}  y=${tap.y.roundToInt()}",
-                        style = PixelBody.copy(fontSize = 12.sp),
-                    )
-                }
-            }
+        val objectsImage = objects
+        if (objectsImage != null) {
+            val topLeft = camera.worldToScreen(0f, 0f)
+            val side = OfficeLayout.WORLD * camera.scale
+            drawImage(
+                image = objectsImage,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(objectsImage.width, objectsImage.height),
+                dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
+                dstSize = IntSize(side.roundToInt(), side.roundToInt()),
+                filterQuality = FilterQuality.Medium,
+            )
         }
 
-        // Bottom card: your desk, a selected agent, or a selected room. Only one at a time.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(12.dp),
-        ) {
-            when {
-                deskOpen -> DeskPanel(
-                    approvals = pendingApprovals,
-                    requests = pendingRequests,
-                    agents = agents,
-                    settings = settings,
-                    onApprove = { viewModel.approve(it) },
-                    onDeny = { viewModel.deny(it) },
-                    onSetAuto = { on, types ->
-                        viewModel.updateSettings {
-                            it.copy(autoApproveEnabled = on, autoApproveTypes = types.joinToString(","))
-                        }
-                    },
-                    onOpenApprovals = onOpenApprovals,
-                    onClose = { deskOpen = false },
+        if (deskAlertNow) {
+            val desk = OfficeLayout.deskHotspot.rect
+            val dTl = camera.worldToScreen(desk.left, desk.top)
+            val side = min(desk.width, desk.height) * camera.scale * 0.8f
+            drawRect(
+                Pal.amber,
+                topLeft = Offset(dTl.x + (desk.width * camera.scale - side) / 2f, dTl.y + (desk.height * camera.scale - side) / 2f),
+                size = Size(side, side),
+                style = Stroke(3.dp.toPx()),
+            )
+        }
+
+        if (debug) drawDebug(camera)
+
+        val sheetImage = sheet ?: return@Canvas
+        val px = camera.spritePx()
+        val ordered = sim.actors.sortedBy { it.y }
+
+        // Pass 1: shadows, selection rings and sprites, back to front.
+        for (a in ordered) {
+            val s = camera.worldToScreen(a.x, a.y)
+            drawOval(
+                color = Color(0x44000000),
+                topLeft = Offset(s.x - px * 0.28f, s.y - px * 0.08f),
+                size = Size(px * 0.56f, px * 0.16f),
+            )
+            if (a.agentId == selectedId) {
+                drawOval(
+                    color = Pal.amber,
+                    topLeft = Offset(s.x - px * 0.42f, s.y - px * 0.14f),
+                    size = Size(px * 0.84f, px * 0.28f),
+                    style = Stroke(width = 2.dp.toPx()),
                 )
+            }
+            val frameIdx = if (a.walking) {
+                SpriteSheet.WALK[((a.anim * 7f).toInt()) % SpriteSheet.WALK.size]
+            } else {
+                1
+            }
+            val bob = if (!a.walking && ((a.anim * 2f).toInt() and 1) == 1) 1.dp.toPx() else 0f
+            drawImage(
+                image = sheetImage,
+                srcOffset = SpriteSheet.srcOffset(a.avatar, a.dir, frameIdx),
+                srcSize = IntSize(SpriteSheet.CELL, SpriteSheet.CELL),
+                dstOffset = IntOffset(
+                    (s.x - px / 2f).roundToInt(),
+                    (s.y - px * 0.88f + bob).roundToInt(),
+                ),
+                dstSize = IntSize(px.roundToInt(), px.roundToInt()),
+                filterQuality = FilterQuality.None,
+            )
+        }
 
-                selectedAgent != null -> PixelPanel(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AgentAvatar(selectedAgent, 44.dp)
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(selectedAgent.name.uppercase(), style = PixelLabel)
-                                Text(selectedAgent.role, style = PixelBody.copy(fontSize = 12.sp))
-                            }
-                            PixelIconButton(Icons.Default.Close, "Close", { selectedId = null })
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = statusLine ?: statusLabel(selectedAgent.status),
-                            style = PixelBody.copy(fontWeight = FontWeight.SemiBold),
-                        )
-                        if (!latestDiary.isNullOrBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "${latestDiary.take(140)}",
-                                style = PixelBody.copy(
-                                    fontStyle = FontStyle.Italic,
-                                    color = Color(0xFF4A4338),
-                                ),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            PixelButton(
-                                text = "Diary & chat",
-                                onClick = { onOpenAgent(selectedAgent.id) },
-                            )
-                            if (pendingApprovals.any { it.agentId == selectedAgent.id } ||
-                                pendingRequests.any { it.agentId == selectedAgent.id }
-                            ) {
-                                PixelButton(
-                                    text = "Approvals",
-                                    onClick = { deskOpen = true; selectedId = null },
-                                    fill = Pal.cream,
-                                )
-                            }
-                        }
-                    }
+        // Pass 2: bubbles and name tags on top of every sprite.
+        val showTags = camera.scale >= 1.8f
+        for (a in ordered) {
+            val s = camera.worldToScreen(a.x, a.y)
+            val headY = s.y - px * 0.9f
+            when (a.bubble) {
+                Bubble.ALERT -> drawAlert(s.x, headY, sim.elapsed)
+                Bubble.TALK -> drawTalk(s.x, headY, sim.elapsed)
+                Bubble.NONE -> Unit
+            }
+            val selected = a.agentId == selectedId
+            if ((showTags || selected) && a.name.isNotEmpty()) {
+                val layout = tagCache.getOrPut(a.name) {
+                    textMeasurer.measure(a.name.uppercase(), TagStyle)
                 }
-
-                hotspot != null -> {
-                    val hs = hotspot
-                    if (hs != null) {
-                        PixelPanel(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(hs.label, style = PixelLabel)
-                                        Text(hs.blurb, style = PixelBody.copy(fontSize = 12.sp))
-                                    }
-                                    PixelIconButton(Icons.Default.Close, "Close", { hotspot = null })
-                                }
-                                Spacer(Modifier.height(10.dp))
-                                PixelButton(text = "Open", onClick = { onNavigate(hs.route) })
-                            }
-                        }
-                    }
-                }
+                val padX = 4.dp.toPx()
+                val padY = 2.dp.toPx()
+                val w = layout.size.width + padX * 2f
+                val h = layout.size.height + padY * 2f
+                val tl = Offset(s.x - w / 2f, s.y + 3.dp.toPx())
+                pixelBox(tl, Size(w, h), if (selected) Pal.amber else Pal.cream, 1.5.dp.toPx())
+                drawText(layout, topLeft = Offset(tl.x + padX, tl.y + padY))
             }
         }
     }
+}
+
+private fun hitActor(sim: OfficeSim, cam: CameraState, tap: Offset, minHalfW: Float): Actor? {
+    val size = cam.spritePx()
+    var best: Actor? = null
+    var bestY = -Float.MAX_VALUE
+    for (a in sim.actors) {
+        val s = cam.worldToScreen(a.x, a.y)
+        val halfW = max(size * 0.45f, minHalfW)
+        val top = s.y - size * (if (a.bubble == Bubble.NONE) 1.0f else 1.6f)
+        val bottom = s.y + size * 0.15f
+        if (abs(tap.x - s.x) <= halfW && tap.y >= top && tap.y <= bottom && s.y > bestY) {
+            best = a
+            bestY = s.y
+        }
+    }
+    return best
+}
+
+private fun DrawScope.pixelBox(topLeft: Offset, size: Size, fill: Color, border: Float) {
+    drawRect(
+        Pal.ink,
+        topLeft = Offset(topLeft.x - border, topLeft.y - border),
+        size = Size(size.width + border * 2f, size.height + border * 2f),
+    )
+    drawRect(fill, topLeft = topLeft, size = size)
+}
+
+/** Yellow "!" above an agent who is waiting for you. */
+private fun DrawScope.drawAlert(cx: Float, headY: Float, t: Float) {
+    val w = 18.dp.toPx()
+    val h = 22.dp.toPx()
+    val bob = sin(t * 7f) * 2.dp.toPx()
+    val tl = Offset(cx - w / 2f, headY - h - 6.dp.toPx() + bob)
+    pixelBox(tl, Size(w, h), Pal.amber, 2.dp.toPx())
+    val bar = 3.dp.toPx()
+    drawRect(Pal.ink, Offset(cx - bar / 2f, tl.y + 4.dp.toPx()), Size(bar, 9.dp.toPx()))
+    drawRect(Pal.ink, Offset(cx - bar / 2f, tl.y + 15.dp.toPx()), Size(bar, 3.dp.toPx()))
+    drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
+}
+
+/** Three-dot speech bubble for agents who are talking. Phase 3 puts real text in here. */
+private fun DrawScope.drawTalk(cx: Float, headY: Float, t: Float) {
+    val w = 30.dp.toPx()
+    val h = 18.dp.toPx()
+    val tl = Offset(cx - w / 2f, headY - h - 6.dp.toPx())
+    pixelBox(tl, Size(w, h), Pal.cream, 2.dp.toPx())
+    val dot = 3.dp.toPx()
+    val gap = 4.dp.toPx()
+    val startX = cx - (dot * 3f + gap * 2f) / 2f
+    val active = (t * 3f).toInt() % 3
+    for (i in 0 until 3) {
+        val lift = if (i == active) 2.dp.toPx() else 0f
+        drawRect(
+            Pal.ink,
+            Offset(startX + i * (dot + gap), tl.y + h / 2f - dot / 2f - lift),
+            Size(dot, dot),
+        )
+    }
+    drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
+}
+
+/** Shows the walking graph, every spot, your desk and the map bounds. Long-press the title to toggle. */
+private fun DrawScope.drawDebug(cam: CameraState) {
+    val g = OfficeLayout.graph
+    val line = Color(0xAA00E5FF)
+    for (i in 0 until g.size) {
+        val a = cam.worldToScreen(g.xs[i], g.ys[i])
+        for (j in g.adj[i]) {
+            if (j > i) {
+                val b = cam.worldToScreen(g.xs[j], g.ys[j])
+                drawLine(line, a, b, strokeWidth = 2.dp.toPx())
+            }
+        }
+    }
+    val dot = 4.dp.toPx()
+    for (i in 0 until g.size) {
+        val p = cam.worldToScreen(g.xs[i], g.ys[i])
+        drawRect(Color(0xFF00E5FF), Offset(p.x - dot / 2f, p.y - dot / 2f), Size(dot, dot))
+    }
+    for (s in g.spots) {
+        val p = cam.worldToScreen(s.x, s.y)
+        val r = 5.dp.toPx()
+        drawOval(Color(0xFFFF8A00), topLeft = Offset(p.x - r, p.y - r), size = Size(r * 2f, r * 2f), style = Stroke(2.dp.toPx()))
+    }
+    val d = OfficeLayout.deskHotspot.rect
+    val dTl = cam.worldToScreen(d.left, d.top)
+    drawRect(
+        Color(0xFFFFC83D),
+        topLeft = dTl,
+        size = Size(d.width * cam.scale, d.height * cam.scale),
+        style = Stroke(2.dp.toPx()),
+    )
+    val b = OfficeLayout.bounds
+    val bTl = cam.worldToScreen(b.left, b.top)
+    drawRect(
+        Color(0xFFFF4D6D),
+        topLeft = bTl,
+        size = Size(b.width * cam.scale, b.height * cam.scale),
+        style = Stroke(1.dp.toPx()),
+    )
 }

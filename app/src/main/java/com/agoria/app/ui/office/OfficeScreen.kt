@@ -292,7 +292,7 @@ private fun OfficeWorldScreen(
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                     Text("DEBUG", style = PixelLabel)
                     Text(
-                        text = if (tap == null) "tap the map" else "x=${tap.x.roundToInt()}  y=${tap.y.round.ToInt()}",
+                        text = if (tap == null) "tap the map" else "x=${tap.x.roundToInt()}  y=${tap.y.roundToInt()}",
                         style = PixelBody.copy(fontSize = 12.sp),
                     )
                 }
@@ -342,7 +342,7 @@ private fun OfficeWorldScreen(
                         if (!latestDiary.isNullOrBlank()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "“latestDiary.take(140)}”",
+                                text = "“${latestDiary.take(140)}”",
                                 style = PixelBody.copy(
                                     fontStyle = FontStyle.Italic,
                                     color = Color(0xFF4A4338),
@@ -541,7 +541,7 @@ private fun AgentDesk(
             Text(
                 text = latestDiary ?: agent.goal,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontStyle = FontStyle.Italic,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
