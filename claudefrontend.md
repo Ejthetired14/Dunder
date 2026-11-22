@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 12:45 UTC.
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 14:15 UTC.
 
 ---
 
@@ -113,7 +113,7 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | --- | --- | --- |
 | T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. |
 | T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
-| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | PARTIAL: Home, Project, Connectors, Agent done (PR #9, #10). Remaining: Approvals, Settings, Onboarding. Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) and Approvals (24 KB) are big: do them one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
+| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | PARTIAL: Home, Project, Connectors, Agent, Approvals done (PR #9, #10, #11). Remaining: Settings, Onboarding. Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) is big: do it one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
 | T-CARRY | Agent carries a finished build (crate icon) to a shelf in the workshop | Needs "build finished" signal. |
@@ -180,6 +180,7 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 14:15  Claude  T-BACK2  PR #11 merged to main (commit d15decc). Build APK run 45078557925 green, Backup guard run 45078557904 green. ApprovalsScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'approvals'; auto-approve settings action in top bar; floating button hidden on Approvals page. [verified]
 - 2026-11-23 12:45  Claude  T-BACK2  PR #10 merged to main (commit ca2ef1e). Build APK run 45072215229 green, Backup guard run 45072215197 green. AgentScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'agent'; pause/resume action in top bar; floating button hidden on Agent page. [verified]
 - 2026-11-23 11:30  Claude  T-BACK2  PR #9 merged to main (commit 2f638f2). Build APK run 45070684147 green, Backup guard run 45070684236 green. Home, Project, Connectors converted to PixelScaffold; AgoriaNav ScaffoldedRoutes updated; floating button hidden on these three pages. [verified]
 - 2026-11-23 10:25  Claude  T-BACK  PR #8 merged to main (commit b6b7efb). Build APK run 45068973188 green, Backup guard run 45068973197 green. `PixelScaffold` + `PixelTopBar` compiled and CI passes. Diary & Browsers converted; AgoriaNav hides floating button on scaffolded routes. [verified]
