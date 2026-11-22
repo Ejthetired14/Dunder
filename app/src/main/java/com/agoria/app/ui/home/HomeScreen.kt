@@ -35,17 +35,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +66,7 @@ import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.AgentCard
 import com.agoria.app.ui.components.OfficeThumbnail
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.SectionHeader
 import com.agoria.app.util.Time
 
@@ -82,6 +79,7 @@ fun HomeScreen(
     onOpenApprovals: () -> Unit,
     onOpenDiary: () -> Unit,
     onOpenOffice: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val state by viewModel.homeScreenState.collectAsStateWithLifecycle()
@@ -102,31 +100,10 @@ fun HomeScreen(
     val userName = settings?.userName ?: "Boss"
     val latestDiary = diary.take(5)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(officeName, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = if (runtime.running) "The office is awake" else "The office is resting",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add agent")
-            }
-        },
+    PixelScaffold(
+        title = "Home",
+        subtitle = "Welcome back, $userName · $officeName",
+        onBack = onBack,
     ) { padding ->
         LazyColumn(
             modifier = Modifier

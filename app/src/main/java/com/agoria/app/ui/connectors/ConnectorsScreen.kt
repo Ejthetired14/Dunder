@@ -20,12 +20,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,13 +44,17 @@ import com.agoria.app.core.ConnectorDef
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ConnectorLogEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.connectorIcon
 import com.agoria.app.util.Time
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectorsScreen(viewModel: AgoriaViewModel) {
+fun ConnectorsScreen(
+    viewModel: AgoriaViewModel,
+    onBack: () -> Unit,
+) {
     val connectors by viewModel.connectors.collectAsStateWithLifecycle()
     val requests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
     val logs by viewModel.connectorLogs.collectAsStateWithLifecycle()
@@ -86,8 +88,10 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
         }
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Connectors") }) },
+    PixelScaffold(
+        title = "Connectors",
+        subtitle = "Office integrations and agent tools",
+        onBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
