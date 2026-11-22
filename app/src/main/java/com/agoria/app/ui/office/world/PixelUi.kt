@@ -83,7 +83,10 @@ fun PixelButton(
             .heightIn(min = 44.dp)
             .background(fill)
             .border(2.dp, Pal.ink)
-            .clickable(onClick = onClick)
+            .clickable(onClick = {
+                OfficeSound.play(OfficeSound.Fx.CLICK)
+                onClick()
+            })
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -102,7 +105,10 @@ fun PixelIconButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(onClick = onClick),
+                .clickable(onClick = {
+                    OfficeSound.play(OfficeSound.Fx.CLICK)
+                    onClick()
+                }),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

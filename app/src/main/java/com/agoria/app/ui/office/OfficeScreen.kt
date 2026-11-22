@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
@@ -48,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -83,6 +86,8 @@ import com.agoria.app.ui.components.statusLabel
 import com.agoria.app.ui.office.world.CameraState
 import com.agoria.app.ui.office.world.ChatterPanel
 import com.agoria.app.ui.office.world.DeskPanel
+import com.agoria.app.ui.office.world.DirectoryPanel
+import com.agoria.app.ui.office.world.OfficeSound
 import com.agoria.app.ui.office.world.HotspotDef
 import com.agoria.app.ui.office.world.OfficeSim
 import com.agoria.app.ui.office.world.OfficeWorld
@@ -173,6 +178,17 @@ private fun OfficeWorldScreen(
     val prefs = remember { context.getSharedPreferences("dunder_office", Context.MODE_PRIVATE) }
     var hintsSeen by remember { mutableStateOf(prefs.getBoolean("hints_seen", false)) }
 
+    val christmas = remember { isChristmasSeason() }
+    var directoryOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { OfficeSound.init(context) }
+
+    // Sound: an alert when something new needs you.
+    var lastPending by remember { mutableIntStateOf(pending) }
+    LaunchedEffect(pending) {
+        if (pending > lastPending) OfficeSound.play(OfficeSound.Fx.ALERT)
+        lastPending = pending
+    }
+
     var selectedId by remember { mutableStateOf<String?>(null) }
     var hotspot by remember { mutableStateOf<HotspotDef?>(null) }
     var deskOpen by remember { mutableStateOf(false) }
@@ -202,7 +218,13 @@ private fun OfficeWorldScreen(
 
     // What agents say to each other. New messages are acted out in the world as they arrive.
     val chatter = remember(diary, agents) { parseChatter(diary, agents) }
-    LaunchedEffect(chatter) { sim.onChatter(chatter, Time.now()) }
+    var lastChatAt by remember { mutableLongStateOf(-1L) }
+    LaunchedEffect(chatter) {
+        sim.onChatter(chatter, Time.now())
+        val newest = chatter.firstOrNull()?.at ?: 0L
+        if (lastChatAt >= 0L && newest > lastChatAt) OfficeSound.play(OfficeSound.Fx.TALK)
+        lastChatAt = newest
+    }
 
     val selectedAgent = agents.firstOrNull { it.id == selectedId }
     val actor = sim.actors.firstOrNull { it.agentId == selectedId }
@@ -259,6 +281,7 @@ private fun OfficeWorldScreen(
             selectedHotspotId = hotspot?.id,
             deskAlert = pending > 0,
             tint = tint,
+            christmas = christmas,
             debug = debug,
             onSelect = {
                 selectedId = it
@@ -266,6 +289,7 @@ private fun OfficeWorldScreen(
                     hotspot = null
                     deskOpen = false
                     chatterOpen = false
+                    directoryOpen = false
                 }
             },
             onHotspot = { hs ->
@@ -275,12 +299,20 @@ private fun OfficeWorldScreen(
                     hotspot = null
                     selectedId = null
                     chatterOpen = false
+                    directoryOpen = false
                     deskOpen = true
+                } else if (hs.id == "board") {
+                    hotspot = null
+                    selectedId = null
+                    chatterOpen = false
+                    deskOpen = false
+                    directoryOpen = true
                 } else {
                     hotspot = hs
                     selectedId = null
                     deskOpen = false
                     chatterOpen = false
+                    directoryOpen = false
                 }
             },
             onDebugTap = { debugTap = it },
@@ -301,13 +333,26 @@ private fun OfficeWorldScreen(
                     PixelPanel(
                         modifier = Modifier
                             .pointerInput(Unit) {
-                                detectTapGestures(onLongPress = {
-                                    debug = !debug
-                                    debugTap = null
-                                })
+                                detectTapGestures(
+                                    onTap = {
+                                        selectedId = null
+                                        hotspot = null
+                                        deskOpen = false
+                                        chatterOpen = false
+                                        directoryOpen = !directoryOpen
+                                    },
+                                    onLongPress = {
+                                        debug = !debug
+                                        debugTap = null
+                                    },
+                                )
                             },
                     ) {
-                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                          Column(Modifier.weight(1f, fill = false)) {
                             Text("THE OFFICE", style = PixelLabel)
                             Text(
                                 text = "${agents.size} agents · " + when {
@@ -316,6 +361,14 @@ private fun OfficeWorldScreen(
                                     else -> "open"
                                 },
                                 style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
+                            )
+                          }
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                Icons.Default.Menu,
+                                contentDescription = "Open directory",
+                                tint = Pal.ink,
+                                modifier = Modifier.size(22.dp),
                             )
                         }
                     }
@@ -327,6 +380,7 @@ private fun OfficeWorldScreen(
                                 selectedId = null
                                 hotspot = null
                                 chatterOpen = false
+                                directoryOpen = false
                                 focusDesk()
                                 deskOpen = true
                             },
@@ -343,6 +397,7 @@ private fun OfficeWorldScreen(
                                 selectedId = null
                                 hotspot = null
                                 deskOpen = false
+                                directoryOpen = false
                             }
                         },
                     )
@@ -369,7 +424,7 @@ private fun OfficeWorldScreen(
                     Spacer(Modifier.height(8.dp))
                     Text("Tap an agent to see what they are thinking, or to talk to them.", style = PixelBody)
                     Spacer(Modifier.height(4.dp))
-                    Text("Tap a room to open the part of the app it stands for.", style = PixelBody)
+                    Text("There is no menu bar. Tap a room, or the notice board (DIRECTORY), to open any page. Zoom in to see labels.", style = PixelBody)
                     Spacer(Modifier.height(4.dp))
                     Text("A yellow ! means someone needs you. Tap your desk to approve.", style = PixelBody)
                     Spacer(Modifier.height(4.dp))
@@ -412,6 +467,24 @@ private fun OfficeWorldScreen(
                 .padding(12.dp),
         ) {
             when {
+                directoryOpen -> DirectoryPanel(
+                    onGo = { route ->
+                        directoryOpen = false
+                        onNavigate(route)
+                    },
+                    onListView = {
+                        directoryOpen = false
+                        onShowList()
+                    },
+                    onResetView = {
+                        directoryOpen = false
+                        camera.reset()
+                    },
+                    soundOn = OfficeSound.enabled,
+                    onSound = { OfficeSound.setEnabled(it) },
+                    onClose = { directoryOpen = false },
+                )
+
                 deskOpen -> DeskPanel(
                     approvals = pendingApprovals,
                     requests = pendingRequests,
@@ -532,6 +605,14 @@ private fun OfficeWorldScreen(
             }
         }
     }
+}
+
+/** Christmas season in the Philippines: the "Ber months" start in September and run to Three Kings. */
+private fun isChristmasSeason(): Boolean {
+    val c = java.util.Calendar.getInstance()
+    val month = c.get(java.util.Calendar.MONTH)
+    return month >= java.util.Calendar.SEPTEMBER ||
+        (month == java.util.Calendar.JANUARY && c.get(java.util.Calendar.DAY_OF_MONTH) <= 6)
 }
 
 /** One-line message box: talk to an agent without leaving the office. */
