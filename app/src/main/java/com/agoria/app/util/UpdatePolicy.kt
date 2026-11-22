@@ -98,7 +98,7 @@ object UpdatePolicy {
 
     /** Tag name -> safe file name part (no separators, no leading dots). */
     fun safeFileComponent(raw: String): String {
-        val cleaned = raw.replace(UNSAFE_FILE_CHARS, "_").trim('.', '_').take(64)
+        val cleaned = raw.replace(UNSAFE_FILE_CHARS, "_").trim { it == '.' || it == '_' }.take(64)
         return if (cleaned.isEmpty()) "release" else cleaned
     }
 
