@@ -2,9 +2,9 @@ package com.agoria.app.ui.settings
 
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
-import java.io.File
 import android.os.PowerManager
+import android.provider.Settings as AndroidSettings
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -114,6 +113,12 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.settingsScreenState.collectAsStateWithLifecycle()
+    val settings = state.settings
+    val providers = state.providers
+    val tests = state.providerTests
+    val revenue = state.revenue
+    val runtimeState = state.runtimeState
+
     var showReset by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(120) }
     var cooldown by remember { mutableStateOf(90) }
@@ -170,12 +175,6 @@ fun SettingsScreen(
         val pm = context.getSystemService(PowerManager::class.java)
         isIgnoringBatteryOptimizations.value = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
     }
-
-    val settings = state.settings
-    val providers = state.providers
-    val tests = state.providerTests
-    val revenue = state.revenue
-    val runtimeState = state.runtimeState
 
     LaunchedEffect(settings) {
         settings?.let {
@@ -323,7 +322,7 @@ fun SettingsScreen(
                     if (!isIgnoringBatteryOptimizations.value) {
                         Button(
                             onClick = {
-                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                val intent = Intent(AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                                     .apply { setData(android.net.Uri.parse("package:${context.packageName}")) }
                                 requestIgnoreBatteryOptimizationLauncher.launch(intent)
                             },
@@ -331,15 +330,15 @@ fun SettingsScreen(
                     } else {
                         TextButton(
                             onClick = {
-                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                val intent = Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                                 context.startActivity(intent)
                             },
                         ) { Text("Review battery settings") }
                     }
                     TextButton(
                         onClick = {
-                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            val intent = Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
                             }
                             context.startActivity(intent)
                         },
