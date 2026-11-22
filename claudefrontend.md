@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Sunday 22 Nov 2026 20:22 UTC.
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026.
 
 ---
 
@@ -112,7 +112,8 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | ID | What | Notes |
 | --- | --- | --- |
 | T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. |
-| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) used by every sub page | Spec in section 5. Do before T-SCREENS. |
+| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | PARTIAL: `ui/components/PixelScaffold.kt` written; Diary and Browsers converted. CODE WRITTEN, not compiled. Needs a green CI build. |
+| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | TODO (NEXT). Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) and Approvals (24 KB) are big: do them one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
 | T-CARRY | Agent carries a finished build (crate icon) to a shelf in the workshop | Needs "build finished" signal. |
@@ -173,11 +174,13 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
       corners, monospace headings and flat dark backgrounds. List which still look off (feeds T-SCREENS).
 - [ ] Quick chat: send a message to an agent from its card; it thinks and replies on the card.
 - [ ] Agent talk: tell one agent "say hi to <other agent>"; a speech bubble plays out.
+- [ ] Diary and Agent browsers pages show the ink top bar with BACK TO OFFICE; tapping returns to the office; no floating "< Office" button on those two pages.
 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 10:15  Claude  T-BACK  CODE WRITTEN (not compiled, not pushed: the chat's GitHub token was read-only, branch creation returned 403). Added `ui/components/PixelScaffold.kt` (`PixelScaffold`, `PixelTopBar`), converted `DiaryScreen` (new `onBack` param) and `BrowsersScreen`, `AgoriaNav` passes `popBackStack("office", false)` and hides the floating button on scaffolded routes. Compile suspects: `Icons.AutoMirrored.Filled.ArrowBack` (already used in BrowsersScreen, so should be fine), `PixelLabel.copy(...)`, `Scaffold(content = ...)` named argument. [untested]
 - 2026-11-22 20:22  Claude  T-NAV, T-DIR, T-THEME, T-COMMON, T-SOUND, T-NIGHT, T-SEASON  PR #7 opened, Build APK run 45065987758 green, Backup guard run 45065987749 green. Fixed one compile error: `OfficeSound.setEnabled` platform declaration clash -> renamed to `setSoundEnabled`. All Phase 5 code compiles and CI passes. [verified]
 - 2026-11-22  Claude  T-THEME, T-COMMON  CODE WRITTEN (not compiled): `AgoriaTheme.kt` is one fixed pixel scheme (ink/navy/cream/amber/teal, square shapes, monospace headings, no surface tint); `Common.kt` rewritten with the same public API (crisp square avatar showing the standing frame, solid ink-bordered chips, `PixelCard`). Every page that uses the theme or these components changes look at once. Per-screen leftovers (explicit RoundedCornerShape, Material buttons/switches/text fields) are T-SCREENS. [untested]
 - 2026-11-22  Claude  T-NAV, T-DIR, T-SOUND, T-NIGHT, T-SEASON  CODE WRITTEN (not compiled): AgoriaNav has no bottom bar plus a floating "< Office" button; DirectoryPanel on the notice board and the title panel; amber page labels on every tappable area when zoomed in; OfficeSound (3 generated WAVs, mute in the directory); lamp glow at night; Christmas decor Sep 1 - Jan 6. [untested]

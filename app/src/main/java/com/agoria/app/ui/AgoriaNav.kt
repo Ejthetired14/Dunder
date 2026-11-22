@@ -26,10 +26,17 @@ import com.agoria.app.ui.project.ProjectScreen
 import com.agoria.app.ui.settings.SettingsScreen
 
 /**
+ * Routes whose screen already uses PixelScaffold (task T-BACK). They draw their own BACK TO OFFICE
+ * top bar, so the floating "< Office" button is hidden on them. When you convert another screen,
+ * add its route here. Once every route is listed, delete the floating button and this set.
+ */
+private val ScaffoldedRoutes = setOf("diary", "browsers")
+
+/**
  * The office is the only top-level view. There is no bottom bar: every other page is opened from
  * inside the office (rooms, your desk, the notice board directory) and system Back returns to it.
- * Until every page has its own pixel top bar (see claudefrontend.md, T-BACK), a floating
- * "< Office" button on every other page is the visible way back.
+ * Screens not yet on PixelScaffold (see claudefrontend.md, T-BACK2) still get the floating
+ * "< Office" button as the visible way back.
  */
 @Composable
 fun AgoriaNav(viewModel: AgoriaViewModel) {
@@ -74,13 +81,14 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 composable("browsers") {
                     BrowsersScreen(
                         viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackStack("office", false) },
                     )
                 }
                 composable("diary") {
                     DiaryScreen(
                         viewModel = viewModel,
                         onOpenAgent = { id -> navController.navigate("agent/$id") },
+                        onBack = { navController.popBackStack("office", false) },
                     )
                 }
                 composable("approvals") {
@@ -108,7 +116,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 }
             }
 
-            if (currentRoute != null && currentRoute != "office") {
+            if (currentRoute != null && currentRoute != "office" && currentRoute !in ScaffoldedRoutes) {
                 PixelButton(
                     text = "< Office",
                     onClick = { navController.popBackStack("office", false) },

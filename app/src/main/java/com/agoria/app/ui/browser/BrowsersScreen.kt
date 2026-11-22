@@ -16,19 +16,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,6 +38,7 @@ import com.agoria.app.browser.BrowserHub
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.util.Time
 
 /**
@@ -113,7 +110,6 @@ private fun LiveWebPage(url: String) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowsersScreen(
     viewModel: AgoriaViewModel,
@@ -122,26 +118,10 @@ fun BrowsersScreen(
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val sessions by BrowserHub.sessions.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Agent browsers")
-                        Text(
-                            text = "Every agent browses in its own window, in the background",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
+    PixelScaffold(
+        title = "Agent browsers",
+        subtitle = "Every agent browses in its own window, in the background",
+        onBack = onBack,
     ) { padding ->
         if (agents.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(padding)) {
