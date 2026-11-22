@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import java.io.File
+import android.os.PowerManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
@@ -36,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -145,10 +149,33 @@ fun SettingsScreen(
         }
     }
 
+    // Battery optimization ignore request
+    val requestIgnoreBatteryOptimizationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val pm = context.getSystemService(PowerManager::class.java)
+        val isIgnoring = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                if (isIgnoring) "Battery optimization disabled for Dunder" else "Battery optimization still active for Dunder"
+            )
+        }
+    }
+
+    // Battery optimization status
+    val isIgnoringBatteryOptimizations = remember {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(settings) {
+        val pm = context.getSystemService(PowerManager::class.java)
+        isIgnoringBatteryOptimizations.value = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+    }
+
     val settings = state.settings
     val providers = state.providers
     val tests = state.providerTests
     val revenue = state.revenue
+    val runtimeState = state.runtimeState
 
     LaunchedEffect(settings) {
         settings?.let {
@@ -188,7 +215,40 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.setAutonomy(it) },
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
+                // Runtime status row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val isRunning = runtimeState.running
+                    val isTicking = runtimeState.ticking
+                    val currentAgent = runtimeState.currentAgentName
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = if (isRunning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = when {
+                            isRunning && isTicking -> "Autonomy: RUNNING (ticking)"
+                            isRunning -> "Autonomy: RUNNING (idle)"
+                            else -> "Autonomy: STOPPED",
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isRunning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
+                    )
+                    if (currentAgent != null) {
+                        Text(
+                            text = "→ $currentAgent",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Cycle interval: ${formatSeconds(tick)}",
                     style = MaterialTheme.typography.labelLarge,
@@ -232,18 +292,50 @@ fun SettingsScreen(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BatteryAlert,
+                        contentDescription = null,
+                        tint = if (isIgnoringBatteryOptimizations.value) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = if (isIgnoringBatteryOptimizations.value)
+                            "Battery optimization: DISABLED ✓"
+                            else "Battery optimization: ACTIVE (may pause background work)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isIgnoringBatteryOptimizations.value)
+                            MaterialTheme.colorScheme.secondary
+                            else MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "For reliable background execution, allow notifications and disable battery optimization for Dunder.",
+                    text = "For reliable background execution, allow notifications and disable battery optimization for Dunder. OEMs may still kill the app; see dontkillmyapp.com for vendor-specific steps.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                            context.startActivity(intent)
-                        },
-                    ) { Text("Battery settings") }
+                    if (!isIgnoringBatteryOptimizations.value) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                    .apply { setData(android.net.Uri.parse("package:${context.packageName}")) }
+                                requestIgnoreBatteryOptimizationLauncher.launch(intent)
+                            },
+                        ) { Text("Disable battery optimization") }
+                    } else {
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                context.startActivity(intent)
+                            },
+                        ) { Text("Review battery settings") }
+                    }
                     TextButton(
                         onClick = {
                             val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {

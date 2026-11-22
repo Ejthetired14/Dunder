@@ -62,6 +62,7 @@ data class SettingsScreenState(
     val providerTests: Map<String, ProviderTest>,
     val revenue: List<com.agoria.app.data.RevenueEntity>,
     val connectors: List<com.agoria.app.data.ConnectorEntity>,
+    val runtimeState: com.agoria.app.core.RuntimeState,
 )
 
 // Combined state for AgentScreen to reduce Flow collections
@@ -211,9 +212,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         providerTests,
         revenue,
         connectors,
-    ) { s, p, t, r, c ->
-        SettingsScreenState(s, p, t, r, c)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList(), emptyList()))
+        runtime.state,
+    ) { s, p, t, r, c, rt ->
+        SettingsScreenState(s, p, t, r, c, rt)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList(), emptyList(), com.agoria.app.core.RuntimeState()))
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
@@ -409,7 +411,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setAutonomy(enabled: Boolean) {
-        viewModelScope.launch {
+        appScope.launch {
             repo.updateSettings { it.copy(autonomyEnabled = enabled) }
             if (enabled) {
                 AutonomyService.start(getApplication())
@@ -425,7 +427,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     fun stopAutonomy() = setAutonomy(false)
 
     fun syncAutonomy() {
-        viewModelScope.launch {
+        appScope.launch {
             val settings = repo.settings()
             if (settings.autonomyEnabled) {
                 AutonomyService.start(getApplication())
@@ -438,15 +440,15 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun runNow() {
-        viewModelScope.launch { runtime.tickOnce() }
+        appScope.launch { runtime.tickOnce() }
     }
 
     fun nudgeAll() {
-        viewModelScope.launch { runtime.nudgeAll() }
+        appScope.launch { runtime.nudgeAll() }
     }
 
     fun sendMessage(agentId: String, text: String) {
-        viewModelScope.launch {
+        appScope.launch {
             try {
                 runtime.chat(agentId, text)
             } catch (e: Exception) {
@@ -462,22 +464,22 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun approve(approvalId: String, note: String = "") {
-        viewModelScope.launch { runtime.approve(approvalId, note) }
+        appScope.launch { runtime.approve(approvalId, note) }
     }
 
     fun deny(approvalId: String, note: String = "") {
-        viewModelScope.launch { runtime.deny(approvalId, note) }
+        appScope.launch { runtime.deny(approvalId, note) }
     }
 
     fun approveConnectorRequest(requestId: String) {
-        viewModelScope.launch {
+        appScope.launch {
             val connectorId = runtime.approveConnectorRequest(requestId)
             _setupConnectorId.value = connectorId
         }
     }
 
     fun denyConnectorRequest(requestId: String, note: String = "") {
-        viewModelScope.launch { runtime.denyConnectorRequest(requestId, note) }
+        appScope.launch { runtime.denyConnectorRequest(requestId, note) }
     }
 
     fun clearSetupConnector() {
@@ -639,7 +641,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun finishSetup(userName: String) {
-        viewModelScope.launch {
+        appScope.launch {
             repo.updateSettings {
                 it.copy(
                     setupComplete = true,

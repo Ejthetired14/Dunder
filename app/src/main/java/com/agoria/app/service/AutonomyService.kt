@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -49,6 +50,15 @@ class AutonomyService : Service() {
         releaseWakeLock()
         (application as AgoriaApplication).runtime.stop()
         super.onDestroy()
+    }
+
+    @RequiresApi(34)
+    override fun onTimeout() {
+        // Android 14+: called if startForeground wasn't called within the timeout.
+        // We already call startForegroundCompat in onCreate/onStartCommand, but if it
+        // failed or took too long, this gives us a chance to log and clean up.
+        Log.e(TAG, "Foreground service start timeout - service will be stopped")
+        stopAutonomy()
     }
 
     private fun acquireWakeLock() {
