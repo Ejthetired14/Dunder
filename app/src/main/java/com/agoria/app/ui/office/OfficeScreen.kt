@@ -481,7 +481,7 @@ private fun OfficeWorldScreen(
                         camera.reset()
                     },
                     soundOn = OfficeSound.enabled,
-                    onSound = { OfficeSound.setEnabled(it) },
+                    onSound = { OfficeSound.setSoundEnabled(it) },
                     onClose = { directoryOpen = false },
                 )
 

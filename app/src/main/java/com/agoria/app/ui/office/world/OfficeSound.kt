@@ -45,7 +45,7 @@ object OfficeSound {
         pool = sp
     }
 
-    fun setEnabled(on: Boolean) {
+    fun setSoundEnabled(on: Boolean) {
         enabled = on
         prefs?.edit()?.putBoolean("sound_on", on)?.apply()
     }
