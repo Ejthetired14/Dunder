@@ -1,4 +1,4 @@
-# Pixel office (Phase 2)
+# Pixel office (Phase 5)
 
 The Office tab is a pixel-art world. Agents walk to the room that matches what they are really
 doing, wait under a "!" when they need you, and your desk opens an approvals + auto-approve panel.
@@ -61,7 +61,53 @@ tap areas are regenerated together, so nothing has to be placed by hand.
 Long-press the THE OFFICE title: blocked tiles (red), spots (orange), tap areas (yellow), and the
 world x/y of each tap.
 
-## Next (Phase 3)
+## Agents talk to each other (Phase 3)
 
-Agent-to-agent `say` action, a message table, real speech bubble text and a transcript.
-Remove the old tabs, sound, onboarding.
+Agents have a new `say` action: `{"action": "say", "action_input": {"to": "Pam", "text": "..."}}`.
+It is stored as a diary entry (kind `say`, content `To Pam: ...`), so no database migration is
+needed and the talk also appears in the Diary screen. The recipient sees it in a "Recent talk"
+section of their next prompt and can answer. Runtime edits: see `phase3-runtime-edits.md`.
+
+In the office:
+
+- A new message plays out once: an idle speaker walks next to the listener and a real speech
+  bubble shows the text; a busy speaker (working, waiting for you) talks from where they stand.
+- Only new messages are acted out (nothing old is replayed when you open the tab).
+- The speech-bubble button in the top bar opens OFFICE CHATTER, the recent talk list. Tap a line to
+  jump to the speaker. A selected agent's card also shows their last two lines.
+- A `say` never wakes the other agent early, so they cannot ping-pong and burn model quotas.
+
+## The office is the app (Phase 4)
+
+- **Home screen:** the office is now the start destination and the first tab. The old Home screen is
+  still a tab (it holds the link to Settings). The office keeps running when you switch tabs.
+- **Run the office from the office:** the play/pause button in the top bar starts or stops autonomy.
+  The subtitle shows `open`, `thinking` or `paused`.
+- **Quick chat:** tap an agent, type in the box and send. It goes through the normal chat path
+  (`viewModel.sendMessage`), so the agent thinks and answers. Their latest reply shows on the card.
+- **Camera:** it flies to your desk when you tap "! n to approve", and to the speaker when you pick a
+  line in Office chatter. Any drag or pinch cancels the flight.
+- **Day and night:** a soft colour wash follows the phone's clock (dark blue at night, a hint of
+  orange at dawn and dusk, none by day). It is the `officeTint()` function in `OfficeScreen.kt`; make
+  it return `Color.Transparent` to turn it off.
+- **First-run tips:** a short "Welcome to your office" card, shown once (stored in the
+  `dunder_office` preferences as `hints_seen`).
+- The Agent browsers button left the top bar to make room; it lives in the Web room.
+
+## Office only (Phase 5)
+
+- **No bottom bar.** The office is the only top-level view. Other pages open from rooms, your desk,
+  or the notice board / title panel **directory**; system Back (or the floating "< Office" button)
+  returns.
+- **Labels:** zoomed in (scale 1.6+), every tappable area shows an amber tag naming the page it opens.
+- **Sound** (res/raw): alert, talk blip, click; mute in the directory (`dunder_office` prefs `sound_on`).
+- **Night shift:** when the tint is dark, each agent has a warm glow.
+- **Christmas decor** (Sep 1 - Jan 6): parol lanterns, tree, string lights. From `tools/office_gen`
+  (the `SEASONAL` array in `OfficeMapData.kt`).
+- **Pixel theme** for the whole app (`AgoriaTheme.kt`) and pixel shared components (`Common.kt`).
+  Remaining per-screen work is tracked in `claudefrontend.md`.
+
+## Next
+
+Sound, a real messages table, per-agent routines. Ideas: agents carry their finished builds to the
+workshop shelf, seasonal decor, a night shift with the lights off.

@@ -1,12 +1,7 @@
 package com.agoria.app.ui.components
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,17 +15,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Language
@@ -46,13 +38,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontStyle
@@ -64,15 +55,18 @@ import androidx.compose.ui.unit.dp
 import com.agoria.app.R
 import com.agoria.app.data.AgentEntity
 
+/** Pixel look shared by every page: 2 dp ink borders, flat fills, square corners. */
+private val PixelInk = Color(0xFF14161F)
+
 fun statusColor(status: String): Color {
     return when (status) {
-        "thinking" -> Color(0xFFF2B84B)
-        "working" -> Color(0xFF5FD3C4)
-        "waiting_approval" -> Color(0xFFB69CFF)
+        "thinking" -> Color(0xFFFFC83D)
+        "working" -> Color(0xFF5E9AA0)
+        "waiting_approval" -> Color(0xFFC9A2F0)
         "paused" -> Color(0xFF8B93A3)
         "sleeping" -> Color(0xFF6B7280)
-        "error" -> Color(0xFFFF6B6B)
-        else -> Color(0xFF7C8798)
+        "error" -> Color(0xFFD9534F)
+        else -> Color(0xFFB9B2A0)
     }
 }
 
@@ -90,10 +84,28 @@ fun statusLabel(status: String): String {
 
 fun riskColor(risk: String): Color {
     return when (risk) {
-        "low" -> Color(0xFF5FD3C4)
-        "medium" -> Color(0xFFF2B84B)
-        "high" -> Color(0xFFFF6B6B)
+        "low" -> Color(0xFF5E9AA0)
+        "medium" -> Color(0xFFFFC83D)
+        "high" -> Color(0xFFD9534F)
         else -> Color(0xFF8B93A3)
+    }
+}
+
+/** A flat panel with a 2 dp ink border and a hard offset shadow. Use instead of rounded cards. */
+@Composable
+fun PixelCard(
+    modifier: Modifier = Modifier,
+    fill: Color = MaterialTheme.colorScheme.surfaceVariant,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .background(Color(0x66000000))
+            .padding(end = 3.dp, bottom = 3.dp)
+            .background(fill)
+            .border(2.dp, PixelInk),
+    ) {
+        content()
     }
 }
 
@@ -106,21 +118,24 @@ fun AgentAvatar(
 ) {
     val sprite = ImageBitmap.imageResource(R.drawable.office_sprites)
     val index = agent.avatarIndex.coerceIn(0, 7)
-    val baseColumn = if (index < 4) index * 3 else (index - 4) * 3
+    // Front-facing, standing frame (middle column of the character's block).
+    val baseColumn = (if (index < 4) index * 3 else (index - 4) * 3) + 1
     val baseRow = if (index < 4) 0 else 4
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(
-                color = Color(0xFF2A3140),
-                radius = size.toPx() / 2f,
-            )
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF2C3254))
+                .border(2.dp, PixelInk),
+        ) {
             drawImage(
                 image = sprite,
                 srcOffset = IntOffset(baseColumn * 32, baseRow * 32),
                 srcSize = IntSize(32, 32),
                 dstOffset = IntOffset(0, 0),
-                dstSize = IntSize(size.toPx().toInt(), size.toPx().toInt()),
+                dstSize = IntSize(this.size.width.toInt(), this.size.height.toInt()),
+                filterQuality = FilterQuality.None,
             )
         }
         if (showStatus) {
@@ -134,70 +149,39 @@ fun AgentAvatar(
 
 @Composable
 fun StatusDot(status: String, modifier: Modifier = Modifier) {
-    val color = statusColor(status)
-    val transition = rememberInfiniteTransition(label = "status")
-    val pulse by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (status == "thinking") 0.35f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse",
-    )
     Box(
         modifier = modifier
-            .size(11.dp)
-            .clip(CircleShape)
-            .background(color)
-            .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
-            .alpha(if (status == "thinking") pulse else 1f),
+            .size(12.dp)
+            .background(statusColor(status))
+            .border(2.dp, PixelInk),
     )
+}
+
+@Composable
+private fun PixelChip(text: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = color,
+        shape = RectangleShape,
+        border = BorderStroke(2.dp, PixelInk),
+    ) {
+        Text(
+            text = text.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = PixelInk,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+        )
+    }
 }
 
 @Composable
 fun StatusPill(status: String, modifier: Modifier = Modifier) {
-    val color = statusColor(status)
-    Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(color),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = statusLabel(status),
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
-            )
-        }
-    }
+    PixelChip(statusLabel(status), statusColor(status), modifier)
 }
 
 @Composable
 fun RiskBadge(risk: String, modifier: Modifier = Modifier) {
-    val color = riskColor(risk)
-    Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text(
-            text = "${risk.replaceFirstChar { it.uppercase() }} risk",
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
+    PixelChip("${risk.replaceFirstChar { it.uppercase() }} risk", riskColor(risk), modifier)
 }
 
 @Composable
@@ -206,18 +190,7 @@ fun Pill(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.secondary,
 ) {
-    Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
+    PixelChip(text, color, modifier)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -231,12 +204,14 @@ fun AgentCard(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
+        shape = RectangleShape,
+        border = BorderStroke(2.dp, PixelInk),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(agent, 50.dp)
                 Spacer(Modifier.width(12.dp))
@@ -284,18 +259,23 @@ fun SectionHeader(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
-        if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) { Text(actionLabel) }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title.uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction) { Text(actionLabel.uppercase()) }
+            }
         }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(PixelInk),
+        )
     }
 }
 
@@ -319,7 +299,7 @@ fun EmptyState(
             modifier = Modifier.size(28.dp),
         )
         Spacer(Modifier.height(10.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title.uppercase(), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
             text = body,
@@ -353,6 +333,7 @@ fun OfficeThumbnail(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .background(colors.primaryContainer)
+            .border(2.dp, PixelInk),
     ) {
         Icon(
             imageVector = Icons.Default.Hub,

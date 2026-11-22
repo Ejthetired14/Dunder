@@ -17,6 +17,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -165,6 +166,7 @@ fun OfficeWorld(
     selectedHotspotId: String?,
     deskAlert: Boolean,
     tint: Color,
+    christmas: Boolean = false,
     debug: Boolean,
     onSelect: (String?) -> Unit,
     onHotspot: (HotspotDef?) -> Unit,
@@ -184,6 +186,7 @@ fun OfficeWorld(
     val textMeasurer = rememberTextMeasurer()
     val tagCache = remember { HashMap<String, TextLayoutResult>() }
     val speechCache = remember { HashMap<String, TextLayoutResult>() }
+    val hotCache = remember { HashMap<String, TextLayoutResult>() }
 
     // Game loop. Only runs while the screen is visible, and redraws at ~30 fps.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -274,6 +277,33 @@ fun OfficeWorld(
         var oi = 0
         var ai = 0
 
+        // Seasonal decor (parol lanterns, tree, string lights): hung on walls, so it goes under the agents.
+        if (christmas && atlasBmp != null) {
+            val seas = OfficeMapData.SEASONAL
+            var k = 0
+            while (k + 6 < seas.size) {
+                val w = seas[k + 2]
+                val h = seas[k + 3]
+                val dx = seas[k + 4].toFloat()
+                val dy = seas[k + 5].toFloat()
+                val l = sx(dx).roundToInt()
+                val t = sy(dy).roundToInt()
+                val r = sx(dx + w).roundToInt()
+                val bt = sy(dy + h).roundToInt()
+                if (r > 0 && l < camera.viewW && bt > 0 && t < camera.viewH) {
+                    drawImage(
+                        image = atlasBmp,
+                        srcOffset = IntOffset(seas[k], seas[k + 1]),
+                        srcSize = IntSize(w, h),
+                        dstOffset = IntOffset(l, t),
+                        dstSize = IntSize(r - l, bt - t),
+                        filterQuality = FilterQuality.None,
+                    )
+                }
+                k += 7
+            }
+        }
+
         // Furniture and agents are drawn together, back to front, so an agent sitting behind a
         // desk has their legs hidden by it and one standing in front of it covers it.
         while (oi < objCount || ai < ordered.size) {
@@ -356,6 +386,19 @@ fun OfficeWorld(
         // Time of day: a soft colour wash over the world (not over bubbles or tags).
         if (tint.alpha > 0.005f) drawRect(tint)
 
+        // Night shift: when it is dark, every agent carries a small warm lamp glow.
+        if (tint.alpha > 0.15f) {
+            val glowR = px * 1.5f
+            for (a in ordered) {
+                val c = Offset(sx(a.x), sy(a.y) - px * 0.4f)
+                drawCircle(
+                    brush = Brush.radialGradient(listOf(Color(0x55FFE2A0), Color.Transparent), center = c, radius = glowR),
+                    radius = glowR,
+                    center = c,
+                )
+            }
+        }
+
         // Pass 2: bubbles and name tags on top of everything.
         val showTags = camera.scale >= 1.6f
         for (a in ordered) {
@@ -389,11 +432,47 @@ fun OfficeWorld(
             }
         }
 
+        // Labels on everything tappable, so you can see which page it opens.
+        if (camera.scale >= 1.6f) {
+            for (h in OfficeLayout.hotspots) {
+                val text = h.pageTag() + " >"
+                val layout = hotCache.getOrPut(text) { textMeasurer.measure(text, TagStyle) }
+                val padX = 4.dp.toPx()
+                val padY = 2.dp.toPx()
+                val w = layout.size.width + padX * 2f
+                val bh = layout.size.height + padY * 2f
+                val cxs = sx((h.x0 + h.x1) / 2f)
+                val tl = Offset(
+                    (cxs - w / 2f).coerceIn(2.dp.toPx(), max(2.dp.toPx(), camera.viewW - w - 2.dp.toPx())),
+                    sy(h.y0.toFloat()) - bh - 3.dp.toPx(),
+                )
+                if (tl.y > -bh && tl.y < camera.viewH) {
+                    pixelBox(tl, Size(w, bh), Pal.amber, 1.5.dp.toPx())
+                    drawText(layout, topLeft = Offset(tl.x + padX, tl.y + padY))
+                }
+            }
+        }
+
         // Your desk: a "!" floats over it whenever something needs you.
         if (deskAlert) {
             val d = OfficeLayout.deskHotspot
             drawAlert(sx(d.ax.toFloat()), sy(d.ay.toFloat()), sim.elapsed, Pal.amber)
         }
+    }
+}
+
+/** What the tag over a tappable area says: the page it opens. */
+private fun HotspotDef.pageTag(): String = when (id) {
+    "desk" -> "APPROVALS"
+    "board" -> "DIRECTORY"
+    else -> when (route) {
+        "diary" -> "DIARY"
+        "project" -> "PROJECT"
+        "connectors" -> "CONNECT"
+        "browsers" -> "BROWSERS"
+        "settings" -> "SETTINGS"
+        "home" -> "HOME"
+        else -> label
     }
 }
 
