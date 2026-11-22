@@ -151,8 +151,8 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - CI: `build-apk.yml` publishes `sha256` of the signed APK in `latest-release.json` (new `APK SHA-256` step + job output) and runs `testDebugUnitTest`.
   - Tests: `app/src/test/java/com/agoria/app/util/UpdatePolicyTest.kt` (JUnit 4, `testImplementation("junit:junit:4.13.2")`).
 - Design choices: sha256 is **required** (REQUIRE_SHA256) because every release built after this change carries it and old apps never run this code; the Pages JSON still has the same trust root as the release, so this protects against a wrong/tampered download, not a compromised repo owner (Android's same-signer rule covers the rest); only `/releases/download/` URLs are accepted (matches what CI publishes).
-- Verified: NOT yet. Written without a Kotlin compiler; see the Work log for the exact checks to run.
-- Remaining to close this task: (1) CI `Build APK` green incl. the new `Unit tests` step; `Backup config guard` green; (2) push a test `v*` tag and confirm `latest-release.json` contains `sha256` and the app accepts the update; (3) device check: a tampered APK (or edited sha256 in a local copy of the JSON) is refused and no `dunder-*.apk*` file remains; (4) flip to `DONE` with commit link.
+- Verified (2026-11-23, GitHub Actions): **CI green on main** commit `c1675b0`. Backup config guard run 45044746579 success; Build APK run 45044746633 success (incl. `Unit tests` step).
+- Remaining to close this task: (1) push a test `v*` tag and confirm `latest-release.json` contains `sha256` and the app accepts the update; (2) device check: a tampered APK (or edited sha256 in a local copy of the JSON) is refused and no `dunder-*.apk*` file remains; (3) flip to `DONE` with commit link.
 - Done when: install refuses mismatched hash or wrong host (unit-tested) and an end-to-end update from a tagged release works.
 
 ### SEC-11 - Stripe webhook secret flow is fake
@@ -479,6 +479,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-3 implemented (removed `apply-phase2.yml` and `generate-keystore.yml`; `build-apk.yml` least-privilege permissions, fail-closed signing via `env:`, signed APK only in releases; new `tools/check_workflows.py` guard + tests wired into `backup-guard.yml`; `docs/release-signing.md`); IN-PROGRESS pending CI and owner actions. Added SEC-14 (SHA-pin actions, split signing job, Dependabot) and DEC-6 (rotate keystore?). Updated section 1 (CI/Tools rows), section 9, work log. Not run in GitHub Actions. |
 | 2026-11-22 | Claude | SEC-3 CI verified (Backup config guard run 45041539979, Build APK run 45041540039, commit `231f84a`); updated SEC-3 status with commit link and run IDs. |
 | 2026-11-23 | Claude | SEC-10 implemented (new `UpdatePolicy.kt`, hardened `UpdateManager.kt`, SHA-256 published by CI in `latest-release.json`, `UpdatePolicyTest`, `testDebugUnitTest` CI step); IN-PROGRESS pending CI, a tagged release and a device check. Added SEC-15 (surface update refusal reasons). Updated section 1 (Util row), TEST-1, section 9, work log. Not compiled in the session (no Kotlin toolchain). |
+| 2026-11-23 | Claude | SEC-10 CI verified (Backup config guard run 45044746579, Build APK run 45044746633, commit `c1675b0`); updated SEC-10 status with commit link and run IDs. |
 
 ---
 
