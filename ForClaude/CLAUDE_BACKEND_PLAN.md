@@ -99,8 +99,9 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - New `tools/check_workflows.py` + `tools/test_check_workflows.py` (13 `unittest` cases; stdlib only; textual checks so no YAML library is needed): fails on the removed files, paste/transfer hosts, `curl|wget | sh`, `keytool -genkey*`, keystore uploads as artifacts, missing/`write-all`/top-level-write `permissions:`, `${{ secrets.* }}` inside script lines, debug APK in `gh release create`. Wired into `.github/workflows/backup-guard.yml` (self-tests + guard).
   - New `docs/release-signing.md`: local one-time keystore creation and the four secret names.
 - Verified (2026-11-22, local sandbox): 13/13 self-tests pass; `check_workflows.py` exits 0 on the new `build-apk.yml` and `backup-guard.yml`.
-- NOT verified: a GitHub Actions run of the edited workflows (the signing step only runs on `v*` tags, so it needs a test tag with real secrets); a red check on a throwaway PR.
-- Remaining to close this task: (1) push and confirm `Backup config guard` and `Build APK` are green on `main`; (2) **owner**: confirm the four signing secrets exist, then push a test tag and confirm the signed release; (3) **owner**: decide DEC-6 (rotate any keystore made by `generate-keystore.yml`; also check the Actions run logs/artifacts of past runs and delete them); (4) pinning actions by SHA, splitting signing into its own job and Dependabot are tracked as SEC-14; (5) flip to `DONE`.
+- Verified (2026-11-22, GitHub Actions): **CI green on main** commit `231f84a`. Backup config guard run 45041539979 success; Build APK run 45041540039 success.
+- NOT verified: a test `v*` tag run (the signing step only runs on `v*` tags, so it needs a test tag with real secrets); a red check on a throwaway PR.
+- Remaining to close this task: (1) **owner**: confirm the four signing secrets exist, then push a test tag and confirm the signed release; (2) **owner**: decide DEC-6 (rotate any keystore made by `generate-keystore.yml`; also check the Actions run logs/artifacts of past runs and delete them); (3) pinning actions by SHA, splitting signing into its own job and Dependabot are tracked as SEC-14; (4) flip to `DONE`.
 
 ### SEC-4 - Money and config actions run with no approval
 - Status: TODO | Effort: S
@@ -463,6 +464,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | RUN-5 implemented (`BootReceiver` read-only bounded settings read + visible failure reporting, new `BootStatus.kt`, `AutonomyService` clears stale status) and RUN-3 part 1 implemented (stop path persists `autonomyEnabled=false`); both IN-PROGRESS pending CI build and device check. Added RUN-6 (show boot failure in the UI). Updated section 1 (Service row), DATA-1 note, TEST-1, sections 7 (paged-query names), 8 and 9. Added work-log entry. Not compiled in the session. |
 | 2026-11-22 | Claude | RUN-5 and RUN-3 part 1 CI verified (Build APK run 45039776580, Backup config guard run 45039776621, commit `7c990ec`); updated RUN-3 and RUN-5 status with commit link and run IDs. |
 | 2026-11-22 | Claude | SEC-3 implemented (removed `apply-phase2.yml` and `generate-keystore.yml`; `build-apk.yml` least-privilege permissions, fail-closed signing via `env:`, signed APK only in releases; new `tools/check_workflows.py` guard + tests wired into `backup-guard.yml`; `docs/release-signing.md`); IN-PROGRESS pending CI and owner actions. Added SEC-14 (SHA-pin actions, split signing job, Dependabot) and DEC-6 (rotate keystore?). Updated section 1 (CI/Tools rows), section 9, work log. Not run in GitHub Actions. |
+| 2026-11-22 | Claude | SEC-3 CI verified (Backup config guard run 45041539979, Build APK run 45041540039, commit `231f84a`); updated SEC-3 status with commit link and run IDs. |
 
 ---
 
