@@ -15,23 +15,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +47,7 @@ import com.agoria.app.data.TaskEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
@@ -70,6 +66,7 @@ fun ProjectScreen(
     viewModel: AgoriaViewModel,
     onOpenAgent: (String) -> Unit,
     onOpenBrowsers: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val projects by viewModel.projects.collectAsStateWithLifecycle()
@@ -84,29 +81,13 @@ fun ProjectScreen(
     var showLead by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(project?.name ?: "Project")
-                        Text(
-                            text = project?.let { p ->
-                                val lead = agents.firstOrNull { it.id == p.leadAgentId }
-                                "Lead: ${lead?.name ?: "not set"}"
-                            } ?: "Shared folder for every build",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenBrowsers) {
-                        Icon(Icons.Default.OpenInBrowser, contentDescription = "Agent browsers")
-                    }
-                },
-            )
-        },
+    PixelScaffold(
+        title = project?.name ?: "Project",
+        subtitle = project?.let { p ->
+            val lead = agents.firstOrNull { it.id == p.leadAgentId }
+            "Lead: ${lead?.name ?: "not set"}"
+        } ?: "Shared folder for every build",
+        onBack = onBack,
     ) { padding ->
         if (project == null) {
             Column(Modifier.fillMaxSize().padding(padding)) {
@@ -115,7 +96,7 @@ fun ProjectScreen(
                     body = "The office project is created automatically. Pull to refresh or open this tab again.",
                 )
             }
-            return@Scaffold
+            return@PixelScaffold
         }
 
         Column(Modifier.fillMaxSize().padding(padding)) {

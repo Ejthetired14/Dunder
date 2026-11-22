@@ -30,7 +30,7 @@ import com.agoria.app.ui.settings.SettingsScreen
  * top bar, so the floating "< Office" button is hidden on them. When you convert another screen,
  * add its route here. Once every route is listed, delete the floating button and this set.
  */
-private val ScaffoldedRoutes = setOf("diary", "browsers")
+private val ScaffoldedRoutes = setOf("diary", "browsers", "home", "project", "connectors")
 
 /**
  * The office is the only top-level view. There is no bottom bar: every other page is opened from
@@ -69,6 +69,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                         onOpenDiary = { navController.navigate("diary") },
                         // Back to the one office, never a second copy stacked on top.
                         onOpenOffice = { navController.popBackStack("office", false) },
+                        onBack = { navController.popBackStack("office", false) },
                     )
                 }
                 composable("project") {
@@ -76,6 +77,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                         viewModel = viewModel,
                         onOpenAgent = { id -> navController.navigate("agent/$id") },
                         onOpenBrowsers = { navController.navigate("browsers") },
+                        onBack = { navController.popBackStack("office", false) },
                     )
                 }
                 composable("browsers") {
@@ -98,7 +100,10 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     )
                 }
                 composable("connectors") {
-                    ConnectorsScreen(viewModel = viewModel)
+                    ConnectorsScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack("office", false) },
+                    )
                 }
                 composable("settings") {
                     SettingsScreen(
