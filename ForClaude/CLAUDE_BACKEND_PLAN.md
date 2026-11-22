@@ -146,7 +146,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: no secret reaches diary/messages/logs; signature check uses the real Stripe secret.
 
 ### SEC-12 - Regression guard for backup config (CI check)
-- Status: IN-PROGRESS (2026-11-22) - implemented, **local tests pass; first CI run on `main` pending (needs push)**. Commit: _fill in after push_ | Effort: S | Depends on: SEC-1 verified
+- Status: IN-PROGRESS (2026-11-22) - implemented, **CI green on main (run 45035735896)**. Commit: `583c74f` | Effort: S | Depends on: SEC-1 verified
 - Evidence: added 2026-11-22 after SEC-1. Nothing stops a later edit (or an AI session) from flipping `allowBackup` back to `true` or re-adding `<include>` rules to `backup_rules.xml` / `data_extraction_rules.xml`; the leak would be silent.
 - Fix: add a small CI step (shell or Gradle task, run before the build in `build-apk.yml` or a new lint workflow) that fails when: `AndroidManifest.xml` lacks `android:allowBackup="false"`; either rules file contains an `<include` element; `data_extraction_rules.xml` lacks `<cloud-backup>` or `<device-transfer>` exclude blocks; the manifest has no `dataExtractionRules` attribute. A `grep`-based script under `tools/` is enough.
 - Done when: CI fails on a PR that sets `allowBackup="true"` or adds an `<include>`, and passes on `main`.
@@ -154,11 +154,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - `tools/check_backup_config.py` - stdlib-only Python (no Gradle/SDK needed). Uses a real XML parser instead of `grep`, so commented-out `<include>` lines do not cause false alarms. Checks: (1) main manifest `allowBackup` is explicitly `"false"` (missing counts as a failure, the Android default is `true`); (2) `android:dataExtractionRules` is present and resolves to a file in `res/xml`; (3) `fullBackupContent`, if set, resolves; (4) no `<include>` in either rules file; (5) `data_extraction_rules.xml` has `<cloud-backup>` **and** `<device-transfer>`, each excluding `root`, `file`, `database`, `sharedpref`, `external` with `path="."`; (6) legacy `backup_rules.xml` has the same excludes; (7) any variant manifest under `app/src/<variant>/` that sets `allowBackup="true"` fails. Emits GitHub `::error` annotations when run in Actions. Exit codes: 0 ok, 1 violations, 2 wrong `--root`.
   - `tools/test_check_backup_config.py` - 18 `unittest` cases build temp project trees: good config passes; commented include ignored; every regression above fails with the expected message; malformed XML and wrong root element fail; wrong `--root` exits 2.
   - `.github/workflows/backup-guard.yml` - new, separate workflow (`permissions: contents read`, 5 min timeout, no Gradle). Runs the self-tests, then the guard, on push to `main`/`kilo/**`, PRs to `main`, and manually. A separate workflow was chosen over a step in `build-apk.yml` so the check runs in seconds and still reports if the long Android build is skipped or fails.
-- Verified (2026-11-22, local):
+- Verified (2026-11-22):
   - ✅ 18/18 self-tests pass (`python3 tools/test_check_backup_config.py`).
   - ✅ Guard passes on a config shaped like the real SEC-1 manifest + rules (reviewed via the GitHub API at `0c6e642`); flipping `allowBackup` to `true` makes it exit 1.
-  - ❌ Not yet run in GitHub Actions on the real repo files.
-- Remaining to close this task: (1) push; confirm the `Backup config guard` run is green on `main`; (2) open a throwaway PR that sets `allowBackup="true"` and confirm the check goes red, then close it; (3) optional: in repo Settings > Branches, make `Check backup config` a required check (a guard that is not required can be merged past); (4) put the commit link above and flip to `DONE`.
+  - ✅ GitHub Actions run 45035735896 ("Backup config guard") green on `main` commit `583c74f`.
+- Remaining to close this task: (1) open a throwaway PR that sets `allowBackup="true"` and confirm the check goes red, then close it; (2) optional: in repo Settings > Branches, make `Check backup config` a required check (a guard that is not required can be merged past); (3) flip to `DONE`.
 
 ### SEC-13 - BootReceiver is exported and probably never gets LOCKED_BOOT_COMPLETED
 - Status: TODO | Effort: S | Verify first: `service/BootReceiver.kt` was not reviewed
@@ -405,6 +405,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-1 implemented (manifest `allowBackup="false"`, new `data_extraction_rules.xml`, exclude-all `backup_rules.xml`); status set to IN-PROGRESS pending build/device verification. Added SEC-12 (CI regression guard). Updated drift table, DEC-3 note, DOC-1, section 9. Added section 11 (Work log). |
 | 2026-11-22 | Claude | SEC-1 CI build verified (GitHub Actions run 45034237240, commit `b78501b`); updated SEC-1 status with verification results; `bmgr`/`adb` check still pending. |
 | 2026-11-22 | Claude | SEC-12 implemented (`tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `.github/workflows/backup-guard.yml`); status IN-PROGRESS pending first CI run. Added SEC-13 (BootReceiver exported / boot filters) from the manifest review. Updated section 1 (CI/Tools rows), DEC-3, TEST-1, RUN-3 cross-reference, section 8 and section 9. Added work-log entry. |
+| 2026-11-22 | Claude | SEC-12 CI verified (GitHub Actions run 45035735896, commit `583c74f`); updated SEC-12 status with commit link and "CI green on main". |
 
 ---
 
