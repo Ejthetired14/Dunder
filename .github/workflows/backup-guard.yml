@@ -1,0 +1,29 @@
+name: Backup config guard
+
+# SEC-12: fail fast if Android backup / device transfer is ever re-enabled.
+# Cheap (a few seconds, no Gradle, no Android SDK), so it runs on every push and PR.
+
+on:
+  push:
+    branches: [ main, kilo/** ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-guard:
+    name: Check backup config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run guard self-tests
+        run: python3 tools/test_check_backup_config.py
+
+      - name: Check backup config
+        run: python3 tools/check_backup_config.py
