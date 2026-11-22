@@ -36,13 +36,14 @@ fun PixelScaffold(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    backLabel: String = "BACK TO OFFICE",
     actions: @Composable RowScope.() -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
-        topBar = { PixelTopBar(title = title, subtitle = subtitle, onBack = onBack, actions = actions) },
+        topBar = { PixelTopBar(title = title, subtitle = subtitle, onBack = onBack, backLabel = backLabel, actions = actions) },
         snackbarHost = snackbarHost,
         content = content,
     )
@@ -54,6 +55,7 @@ fun PixelTopBar(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    backLabel: String = "BACK TO OFFICE",
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxWidth().background(Pal.ink)) {
@@ -66,12 +68,12 @@ fun PixelTopBar(
         ) {
             PixelIconButton(
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
-                description = "Back to office",
+                description = backLabel,
                 onClick = onBack,
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "BACK TO OFFICE",
+                    text = backLabel,
                     style = PixelLabel.copy(color = Pal.amber, fontSize = 10.sp),
                     maxLines = 1,
                 )
