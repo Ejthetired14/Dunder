@@ -146,7 +146,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: no secret reaches diary/messages/logs; signature check uses the real Stripe secret.
 
 ### SEC-12 - Regression guard for backup config (CI check)
-- Status: IN-PROGRESS (2026-11-22) - implemented, **CI green on main (run 45035735896)**. Commit: `583c74f` | Effort: S | Depends on: SEC-1 verified
+- Status: DONE (2026-11-22) - implemented and verified. Commit: `583c74f` | Effort: S | Depends on: SEC-1 verified
 - Evidence: added 2026-11-22 after SEC-1. Nothing stops a later edit (or an AI session) from flipping `allowBackup` back to `true` or re-adding `<include>` rules to `backup_rules.xml` / `data_extraction_rules.xml`; the leak would be silent.
 - Fix: add a small CI step (shell or Gradle task, run before the build in `build-apk.yml` or a new lint workflow) that fails when: `AndroidManifest.xml` lacks `android:allowBackup="false"`; either rules file contains an `<include` element; `data_extraction_rules.xml` lacks `<cloud-backup>` or `<device-transfer>` exclude blocks; the manifest has no `dataExtractionRules` attribute. A `grep`-based script under `tools/` is enough.
 - Done when: CI fails on a PR that sets `allowBackup="true"` or adds an `<include>`, and passes on `main`.
@@ -158,7 +158,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - ✅ 18/18 self-tests pass (`python3 tools/test_check_backup_config.py`).
   - ✅ Guard passes on a config shaped like the real SEC-1 manifest + rules (reviewed via the GitHub API at `0c6e642`); flipping `allowBackup` to `true` makes it exit 1.
   - ✅ GitHub Actions run 45035735896 ("Backup config guard") green on `main` commit `583c74f`.
-- Remaining to close this task: (1) open a throwaway PR that sets `allowBackup="true"` and confirm the check goes red, then close it; (2) optional: in repo Settings > Branches, make `Check backup config` a required check (a guard that is not required can be merged past); (3) flip to `DONE`.
+  - ✅ Throwaway PR #6 (branch `test-sec12-fail`, commit `c1c3855`) with `allowBackup="true"`: guard run 45035887609 **failed** as expected; PR closed, branch deleted.
 
 ### SEC-13 - BootReceiver is exported and probably never gets LOCKED_BOOT_COMPLETED
 - Status: TODO | Effort: S | Verify first: `service/BootReceiver.kt` was not reviewed
@@ -406,6 +406,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-1 CI build verified (GitHub Actions run 45034237240, commit `b78501b`); updated SEC-1 status with verification results; `bmgr`/`adb` check still pending. |
 | 2026-11-22 | Claude | SEC-12 implemented (`tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `.github/workflows/backup-guard.yml`); status IN-PROGRESS pending first CI run. Added SEC-13 (BootReceiver exported / boot filters) from the manifest review. Updated section 1 (CI/Tools rows), DEC-3, TEST-1, RUN-3 cross-reference, section 8 and section 9. Added work-log entry. |
 | 2026-11-22 | Claude | SEC-12 CI verified (GitHub Actions run 45035735896, commit `583c74f`); updated SEC-12 status with commit link and "CI green on main". |
+| 2026-11-22 | Claude | SEC-12 throwaway PR test passed (PR #6, run 45035887609 failed as expected); set SEC-12 to DONE. |
 
 ---
 
