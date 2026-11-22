@@ -54,12 +54,12 @@ object ProviderCatalog {
         ProviderSpec(
             id = "freellmapi",
             name = "FreeLLMAPI (local)",
-            baseUrl = "http://10.0.2.2:3001/v1",
+            baseUrl = "http://localhost:3001/v1",
             keyRequired = true,
             keyLabel = "FreeLLMAPI unified key",
-            keyHint = "Run FreeLLMAPI locally, then copy the unified key from the dashboard (freellmapi-...)",
+            keyHint = "Install FreeLLMAPI app from Play Store, run it, copy unified key from dashboard (freellmapi-...)",
             docsUrl = "https://freellmapi.co",
-            freeNote = "Runs locally via Docker/desktop. Aggregates 87+ free LLM providers behind one OpenAI-compatible endpoint.",
+            freeNote = "Runs on phone via FreeLLMAPI Android app (Play Store), or Docker/desktop. Aggregates 87+ free LLM providers behind one OpenAI-compatible endpoint.",
             models = listOf(
                 ModelSpec("auto", "Auto (router picks best free model)", "Varies", "Text"),
                 ModelSpec("gpt-oss-120b", "gpt-oss-120b", "131K", "Text"),
