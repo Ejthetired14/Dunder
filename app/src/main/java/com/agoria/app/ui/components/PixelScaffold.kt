@@ -37,11 +37,13 @@ fun PixelScaffold(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
         topBar = { PixelTopBar(title = title, subtitle = subtitle, onBack = onBack, actions = actions) },
+        snackbarHost = snackbarHost,
         content = content,
     )
 }

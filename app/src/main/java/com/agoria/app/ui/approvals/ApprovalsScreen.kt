@@ -13,18 +13,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -33,8 +31,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +52,7 @@ import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
 import com.agoria.app.util.Json
 import com.agoria.app.util.Time
@@ -64,6 +63,7 @@ import kotlinx.coroutines.launch
 fun ApprovalsScreen(
     viewModel: AgoriaViewModel,
     onOpenConnectors: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val approvals by viewModel.approvals.collectAsStateWithLifecycle()
     val pending by viewModel.pendingApprovals.collectAsStateWithLifecycle()
@@ -93,25 +93,17 @@ fun ApprovalsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Approvals", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${pending.size} waiting · nothing external runs without you",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showAutoApproveDialog = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Auto-approve settings")
-                    }
-                },
-            )
+    PixelScaffold(
+        title = "Approvals",
+        subtitle = "${pending.size} waiting · nothing external runs without you",
+        onBack = onBack,
+        actions = {
+            IconButton(onClick = { showAutoApproveDialog = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Auto-approve settings",
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
