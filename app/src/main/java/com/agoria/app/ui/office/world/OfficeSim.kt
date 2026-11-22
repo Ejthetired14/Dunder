@@ -35,11 +35,18 @@ class Actor(val agentId: String, val desk: Spot) {
     var intentKey = "boot"
     var intentSince = 0f
     var detail = ""
+
+    /** What this agent is saying out loud right now (a real message to a coworker). Empty when quiet. */
+    var say = ""
+    var sayAt = 0f
+    var sayDur = 0f
+    var pendingSay = ""
     val route = ArrayList<Offset>()
     var routeIdx = 0
 }
 
 fun Actor.statusText(): String {
+    if (say.isNotBlank()) return "Talking: \"${say.take(80)}\""
     val base = when {
         bubble == Bubble.TALK && partner != null -> "Chatting with ${partner?.name ?: "a coworker"}"
         activity == Activity.WORK -> "Working at their desk"
@@ -88,6 +95,12 @@ class OfficeSim {
     private val rng = Random(System.nanoTime())
     private var signals: Map<String, AgentSignal> = emptyMap()
 
+    // Real conversations between agents (the `say` action), played out as they arrive.
+    private val talkQueue = ArrayList<ChatLine>()
+    private var chatterSeen = -1L
+    private var nextTalkAt = 0f
+    private var talkWaits = 0
+
     fun sync(agents: List<AgentEntity>) {
         val ids = agents.map { it.id }.toSet()
         val iter = actors.iterator()
@@ -120,10 +133,33 @@ class OfficeSim {
         signals = next
     }
 
+    /**
+     * Feed the latest `say` messages. The first call only records what already happened, so old
+     * talk is never replayed. After that, each new message is acted out once: the speaker walks
+     * over to the listener (or talks from their desk if busy) and the real text shows in a bubble.
+     */
+    fun onChatter(lines: List<ChatLine>, nowMs: Long) {
+        if (chatterSeen < 0L) {
+            chatterSeen = lines.maxOfOrNull { it.at } ?: 0L
+            return
+        }
+        val fresh = lines.filter { it.at > chatterSeen }.sortedBy { it.at }
+        if (fresh.isEmpty()) return
+        chatterSeen = fresh.last().at
+        for (l in fresh) {
+            if (nowMs - l.at < 90_000L && talkQueue.size < 4) talkQueue.add(l)
+        }
+    }
+
     fun update(dt: Float) {
         elapsed += dt
+        processTalk()
         for (a in actors) {
             a.anim += dt
+            if (a.say.isNotEmpty() && elapsed - a.sayAt >= a.sayDur) {
+                a.say = ""
+                revision++
+            }
             val want = intentOf(a)
             if (want != a.intentKey && (a.intentKey == "boot" || want == "approval" || elapsed - a.intentSince >= MIN_HOLD)) {
                 switchIntent(a, want)
@@ -232,25 +268,26 @@ class OfficeSim {
     private fun startChat(a: Actor) {
         val p = actors.filter {
             it !== a && !it.walking && it.partner == null && it.intentKey == "idle" &&
-                it.activity != Activity.APPROVAL && it.bubble == Bubble.NONE
+                it.activity != Activity.APPROVAL && it.bubble == Bubble.NONE && it.say.isEmpty()
         }.randomOrNull(rng)
-        if (p == null) {
+        if (p == null || !startChatWith(a, p, "", 6f + rng.nextFloat() * 4f)) {
             go(a, a.desk, Activity.IDLE, 8f + rng.nextFloat() * 8f)
-            return
         }
+    }
+
+    /** Walks [a] next to [p]. With a [text], [a] says it out loud when they arrive. Returns false if it cannot. */
+    private fun startChatWith(a: Actor, p: Actor, text: String, dwell: Float): Boolean {
         var side = if (a.x < p.x) -1f else 1f
         if (!OfficeLayout.grid.walkableAt(p.x + side * 30f, p.y)) side = -side
         val destX = p.x + side * 30f
-        if (!OfficeLayout.grid.walkableAt(destX, p.y)) {
-            go(a, a.desk, Activity.IDLE, 8f + rng.nextFloat() * 8f)
-            return
-        }
+        if (!OfficeLayout.grid.walkableAt(destX, p.y)) return false
         release(a)
         a.spot = null
         a.activity = Activity.CHAT
         a.partner = p
         p.partner = a
-        a.dwell = 6f + rng.nextFloat() * 4f
+        a.pendingSay = text
+        a.dwell = dwell
         a.route.clear()
         a.routeIdx = 0
         val tx = (destX / OfficeLayout.TILE).toInt()
@@ -267,6 +304,38 @@ class OfficeSim {
             py = pt.y
         }
         p.timer = maxOf(p.timer, len / SPEED + a.dwell + 1.5f)
+        revision++
+        return true
+    }
+
+    private fun processTalk() {
+        if (talkQueue.isEmpty() || elapsed < nextTalkAt) return
+        val line = talkQueue.first()
+        val s = actors.firstOrNull { it.agentId == line.speakerId }
+        val l = actors.firstOrNull { it.agentId == line.listenerId }
+        if (s == null || l == null) {
+            talkQueue.removeAt(0)
+            return
+        }
+        if (s.walking || l.walking) {
+            nextTalkAt = elapsed + 1f
+            if (++talkWaits > 10) {
+                talkWaits = 0
+                talkQueue.removeAt(0)
+            }
+            return
+        }
+        talkWaits = 0
+        talkQueue.removeAt(0)
+        nextTalkAt = elapsed + 2f
+        val dur = (3f + line.text.length * 0.06f).coerceIn(5f, 14f)
+        val canWalk = s.intentKey == "idle" && s.partner == null && l.partner == null &&
+            l.activity != Activity.APPROVAL
+        if (canWalk && startChatWith(s, l, line.text, dur)) return
+        // Busy (working, waiting for you, ...): speak from where they stand.
+        s.say = line.text
+        s.sayAt = elapsed
+        s.sayDur = dur
         revision++
     }
 
@@ -318,7 +387,14 @@ class OfficeSim {
                 a.dir = dirOf(p.x - a.x, p.y - a.y)
                 p.dir = dirOf(a.x - p.x, a.y - p.y)
                 p.timer = maxOf(p.timer, a.dwell + 0.5f)
+                if (a.pendingSay.isNotBlank()) {
+                    a.say = a.pendingSay
+                    a.sayAt = elapsed
+                    a.sayDur = a.dwell
+                    a.pendingSay = ""
+                }
             } else {
+                a.pendingSay = ""
                 a.partner = null
                 a.activity = Activity.IDLE
                 a.timer = 1.5f

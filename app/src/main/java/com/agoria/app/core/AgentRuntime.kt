@@ -369,7 +369,7 @@ class AgentRuntime(
         val cycleStart = Time.now()
 
         when (action) {
-            "none", "think" -> {
+            "none", "think", "ask_user" -> {
                 // A cycle can be just a thought.
             }
 
@@ -406,6 +406,20 @@ class AgentRuntime(
                 if (taskId.isNotBlank()) {
                     repo.completeTask(taskId, Json.string(input, "result"))
                     log("${agent.name} completed a task.")
+                }
+            }
+
+            "say" -> {
+                val toName = Json.string(input, "to", Json.string(input, "agent"))
+                val text = Json.string(input, "text", Json.string(input, "message")).trim()
+                val peer = repo.allAgents().firstOrNull {
+                    it.id != agentId && it.name.equals(toName.trim(), ignoreCase = true)
+                }
+                if (peer == null || text.isBlank()) {
+                    log("${agent.name} tried to talk to someone who is not in the office.", "error")
+                } else {
+                    repo.addDiary(agentId, "say", AgentPolicy.sayLine(peer.name, text), 2)
+                    log("${agent.name} said something to ${peer.name}.")
                 }
             }
 
@@ -823,6 +837,20 @@ class AgentRuntime(
             )
         }
 
+        // Recent talk between agents (diary kind "say")
+        val chatter = repo.agents.first().flatMap { a ->
+            repo.diaryFor(a.id).first()
+                .filter { it.kind == "say" }
+                .mapNotNull { e ->
+                    val m = AgentPolicy.SAY_REGEX.find(e.content.trim()) ?: return@mapNotNull null
+                    ChatterLine(a.name, m.groupValues[1].trim(), m.groupValues[2].trim(), e.createdAt)
+                }
+        }
+            .filter { it.fromName == agent.name || it.toName.equals(agent.name, ignoreCase = true) }
+            .sortedByDescending { it.at }
+            .take(8)
+            .reversed()
+
         val agentRevenue = repo.totalRevenueForAgent(agent.id)
         val infraFund = repo.getInfrastructureFund()
 
@@ -844,6 +872,7 @@ class AgentRuntime(
             infrastructureFundCents = infraFund,
             agentProfitSharePercent = settings.agentProfitSharePercent,
             userProfitSharePercent = settings.userProfitSharePercent,
+            chatter = chatter,
         )
     }
 

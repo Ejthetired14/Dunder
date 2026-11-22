@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Public
@@ -65,6 +66,7 @@ import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.ui.components.statusLabel
 import com.agoria.app.ui.office.world.CameraState
+import com.agoria.app.ui.office.world.ChatterPanel
 import com.agoria.app.ui.office.world.DeskPanel
 import com.agoria.app.ui.office.world.HotspotDef
 import com.agoria.app.ui.office.world.OfficeSim
@@ -76,6 +78,7 @@ import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
 import com.agoria.app.ui.office.world.buildSignals
+import com.agoria.app.ui.office.world.parseChatter
 import com.agoria.app.ui.office.world.statusText
 import com.agoria.app.util.Time
 import kotlin.math.roundToInt
@@ -143,15 +146,14 @@ private fun OfficeWorldScreen(
     var selectedId by remember { mutableStateOf<String?>(null) }
     var hotspot by remember { mutableStateOf<HotspotDef?>(null) }
     var deskOpen by remember { mutableStateOf(false) }
+    var chatterOpen by remember { mutableStateOf(false) }
     var debug by remember { mutableStateOf(false) }
     var debugTap by remember { mutableStateOf<Offset?>(null) }
 
-    // Auto-hide top HUD. The activity counter restarts the countdown on every touch;
-    // the previous version kept its Job in a plain var and never applied the detector
-    // to the layout, so once the HUD hid it could not come back.
+    // Auto-hide top HUD. Every new touch bumps the tick, which restarts the countdown.
     val hudVisible = remember { mutableStateOf(true) }
     var hudActivityTick by remember { mutableIntStateOf(0) }
-    val hudAutoHideDelay = 3000L // 3 seconds
+    val hudAutoHideDelay = 3000L
 
     // Live data: agents get bodies, then what they are really doing decides where they stand.
     // The tick re-checks every few seconds so "recently used" connectors age out on their own.
@@ -168,21 +170,23 @@ private fun OfficeWorldScreen(
     }
     LaunchedEffect(selectedId) { sim.holdId = selectedId }
 
+    // What agents say to each other. New messages are acted out in the world as they arrive.
+    val chatter = remember(diary, agents) { parseChatter(diary, agents) }
+    LaunchedEffect(chatter) { sim.onChatter(chatter, Time.now()) }
+
     val selectedAgent = agents.firstOrNull { it.id == selectedId }
     val actor = sim.actors.firstOrNull { it.agentId == selectedId }
     // Reading sim.revision here makes the card refresh when the agent changes activity.
     val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
     val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
 
-    // Show the HUD, then hide it after a few idle seconds. Every touch bumps the tick,
-    // which cancels the pending countdown and starts a fresh one.
     LaunchedEffect(hudActivityTick) {
         hudVisible.value = true
         delay(hudAutoHideDelay)
         hudVisible.value = false
     }
 
-    // The map and its actors consume taps, so listen on the Initial pass.
+    // The map and its agents consume taps, so listen on the Initial pass without consuming.
     val hudTouchDetector = Modifier
         .fillMaxSize()
         .pointerInput(Unit) {
@@ -215,6 +219,7 @@ private fun OfficeWorldScreen(
                 if (it != null) {
                     hotspot = null
                     deskOpen = false
+                    chatterOpen = false
                 }
             },
             onHotspot = { hs ->
@@ -223,11 +228,13 @@ private fun OfficeWorldScreen(
                 } else if (hs.id == "desk") {
                     hotspot = null
                     selectedId = null
+                    chatterOpen = false
                     deskOpen = true
                 } else {
                     hotspot = hs
                     selectedId = null
                     deskOpen = false
+                    chatterOpen = false
                 }
             },
             onDebugTap = { debugTap = it },
@@ -275,6 +282,18 @@ private fun OfficeWorldScreen(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelIconButton(
+                        Icons.Default.Forum,
+                        "Office chatter",
+                        {
+                            chatterOpen = !chatterOpen
+                            if (chatterOpen) {
+                                selectedId = null
+                                hotspot = null
+                                deskOpen = false
+                            }
+                        },
+                    )
                     PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
                     PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
                     PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
@@ -323,6 +342,15 @@ private fun OfficeWorldScreen(
                     onClose = { deskOpen = false },
                 )
 
+                chatterOpen -> ChatterPanel(
+                    lines = chatter,
+                    onPick = { id ->
+                        chatterOpen = false
+                        selectedId = id
+                    },
+                    onClose = { chatterOpen = false },
+                )
+
                 selectedAgent != null -> PixelPanel(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -348,6 +376,18 @@ private fun OfficeWorldScreen(
                                     color = Color(0xFF4A4338),
                                 ),
                                 maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        val talk = chatter.filter {
+                            it.speakerId == selectedAgent.id || it.listenerId == selectedAgent.id
+                        }.take(2)
+                        talk.forEach { line ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${line.speakerName} → ${line.listenerName}: ${line.text}",
+                                style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }

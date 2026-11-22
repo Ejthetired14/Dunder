@@ -19,6 +19,7 @@ object PromptBuilder {
         sb.appendLine("## How this office works")
         sb.appendLine("- Each cycle you write a short private diary entry, then choose at most one action.")
         sb.appendLine("- You may also post a public message. Diary entries are private; messages are visible to the user.")
+        sb.appendLine("- You can talk to a coworker with the say action. They read it the next time they think, and you will see their reply below. Keep it short and useful, never repeat yourself, and do not chat just to chat.")
         sb.appendLine("- You have real freedom inside this app: think, research, plan, create tasks, update your memory, and talk to the user.")
         sb.appendLine("- You cannot execute irreversible or outward-facing actions without the user's approval. This includes building a downloadable project, installing a connector, sending email, posting to Slack/Discord/Telegram, creating GitHub issues, and making external HTTP requests.")
         sb.appendLine("- Read-only public connectors (Wikipedia, Hacker News, Web Search, Weather, Currency, and local file listing) can run immediately when configured.")
@@ -119,6 +120,20 @@ object PromptBuilder {
                 .append(") — ").append(peer.goal.take(160)).append('\n')
         }
         sb.appendLine()
+        sb.appendLine("## Recent talk between you and your coworkers")
+        if (context.chatter.isEmpty()) {
+            sb.appendLine("(nothing yet)")
+        } else {
+            context.chatter.forEach { line ->
+                if (line.fromName == agent.name) {
+                    sb.append("- You said to ").append(line.toName).append(": ").append(line.text.take(300)).append('\n')
+                } else {
+                    sb.append("- ").append(line.fromName).append(" said to you: ").append(line.text.take(300)).append('\n')
+                }
+            }
+            sb.appendLine("If a coworker asked you something, answer with the say action.")
+        }
+        sb.appendLine()
         sb.appendLine("Current local time: " + Time.dateTime(context.now) + ".")
         sb.appendLine()
         sb.appendLine("## Output format")
@@ -128,7 +143,7 @@ object PromptBuilder {
               "diary": "one to three honest sentences, written for yourself",
               "diary_kind": "thought|observation|plan|decision|lesson|error|build|connector|review",
               "message": "optional public message; leave empty if you do not want to speak",
-              "action": "none|create_task|request_approval|request_connector|use_connector|update_goal|update_memory|complete_task",
+              "action": "none|create_task|request_approval|request_connector|use_connector|update_goal|update_memory|complete_task|say",
               "action_input": { ... },
               "importance": 1
             }
@@ -142,6 +157,7 @@ object PromptBuilder {
         sb.appendLine("- update_goal: {\"goal\": \"...\"}")
         sb.appendLine("- update_memory: {\"kind\": \"fact\", \"content\": \"...\", \"importance\": 3}")
         sb.appendLine("- complete_task: {\"task_id\": \"...\", \"result\": \"...\"}")
+        sb.appendLine("- say: {\"to\": \"<a coworker's name>\", \"text\": \"...\"}")
         sb.appendLine()
         sb.appendLine("If you want to build something, use request_approval with type build_project. The user will see the plan and approve or deny it. Do not use use_connector to pretend a build happened.")
         sb.appendLine()

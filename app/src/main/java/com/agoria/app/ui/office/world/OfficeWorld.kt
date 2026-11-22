@@ -24,11 +24,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -37,27 +40,28 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.agoria.app.R
-import com.agoria.app.ui.office.world.HotspotDef
-import com.agoria.app.ui.office.world.rememberResBitmap
-import kotlin.collections.HashMap
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val SPRITE_WORLD = 51f
-private const val MIN_ZOOM_FIT = 1f
 private const val MAX_SCALE = 5f
-private const val DEFAULT_SCALE = 2.2f
+private const val DEFAULT_SCALE = 2f
 
-/** Redraw at most ~30 times a second. Plenty for 8 sprites, and kind to a Helio G36. */
+/** Redraw at most ~30 times a second. Plenty for a dozen sprites, and kind to a Helio G36. */
 private const val FRAME_NS = 30_000_000L
 
 private val TagStyle = TextStyle(
     fontFamily = FontFamily.Monospace,
     fontWeight = FontWeight.Bold,
     fontSize = 10.sp,
+    color = Pal.ink,
+)
+
+/** Speech uses a normal readable sans, never the pixel label font. */
+private val SpeechStyle = TextStyle(
+    fontSize = 11.sp,
+    lineHeight = 14.sp,
     color = Pal.ink,
 )
 
@@ -68,14 +72,14 @@ private val TagStyle = TextStyle(
 @Stable
 class CameraState {
     var scale by mutableFloatStateOf(DEFAULT_SCALE)
-    var cx by mutableFloatStateOf(420f)
-    var cy by mutableFloatStateOf(300f)
+    var cx by mutableFloatStateOf(OfficeLayout.worldW / 2f)
+    var cy by mutableFloatStateOf(420f)
     var viewW by mutableFloatStateOf(0f)
     var viewH by mutableFloatStateOf(0f)
     private var placed = false
 
     private fun minScale(): Float =
-        if (viewW <= 0f) MIN_ZOOM_FIT else viewW / OfficeLayout.bounds.width
+        if (viewW <= 0f) 1f else viewW / OfficeLayout.worldW
 
     fun onResize() {
         if (viewW <= 0f || viewH <= 0f) return
@@ -89,8 +93,8 @@ class CameraState {
 
     fun reset() {
         scale = max(minScale(), DEFAULT_SCALE)
-        cx = 420f
-        cy = 300f
+        cx = OfficeLayout.worldW / 2f
+        cy = 420f
         clamp()
     }
 
@@ -100,8 +104,11 @@ class CameraState {
     fun screenToWorld(p: Offset): Offset =
         Offset((p.x - viewW / 2f) / scale + cx, (p.y - viewH / 2f) / scale + cy)
 
-    /** Sprite edge in pixels: always a whole multiple of 32 so pixel art stays crisp. */
-    fun spritePx(): Float = 32f * (scale * SPRITE_WORLD / 32f).roundToInt().coerceIn(1, 8)
+    /**
+     * Agent sprite edge in pixels: a whole multiple of 32 so pixel art stays crisp, and never
+     * smaller than 64 so agents stay easy to see and tap when you zoom out.
+     */
+    fun spritePx(): Float = 32f * max(2, scale.roundToInt()).coerceAtMost(8)
 
     fun transform(centroid: Offset, pan: Offset, zoom: Float) {
         val before = screenToWorld(centroid)
@@ -126,16 +133,16 @@ fun OfficeWorld(
     sim: OfficeSim,
     camera: CameraState,
     selectedId: String?,
-    selectedHotspotId: String? = null,
-    deskAlert: Boolean = false,
-    debug: Boolean = false,
-    onSelect: (String?) -> Unit = {},
-    onHotspot: (HotspotDef?) -> Unit = {},
-    onDebugTap: (Offset) -> Unit = {},
+    selectedHotspotId: String?,
+    deskAlert: Boolean,
+    debug: Boolean,
+    onSelect: (String?) -> Unit,
+    onHotspot: (HotspotDef?) -> Unit,
+    onDebugTap: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val map = rememberResBitmap(R.drawable.office_pixel_base, 2048)
-    val objects = rememberResBitmap(R.drawable.office_pixel_objects, 2048)
+    val baseImage = rememberResBitmap(R.drawable.office_pixel_base, 2048)
+    val atlas = rememberResBitmap(R.drawable.office_pixel_objects, 1024)
     val sheet = rememberResBitmap(R.drawable.office_sprites, 4096)
     var frame by remember { mutableLongStateOf(0L) }
 
@@ -143,11 +150,10 @@ fun OfficeWorld(
     val onHotspotNow by rememberUpdatedState(onHotspot)
     val onDebugTapNow by rememberUpdatedState(onDebugTap)
     val debugNow by rememberUpdatedState(debug)
-    val selectedHotspotIdNow by rememberUpdatedState(selectedHotspotId)
-    val deskAlertNow by rememberUpdatedState(deskAlert)
 
     val textMeasurer = rememberTextMeasurer()
     val tagCache = remember { HashMap<String, TextLayoutResult>() }
+    val speechCache = remember { HashMap<String, TextLayoutResult>() }
 
     // Game loop. Only runs while the screen is visible, and redraws at ~30 fps.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -182,122 +188,156 @@ fun OfficeWorld(
                     camera.transform(centroid, pan, zoom)
                 }
             }
-            .pointerInput(sim, camera, selectedHotspotIdNow, deskAlertNow) {
+            .pointerInput(sim, camera) {
                 detectTapGestures { tap ->
                     val hit = hitActor(sim, camera, tap, 26.dp.toPx())
+                    val world = camera.screenToWorld(tap)
                     if (hit != null) {
                         onSelectNow(hit.agentId)
-                    } else if (OfficeLayout.deskHotspot.rect.contains(camera.screenToWorld(tap))) {
-                        // Check hotspot
-                        val worldPos = camera.screenToWorld(tap)
-                        val hs = OfficeLayout.hotspots.firstOrNull { it.rect.contains(worldPos) }
-                        if (hs != null) {
-                            onHotspotNow(hs)
-                        } else {
-                            onHotspotNow(null)
-                        }
-                    } else {
-                        onSelectNow(null)
                         onHotspotNow(null)
+                    } else {
+                        val hs = OfficeLayout.hotspots
+                            .filter { world.x >= it.x0 && world.x <= it.x1 && world.y >= it.y0 && world.y <= it.y1 }
+                            .minByOrNull { it.area }
+                        onSelectNow(null)
+                        onHotspotNow(hs)
                     }
-                    if (debugNow) onDebugTapNow(camera.screenToWorld(tap))
+                    if (debugNow) onDebugTapNow(world)
                 }
             },
     ) {
         if (frame == Long.MIN_VALUE) return@Canvas // reading `frame` is what schedules each redraw
 
         drawRect(Pal.ink)
+        val s = camera.scale
+        val halfW = camera.viewW / 2f
+        val halfH = camera.viewH / 2f
+        fun sx(wx: Float): Float = (wx - camera.cx) * s + halfW
+        fun sy(wy: Float): Float = (wy - camera.cy) * s + halfH
 
-        val baseImage = map
-        if (baseImage != null) {
-            val topLeft = camera.worldToScreen(0f, 0f)
-            val side = OfficeLayout.worldW * camera.scale
+        val baseBmp = baseImage
+        if (baseBmp != null) {
+            val l = sx(0f).roundToInt()
+            val t = sy(0f).roundToInt()
+            val r = sx(OfficeLayout.worldW).roundToInt()
+            val b = sy(OfficeLayout.worldH).roundToInt()
             drawImage(
-                image = baseImage,
+                image = baseBmp,
                 srcOffset = IntOffset.Zero,
-                srcSize = IntSize(baseImage.width, baseImage.height),
-                dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
-                dstSize = IntSize(side.roundToInt(), side.roundToInt()),
-                filterQuality = FilterQuality.Medium,
-            )
-        }
-
-        val objectsImage = objects
-        if (objectsImage != null) {
-            val topLeft = camera.worldToScreen(0f, 0f)
-            val side = OfficeLayout.worldW * camera.scale
-            drawImage(
-                image = objectsImage,
-                srcOffset = IntOffset.Zero,
-                srcSize = IntSize(objectsImage.width, objectsImage.height),
-                dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
-                dstSize = IntSize(side.roundToInt(), side.roundToInt()),
-                filterQuality = FilterQuality.Medium,
-            )
-        }
-
-        if (deskAlertNow) {
-            val desk = OfficeLayout.deskHotspot.rect
-            val dTl = camera.worldToScreen(desk.left, desk.top)
-            val side = min(desk.width, desk.height) * camera.scale * 0.8f
-            drawRect(
-                Pal.amber,
-                topLeft = Offset(dTl.x + (desk.width * camera.scale - side) / 2f, dTl.y + (desk.height * camera.scale - side) / 2f),
-                size = Size(side, side),
-                style = Stroke(3.dp.toPx()),
+                srcSize = IntSize(baseBmp.width, baseBmp.height),
+                dstOffset = IntOffset(l, t),
+                dstSize = IntSize(r - l, b - t),
+                filterQuality = FilterQuality.None,
             )
         }
 
         if (debug) drawDebug(camera)
 
-        val sheetImage = sheet ?: return@Canvas
+        val sheetBmp = sheet ?: return@Canvas
+        val atlasBmp = atlas
         val px = camera.spritePx()
         val ordered = sim.actors.sortedBy { it.y }
+        val objs = OfficeMapData.OBJECTS
+        val objCount = objs.size / 7
+        var oi = 0
+        var ai = 0
 
-        // Pass 1: shadows, selection rings and sprites, back to front.
-        for (a in ordered) {
-            val s = camera.worldToScreen(a.x, a.y)
-            drawOval(
-                color = Color(0x44000000),
-                topLeft = Offset(s.x - px * 0.28f, s.y - px * 0.08f),
-                size = Size(px * 0.56f, px * 0.16f),
-            )
-            if (a.agentId == selectedId) {
+        // Furniture and agents are drawn together, back to front, so an agent sitting behind a
+        // desk has their legs hidden by it and one standing in front of it covers it.
+        while (oi < objCount || ai < ordered.size) {
+            val objSort = if (oi < objCount) objs[oi * 7 + 6].toFloat() else Float.MAX_VALUE
+            val actSort = if (ai < ordered.size) ordered[ai].y else Float.MAX_VALUE
+            if (oi < objCount && objSort <= actSort) {
+                if (atlasBmp != null) {
+                    val b = oi * 7
+                    val w = objs[b + 2]
+                    val h = objs[b + 3]
+                    val dx = objs[b + 4].toFloat()
+                    val dy = objs[b + 5].toFloat()
+                    val l = sx(dx).roundToInt()
+                    val t = sy(dy).roundToInt()
+                    val r = sx(dx + w).roundToInt()
+                    val bt = sy(dy + h).roundToInt()
+                    if (r > 0 && l < camera.viewW && bt > 0 && t < camera.viewH) {
+                        drawImage(
+                            image = atlasBmp,
+                            srcOffset = IntOffset(objs[b], objs[b + 1]),
+                            srcSize = IntSize(w, h),
+                            dstOffset = IntOffset(l, t),
+                            dstSize = IntSize(r - l, bt - t),
+                            filterQuality = FilterQuality.None,
+                        )
+                    }
+                }
+                oi++
+            } else {
+                val a = ordered[ai]
+                ai++
+                val fx = sx(a.x)
+                val fy = sy(a.y)
                 drawOval(
+                    color = Color(0x44000000),
+                    topLeft = Offset(fx - px * 0.28f, fy - px * 0.08f),
+                    size = Size(px * 0.56f, px * 0.16f),
+                )
+                if (a.agentId == selectedId) {
+                    drawOval(
+                        color = Pal.amber,
+                        topLeft = Offset(fx - px * 0.42f, fy - px * 0.14f),
+                        size = Size(px * 0.84f, px * 0.28f),
+                        style = Stroke(width = 2.dp.toPx()),
+                    )
+                }
+                val frameIdx = if (a.walking) {
+                    SpriteSheet.WALK[((a.anim * 7f).toInt()) % SpriteSheet.WALK.size]
+                } else {
+                    1
+                }
+                val bob = if (!a.walking && ((a.anim * 2f).toInt() and 1) == 1) 1.dp.toPx() else 0f
+                drawImage(
+                    image = sheetBmp,
+                    srcOffset = SpriteSheet.srcOffset(a.avatar, a.dir, frameIdx),
+                    srcSize = IntSize(SpriteSheet.CELL, SpriteSheet.CELL),
+                    dstOffset = IntOffset(
+                        (fx - px / 2f).roundToInt(),
+                        (fy - px * 0.88f + bob).roundToInt(),
+                    ),
+                    dstSize = IntSize(px.roundToInt(), px.roundToInt()),
+                    filterQuality = FilterQuality.None,
+                )
+            }
+        }
+
+        // Selected area outline.
+        if (selectedHotspotId != null) {
+            val hs = OfficeLayout.hotspots.firstOrNull { it.id == selectedHotspotId }
+            if (hs != null) {
+                drawRect(
                     color = Pal.amber,
-                    topLeft = Offset(s.x - px * 0.42f, s.y - px * 0.14f),
-                    size = Size(px * 0.84f, px * 0.28f),
+                    topLeft = Offset(sx(hs.x0.toFloat()), sy(hs.y0.toFloat())),
+                    size = Size((hs.x1 - hs.x0) * s, (hs.y1 - hs.y0) * s),
                     style = Stroke(width = 2.dp.toPx()),
                 )
             }
-            val frameIdx = if (a.walking) {
-                SpriteSheet.WALK[((a.anim * 7f).toInt()) % SpriteSheet.WALK.size]
-            } else {
-                1
-            }
-            val bob = if (!a.walking && ((a.anim * 2f).toInt() and 1) == 1) 1.dp.toPx() else 0f
-            drawImage(
-                image = sheetImage,
-                srcOffset = SpriteSheet.srcOffset(a.avatar, a.dir, frameIdx),
-                srcSize = IntSize(SpriteSheet.CELL, SpriteSheet.CELL),
-                dstOffset = IntOffset(
-                    (s.x - px / 2f).roundToInt(),
-                    (s.y - px * 0.88f + bob).roundToInt(),
-                ),
-                dstSize = IntSize(px.roundToInt(), px.roundToInt()),
-                filterQuality = FilterQuality.None,
-            )
         }
 
-        // Pass 2: bubbles and name tags on top of every sprite.
-        val showTags = camera.scale >= 1.8f
+        // Pass 2: bubbles and name tags on top of everything.
+        val showTags = camera.scale >= 1.6f
         for (a in ordered) {
-            val s = camera.worldToScreen(a.x, a.y)
-            val headY = s.y - px * 0.9f
-            when (a.bubble) {
-                Bubble.ALERT -> drawAlert(s.x, headY, sim.elapsed)
-                Bubble.TALK -> drawTalk(s.x, headY, sim.elapsed)
-                Bubble.NONE, Bubble.THINK, Bubble.ERROR, Bubble.ZZZ -> Unit
+            val fx = sx(a.x)
+            val fy = sy(a.y)
+            val headY = fy - px * 0.9f
+            if (a.say.isNotEmpty()) {
+                drawSpeech(textMeasurer, speechCache, a.say, fx, headY, camera.viewW)
+            } else {
+                when (a.bubble) {
+                    Bubble.ALERT -> drawAlert(fx, headY, sim.elapsed, Pal.amber)
+                    Bubble.ERROR -> drawAlert(fx, headY, sim.elapsed, Pal.red)
+                    Bubble.TALK -> drawDots(fx, headY, sim.elapsed, false)
+                    Bubble.THINK -> drawDots(fx, headY, sim.elapsed, true)
+                    Bubble.ZZZ -> drawZzz(fx, headY, sim.elapsed)
+                    Bubble.NONE -> Unit
+                }
             }
             val selected = a.agentId == selectedId
             if ((showTags || selected) && a.name.isNotEmpty()) {
@@ -308,10 +348,16 @@ fun OfficeWorld(
                 val padY = 2.dp.toPx()
                 val w = layout.size.width + padX * 2f
                 val h = layout.size.height + padY * 2f
-                val tl = Offset(s.x - w / 2f, s.y + 3.dp.toPx())
+                val tl = Offset(fx - w / 2f, fy + 3.dp.toPx())
                 pixelBox(tl, Size(w, h), if (selected) Pal.amber else Pal.cream, 1.5.dp.toPx())
                 drawText(layout, topLeft = Offset(tl.x + padX, tl.y + padY))
             }
+        }
+
+        // Your desk: a "!" floats over it whenever something needs you.
+        if (deskAlert) {
+            val d = OfficeLayout.deskHotspot
+            drawAlert(sx(d.ax.toFloat()), sy(d.ay.toFloat()), sim.elapsed, Pal.amber)
         }
     }
 }
@@ -323,7 +369,7 @@ private fun hitActor(sim: OfficeSim, cam: CameraState, tap: Offset, minHalfW: Fl
     for (a in sim.actors) {
         val s = cam.worldToScreen(a.x, a.y)
         val halfW = max(size * 0.45f, minHalfW)
-        val top = s.y - size * (if (a.bubble == Bubble.NONE) 1.0f else 1.6f)
+        val top = s.y - size * (if (a.say.isNotEmpty()) 2.6f else if (a.bubble == Bubble.NONE) 1.0f else 1.6f)
         val bottom = s.y + size * 0.15f
         if (abs(tap.x - s.x) <= halfW && tap.y >= top && tap.y <= bottom && s.y > bestY) {
             best = a
@@ -342,25 +388,26 @@ private fun DrawScope.pixelBox(topLeft: Offset, size: Size, fill: Color, border:
     drawRect(fill, topLeft = topLeft, size = size)
 }
 
-/** Yellow "!" above an agent who is waiting for you. */
-private fun DrawScope.drawAlert(cx: Float, headY: Float, t: Float) {
+/** A "!" bubble: amber when something needs you, red when an agent hit a problem. */
+private fun DrawScope.drawAlert(cx: Float, headY: Float, t: Float, fill: Color) {
     val w = 18.dp.toPx()
     val h = 22.dp.toPx()
     val bob = sin(t * 7f) * 2.dp.toPx()
     val tl = Offset(cx - w / 2f, headY - h - 6.dp.toPx() + bob)
-    pixelBox(tl, Size(w, h), Pal.amber, 2.dp.toPx())
+    pixelBox(tl, Size(w, h), fill, 2.dp.toPx())
+    val ink = if (fill == Pal.red) Color.White else Pal.ink
     val bar = 3.dp.toPx()
-    drawRect(Pal.ink, Offset(cx - bar / 2f, tl.y + 4.dp.toPx()), Size(bar, 9.dp.toPx()))
-    drawRect(Pal.ink, Offset(cx - bar / 2f, tl.y + 15.dp.toPx()), Size(bar, 3.dp.toPx()))
+    drawRect(ink, Offset(cx - bar / 2f, tl.y + 4.dp.toPx()), Size(bar, 9.dp.toPx()))
+    drawRect(ink, Offset(cx - bar / 2f, tl.y + 15.dp.toPx()), Size(bar, 3.dp.toPx()))
     drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
 }
 
-/** Three-dot speech bubble for agents who are talking. Phase 3 puts real text in here. */
-private fun DrawScope.drawTalk(cx: Float, headY: Float, t: Float) {
+/** Three dots: a speech bubble, or a thought bubble (with a trail of small circles) when [thought]. */
+private fun DrawScope.drawDots(cx: Float, headY: Float, t: Float, thought: Boolean) {
     val w = 30.dp.toPx()
     val h = 18.dp.toPx()
-    val tl = Offset(cx - w / 2f, headY - h - 6.dp.toPx())
-    pixelBox(tl, Size(w, h), Pal.cream, 2.dp.toPx())
+    val tl = Offset(cx - w / 2f, headY - h - 8.dp.toPx())
+    pixelBox(tl, Size(w, h), if (thought) Color(0xFFFFF6E0) else Pal.cream, 2.dp.toPx())
     val dot = 3.dp.toPx()
     val gap = 4.dp.toPx()
     val startX = cx - (dot * 3f + gap * 2f) / 2f
@@ -373,44 +420,94 @@ private fun DrawScope.drawTalk(cx: Float, headY: Float, t: Float) {
             Size(dot, dot),
         )
     }
-    drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
+    if (thought) {
+        drawRect(Pal.ink, Offset(cx - 1.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(4.dp.toPx(), 4.dp.toPx()))
+        drawRect(Pal.ink, Offset(cx - 4.dp.toPx(), tl.y + h + 8.dp.toPx()), Size(2.dp.toPx(), 2.dp.toPx()))
+    } else {
+        drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
+    }
 }
 
-/** Shows every spot, your desk and the map bounds. Long-press the title to toggle. */
+/** A real message from one agent to another: wraps to 4 lines, cream box, pixel border, small tail. */
+private fun DrawScope.drawSpeech(
+    measurer: TextMeasurer,
+    cache: HashMap<String, TextLayoutResult>,
+    text: String,
+    cx: Float,
+    headY: Float,
+    viewW: Float,
+) {
+    if (cache.size > 40) cache.clear()
+    val maxW = 150.dp.toPx().toInt()
+    val layout = cache.getOrPut(text) {
+        measurer.measure(
+            text = text,
+            style = SpeechStyle,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 4,
+            constraints = Constraints(maxWidth = maxW),
+        )
+    }
+    val padX = 8.dp.toPx()
+    val padY = 5.dp.toPx()
+    val w = layout.size.width + padX * 2f
+    val h = layout.size.height + padY * 2f
+    val edge = 4.dp.toPx()
+    val left = (cx - w / 2f).coerceIn(edge, max(edge, viewW - w - edge))
+    val top = headY - h - 9.dp.toPx()
+    pixelBox(Offset(left, top), Size(w, h), Color(0xFFFFF6E0), 2.dp.toPx())
+    drawText(layout, topLeft = Offset(left + padX, top + padY))
+    val tailX = cx.coerceIn(left + 6.dp.toPx(), left + w - 12.dp.toPx())
+    drawRect(Pal.ink, Offset(tailX, top + h + 2.dp.toPx()), Size(6.dp.toPx(), 4.dp.toPx()))
+    drawRect(Color(0xFFFFF6E0), Offset(tailX + 2.dp.toPx(), top + h - 2.dp.toPx()), Size(2.dp.toPx(), 4.dp.toPx()))
+}
+
+private fun DrawScope.drawZ(x: Float, y: Float, u: Float, color: Color) {
+    drawRect(color, Offset(x, y), Size(5 * u, u))
+    drawRect(color, Offset(x + 3 * u, y + u), Size(u, u))
+    drawRect(color, Offset(x + 2 * u, y + 2 * u), Size(u, u))
+    drawRect(color, Offset(x + u, y + 3 * u), Size(u, u))
+    drawRect(color, Offset(x, y + 4 * u), Size(5 * u, u))
+}
+
+private fun DrawScope.drawZzz(cx: Float, headY: Float, t: Float) {
+    val bob = sin(t * 3f) * 2.dp.toPx()
+    val sizes = floatArrayOf(1.4f, 1.8f, 2.3f)
+    var x = cx + 2.dp.toPx()
+    var y = headY - 4.dp.toPx() + bob
+    for (sz in sizes) {
+        val u = sz.dp.toPx()
+        drawZ(x + u * 0.5f, y + u * 0.5f, u, Pal.ink)
+        drawZ(x, y, u, Pal.cream)
+        x += 4.dp.toPx()
+        y -= 8.dp.toPx()
+    }
+}
+
+/** Walls and furniture as blocked tiles, every spot, every tappable area. Long-press the title to toggle. */
 private fun DrawScope.drawDebug(cam: CameraState) {
-    val line = Color(0xAA00E5FF)
-    // Draw walkable grid edges (simplified)
-    for (ty in 0 until OfficeLayout.grid.rowCount) {
-        for (tx in 0 until OfficeLayout.grid.cols) {
-            if (OfficeLayout.grid.walkable(tx, ty)) {
-                val cx = tx * OfficeLayout.TILE + OfficeLayout.TILE / 2f
-                val cy = ty * OfficeLayout.TILE + 26f
-                val p = cam.worldToScreen(cx, cy)
-                val dot = 2.dp.toPx()
-                drawRect(Color(0x8800E5FF), Offset(p.x - dot / 2f, p.y - dot / 2f), Size(dot, dot))
+    val g = OfficeMapData
+    val tile = OfficeLayout.TILE * cam.scale
+    for (ty in 0 until g.ROWS) {
+        val row = g.GRID[ty]
+        for (tx in 0 until g.COLS) {
+            if (row[tx] == '#') {
+                val p = cam.worldToScreen(tx * OfficeLayout.TILE, ty * OfficeLayout.TILE)
+                drawRect(Color(0x33FF2D55), p, Size(tile, tile))
             }
         }
     }
-    // Draw spots
     for (s in OfficeLayout.spots) {
         val p = cam.worldToScreen(s.x, s.y)
-        val r = 5.dp.toPx()
-        drawOval(Color(0xFFFF8A00), topLeft = Offset(p.x - r, p.y - r), size = Size(r * 2f, r * 2f), style = Stroke(2.dp.toPx()))
+        drawCircle(Color(0xFFFF8A00), radius = 5.dp.toPx(), center = p, style = Stroke(2.dp.toPx()))
     }
-    val d = OfficeLayout.deskHotspot.rect
-    val dTl = cam.worldToScreen(d.left, d.top)
-    drawRect(
-        Color(0xFFFFC83D),
-        topLeft = dTl,
-        size = Size(d.width * cam.scale, d.height * cam.scale),
-        style = Stroke(2.dp.toPx()),
-    )
-    val b = OfficeLayout.bounds
-    val bTl = cam.worldToScreen(b.left, b.top)
-    drawRect(
-        Color(0xFFFF4D6D),
-        topLeft = bTl,
-        size = Size(b.width * cam.scale, b.height * cam.scale),
-        style = Stroke(1.dp.toPx()),
-    )
+    for (h in OfficeLayout.hotspots) {
+        val p = cam.worldToScreen(h.x0.toFloat(), h.y0.toFloat())
+        drawRect(
+            Color(0xFFFFC83D),
+            topLeft = p,
+            size = Size((h.x1 - h.x0) * cam.scale, (h.y1 - h.y0) * cam.scale),
+            style = Stroke(1.5.dp.toPx()),
+        )
+    }
 }

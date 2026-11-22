@@ -13,6 +13,7 @@ object AgentPolicy {
         "complete_task",
         "ask_user",
         "think",
+        "say",
     )
 
     fun parseDecision(text: String): AgentDecision? {
@@ -20,7 +21,7 @@ object AgentPolicy {
         val action = Json.string(root, "action", "none").lowercase().ifBlank { "none" }
         val inputObject = Json.obj(root, "action_input")
         val input = inputObject ?: when (action) {
-            "create_task", "request_approval", "request_connector", "use_connector", "update_goal", "update_memory", "complete_task" -> root
+            "create_task", "request_approval", "request_connector", "use_connector", "update_goal", "update_memory", "complete_task", "say" -> root
             else -> JSONObject()
         }
         return AgentDecision(
@@ -129,4 +130,10 @@ object AgentPolicy {
         )
         return if (value.lowercase() in allowed) value.lowercase() else "thought"
     }
+
+    /** A `say` is stored in the diary (kind "say") as "To <name>: <text>". */
+    val SAY_REGEX = Regex("^To ([^:]{1,40}): (.*)$", RegexOption.DOT_MATCHES_ALL)
+
+    fun sayLine(toName: String, text: String): String =
+        "To ${toName.trim()}: ${text.trim().take(400)}"
 }
