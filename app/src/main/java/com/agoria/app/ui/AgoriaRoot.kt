@@ -32,7 +32,10 @@ fun AgoriaRoot() {
                 }
             }
             !settings.setupComplete -> {
-                OnboardingScreen(viewModel = viewModel)
+                OnboardingScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.finishSetup("Boss") },
+                )
             }
             else -> {
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
