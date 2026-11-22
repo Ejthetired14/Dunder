@@ -33,10 +33,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | Connectors | `core/ConnectorCatalog.kt`, `core/ConnectorExecutor.kt` (~129 KB) | 25 connector definitions; one giant executor with a `when` dispatch. |
 | Builds | `core/BuildRunner.kt` | LLM generates a file list, written under the project workspace, zipped. |
 | Data | `data/*` | Room DB v4 (14 entities), `Repository.kt` (~41 KB), seed data, export/import JSON snapshot, daily auto-backup. |
-| Service | `service/AutonomyService.kt`, `BootReceiver.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. |
+| Service | `service/AutonomyService.kt`, `BootReceiver.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`. |
 | Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON. |
-| CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12) checks the backup config on every push/PR. |
-| Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/office_gen` | Backup-config regression guard + its self-tests (stdlib Python only). |
+| CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13) checks the backup config and exported components on every push/PR. |
+| Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/office_gen` | Backup-config and exported-component regression guards + their self-tests (stdlib Python only). |
 
 ### What is already solid (keep it)
 - Approval-gate architecture: the model can only auto-run a small allowlist; mutating connector actions create an `ApprovalEntity`.
@@ -161,12 +161,23 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - ✅ Throwaway PR #6 (branch `test-sec12-fail`, commit `c1c3855`) with `allowBackup="true"`: guard run 45035887609 **failed** as expected; PR closed, branch deleted.
 
 ### SEC-13 - BootReceiver is exported and probably never gets LOCKED_BOOT_COMPLETED
-- Status: TODO | Effort: S | Verify first: `service/BootReceiver.kt` was not reviewed
+- Status: IN-PROGRESS (2026-11-22) - implemented + guard self-tests pass locally; **CI run and device/emulator reboot check pending**. Commit: _fill in after push_ | Effort: S
 - Evidence (from `AndroidManifest.xml`, reviewed 2026-11-22): `<receiver android:name=".service.BootReceiver" android:enabled="true" android:exported="true">` with intent filters for `BOOT_COMPLETED` **and** `LOCKED_BOOT_COMPLETED`. It has no `android:directBootAware="true"`.
 - Problem 1: system broadcasts such as `BOOT_COMPLETED` are delivered to non-exported receivers too, so `exported="true"` only lets any other app on the phone send this receiver crafted intents. Its job is to start the foreground autonomy service (see RUN-3), so a third-party app could try to trigger that.
 - Problem 2: without `directBootAware`, the `LOCKED_BOOT_COMPLETED` filter is never delivered before first unlock; if it is made direct-boot aware, the receiver must not touch credential-encrypted storage (Room, `filesDir`, Keystore-backed secrets).
 - Fix: set `android:exported="false"`; drop the `LOCKED_BOOT_COMPLETED` filter unless there is a real need; in `BootReceiver.onReceive` check `intent.action` against the expected system actions and read `settings.autonomyEnabled` before starting the service (ties into RUN-3, which also covers the stop-path flag). Extend `tools/check_backup_config.py` or add a sibling check so a receiver with a boot filter cannot be re-exported.
 - Done when: manifest has `exported="false"` on `BootReceiver`; a device/emulator reboot starts the service only when autonomy is enabled; a crafted `am broadcast` from another app/package does not start it.
+- Reviewed first (2026-11-22): `service/BootReceiver.kt` already checked `intent.action` and read `settings.autonomyEnabled` before `AutonomyService.start(context)`, so only the action filter needed tightening. Its `seedIfNeeded()` + settings read also confirms Problem 2 (Room is credential-encrypted, unusable before first unlock).
+- Implemented (2026-11-22):
+  - `AndroidManifest.xml`: `BootReceiver` now `android:exported="false"` and listens for `BOOT_COMPLETED` only; comment explains why (and that `LOCKED_BOOT_COMPLETED` is deliberately absent).
+  - `service/BootReceiver.kt`: accepts only `Intent.ACTION_BOOT_COMPLETED`; class KDoc documents the SEC-13 reasoning. Behavior otherwise unchanged (seed, read `autonomyEnabled`, start service only if enabled).
+  - New sibling guard `tools/check_manifest_exports.py` (+ `tools/test_check_manifest_exports.py`, 12 `unittest` cases). Checks main + variant manifests: every `<service>`/`<receiver>`/`<provider>` must set `exported="false"` (empty allowlist); an `<activity>` may be `exported="true"` only with a MAIN/LAUNCHER filter; an activity with an intent-filter must declare `exported`; any component listening for `LOCKED_BOOT_COMPLETED` must be `directBootAware="true"`. Stdlib only, `::error` annotations in Actions, exit 0/1/2 like SEC-12.
+  - `.github/workflows/backup-guard.yml`: now runs both self-test files, then both guards (workflow name kept so the existing SEC-12 check name and any branch protection keep working).
+- Verified (2026-11-22, local sandbox):
+  - ✅ 12/12 self-tests pass (`python3 tools/test_check_manifest_exports.py`).
+  - ✅ Guard exits 0 on the new manifest; exits 1 on a copy with `BootReceiver` flipped back to `exported="true"`.
+  - ❌ Not run: GitHub Actions (nothing pushed from the session that wrote this), Gradle build, device/emulator reboot, `am broadcast` negative test.
+- Remaining to close this task: (1) push and confirm the `Backup config guard` run is green on `main`; (2) on a device/emulator: enable autonomy, reboot, confirm the service restarts; disable autonomy, reboot, confirm it does not; from `adb shell`, `am broadcast -a android.intent.action.BOOT_COMPLETED -n com.agoria.app/.service.BootReceiver` should be refused/not start the service on a non-rooted device; (3) throwaway-PR red check like SEC-12; (4) fill in the commit link, flip to `DONE`.
 
 ---
 
@@ -286,14 +297,21 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: global requests-per-hour and tokens-per-hour budget, adaptive cooldown, skip a cycle when nothing changed (event-driven wake on new user message/approval/result), prompt size cap with token estimate, per-provider quota tracking in `ProviderEntity`.
 
 ### RUN-3 - AutonomyService battery and lifecycle
-- Status: TODO | Effort: M | Verify first: `BootReceiver.kt` was not reviewed
-- Evidence: `AutonomyService.acquireWakeLock()` takes a `PARTIAL_WAKE_LOCK` with no timeout and holds it for the whole service life; the notification "Stop autonomy" action calls `runtime.stop()` but does not update `settings.autonomyEnabled`, so a boot receiver that reads that flag may restart it.
-- Fix: hold the wake lock only while a cycle runs (with a timeout), write `autonomyEnabled=false` on every stop path, add a WorkManager watchdog, and test on Android 15 foreground-service-from-boot rules. See also SEC-13 (receiver export and boot filters).
+- Status: TODO | Effort: M | Verify first: `AutonomyService.kt` stop path (`BootReceiver.kt` reviewed 2026-11-22 under SEC-13: it does read `settings.autonomyEnabled`)
+- Evidence: `AutonomyService.acquireWakeLock()` takes a `PARTIAL_WAKE_LOCK` with no timeout and holds it for the whole service life; the notification "Stop autonomy" action calls `runtime.stop()` but does not update `settings.autonomyEnabled`, so `BootReceiver` (which restarts the service when that flag is true) may restart it after the next reboot.
+- Fix: hold the wake lock only while a cycle runs (with a timeout), write `autonomyEnabled=false` on every stop path, add a WorkManager watchdog, and test on Android 15 foreground-service-from-boot rules. See also SEC-13 (receiver export and boot filters; done) and RUN-5.
 
 ### RUN-4 - Approval outcome is classified by string prefix
 - Status: TODO | Effort: S
 - Evidence: `executeApproval` decides `ok` with `outcome.startsWith("Failed")`, `"Build failed"`, `"Build skipped"`, etc.
 - Fix: return a sealed `ExecutionResult(ok, summary, retryable)` from each executor.
+
+### RUN-5 - Boot restart fails silently and can outlive the receiver's time budget
+- Status: TODO | Effort: S | Found while doing SEC-13 (2026-11-22)
+- Evidence: `service/BootReceiver.kt` runs `seedIfNeeded()` and a settings read on `CoroutineScope(Dispatchers.IO)` under `goAsync()`, then `AutonomyService.start(context)`. A broadcast receiver has roughly 10 s before the system treats it as unresponsive; a cold Room open on a slow phone can exceed that. The `catch (_: Exception)` swallows everything (including a foreground-service-start refusal from the OS), logs nothing, shows nothing, and the comment promises a retry "the next time the app opens" that no code implements.
+- Effect: after a reboot the office can be silently dead while the user believes autonomy is on.
+- Fix: do not seed from the receiver (the app does it on first launch); read `autonomyEnabled` and hand the work to `WorkManager` (expedited) or start the service immediately and let it load state; log failures to the persisted audit trail (OBS-1) and set a "restart failed" flag the UI shows on next open, plus a notification; unit-test with a fake repository.
+- Done when: a simulated failure in the boot path is visible to the user (flag or notification) and a normal reboot with autonomy enabled restarts the service within the receiver time budget.
 
 ### CONN-1 - Read-only gating ignores action aliases and `check_revenue`
 - Status: TODO | Effort: S
@@ -326,7 +344,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 ### TEST-1 - There are no tests
 - Status: TODO | Effort: L
-- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 guard in `tools/`; they do not cover the app.)
+- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.)
 - Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved).
 
 ### CI-1 - CI hygiene
@@ -381,16 +399,16 @@ UI-only items from those plans (combined flows, LazyColumn keys, pull-to-refresh
 
 ## 8. Not reviewed yet (do these before trusting this plan fully)
 
-`data/Daos.kt`, `data/SeedData.kt`, `core/ProviderCatalog.kt`, `core/AgentModels.kt`, `service/BootReceiver.kt`, `util/Files.kt`, `util/Json.kt`, `util/Notifier.kt`, `util/Share.kt`, `browser/*` (BrowserHub, AgentBrowserActivity), `viewer/*`, all of `ui/*`, `gradle.properties`, `proguard-rules.pro`, `tools/office_gen`, `docs/pixel-office.md`, `.gitignore`.
+`data/Daos.kt`, `data/SeedData.kt`, `core/ProviderCatalog.kt`, `core/AgentModels.kt`, `service/AutonomyService.kt` (stop path, see RUN-3), `util/Files.kt`, `util/Json.kt`, `util/Notifier.kt`, `util/Share.kt`, `browser/*` (BrowserHub, AgentBrowserActivity), `viewer/*`, all of `ui/*`, `gradle.properties`, `proguard-rules.pro`, `tools/office_gen`, `docs/pixel-office.md`, `.gitignore`.
 
-Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`, `res/xml/backup_rules.xml`, `.github/workflows/build-apk.yml` (all while doing SEC-12). The manifest review produced SEC-13. Other manifest items looked at and left alone: `REQUEST_INSTALL_PACKAGES` is used by the self-updater (see SEC-10); `FileProvider` is correctly `exported="false"`; `AutonomyService` is `exported="false"`.
+Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`, `res/xml/backup_rules.xml`, `.github/workflows/build-apk.yml` (all while doing SEC-12), and `service/BootReceiver.kt` (while doing SEC-13; produced RUN-5). Manifest items looked at and left alone: `REQUEST_INSTALL_PACKAGES` is used by the self-updater (see SEC-10); `FileProvider` is correctly `exported="false"`; `AutonomyService` is `exported="false"`; `MainActivity` is the only exported component (launcher).
 
 ---
 
 ## 9. Suggested order of work
 
-1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify), SEC-12 (implemented, verify on CI), SEC-2, SEC-3, SEC-4, SEC-5, SEC-7, SEC-13.
-2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1.
+1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3, SEC-4, SEC-5, SEC-7.
+2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
 4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-10, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
 5. **Quality:** TEST-1 (start alongside step 1), CI-1, OBS-1, ARCH-1, DOC-1.
@@ -407,6 +425,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-12 implemented (`tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `.github/workflows/backup-guard.yml`); status IN-PROGRESS pending first CI run. Added SEC-13 (BootReceiver exported / boot filters) from the manifest review. Updated section 1 (CI/Tools rows), DEC-3, TEST-1, RUN-3 cross-reference, section 8 and section 9. Added work-log entry. |
 | 2026-11-22 | Claude | SEC-12 CI verified (GitHub Actions run 45035735896, commit `583c74f`); updated SEC-12 status with commit link and "CI green on main". |
 | 2026-11-22 | Claude | SEC-12 throwaway PR test passed (PR #6, run 45035887609 failed as expected); set SEC-12 to DONE. |
+| 2026-11-22 | Claude | SEC-13 implemented (non-exported `BootReceiver`, `BOOT_COMPLETED` only, new `tools/check_manifest_exports.py` guard + tests, `backup-guard.yml` runs both guards); status IN-PROGRESS pending CI and device check. Added RUN-5 (silent boot-restart failure). Updated section 1 (Service/CI/Tools rows), RUN-3, TEST-1, sections 8 and 9. Added work-log entry. |
 
 ---
 
@@ -448,3 +467,19 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified: a run in GitHub Actions against the real repo files; the "red on bad PR" check; required-check branch protection (owner setting).
 - Found while reviewing the manifest: `BootReceiver` is `exported="true"` with a `LOCKED_BOOT_COMPLETED` filter but no `directBootAware` -> logged as **SEC-13**. Also noticed (not logged as a task, cosmetic): the comment in `data_extraction_rules.xml` contains the typo "Keystore-encrypted0".
 - Next for whoever continues: push these files, confirm the `Backup config guard` run is green on `main`, do the throwaway-PR red check, fill in the commit link under SEC-12 and flip to `DONE`; then take SEC-13 (S) or SEC-2 (M).
+
+### 2026-11-22 - SEC-13 (BootReceiver export + boot filters) - Claude (free-tier session, GitHub connector + sandbox)
+- Picked SEC-13: the next small (S) P0 item. SEC-2 is M and SEC-4/5/7 need the ~42 KB / ~129 KB Kotlin files, too large for one free-tier session.
+- Note on inputs: the brief again said `ForClaude/claudebackend.md`; the repo file is `ForClaude/CLAUDE_BACKEND_PLAN.md` (same file, kept its name). Read via the GitHub connector at repo commit `71ebd00`; the sandbox had no network, so this file was rewritten from the version read there. **A merge reviewer should diff it against `main` and confirm only SEC-13, RUN-3, new RUN-5, section 1 (Service/CI/Tools rows), TEST-1, sections 8/9, changelog and this log changed.**
+- Read: this plan, `app/src/main/AndroidManifest.xml`, `service/BootReceiver.kt`, `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `.github/workflows/backup-guard.yml`.
+- Changed:
+  - `app/src/main/AndroidManifest.xml` - `BootReceiver` `exported="true"` -> `"false"`; removed the `LOCKED_BOOT_COMPLETED` filter; comment explains why.
+  - `app/src/main/java/com/agoria/app/service/BootReceiver.kt` - handles `ACTION_BOOT_COMPLETED` only; KDoc for SEC-13. No other behavior change.
+  - `tools/check_manifest_exports.py` + `tools/test_check_manifest_exports.py` - new guard (12 tests); chosen as a sibling of the SEC-12 script so each stays small and single-purpose.
+  - `.github/workflows/backup-guard.yml` - runs both self-test files and both guards; workflow name unchanged.
+  - This file - SEC-13 status/notes, RUN-3 wording, new RUN-5, section 1, TEST-1, sections 8/9, changelog, this log.
+- Design choices: kept the existing `autonomyEnabled` gate in the receiver (already correct); dropped `LOCKED_BOOT_COMPLETED` instead of making the receiver `directBootAware` because it needs Room/Keystore, which are unavailable before unlock; the new guard bans exported services/receivers/providers outright (empty allowlist) so any future export is a deliberate, reviewed change.
+- Verified (local sandbox): 12/12 guard self-tests pass; the guard exits 0 on the new manifest and exits 1 on a copy with `BootReceiver` re-exported; new manifest parses.
+- NOT verified: Gradle build of the Kotlin change, GitHub Actions run, device/emulator reboot behavior, `am broadcast` negative test. The SEC-12 self-tests were not re-run here (that script was not changed).
+- Found: RUN-5 (boot start swallows all errors and may exceed the receiver time budget).
+- Next for whoever continues: push these files; confirm `Backup config guard` is green on `main` and `assembleDebug` still passes; do the device reboot checks and a throwaway-PR red check; fill in the commit link under SEC-13 and flip to `DONE`; then take RUN-5 (S) or SEC-2 (M).

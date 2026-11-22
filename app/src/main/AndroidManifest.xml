@@ -62,13 +62,17 @@
                 android:value="Runs the on-device autonomous agent loop, local build runner, and connector actions. No background data is sent without the user's configured providers." />
         </service>
 
+        <!-- SEC-13: not exported. The system still delivers BOOT_COMPLETED to non-exported
+             receivers; exporting only let other apps send this receiver crafted intents.
+             LOCKED_BOOT_COMPLETED is deliberately not listed: the receiver reads Room, which is
+             credential-encrypted and unavailable before first unlock, and the receiver is not
+             directBootAware. tools/check_manifest_exports.py guards this in CI. -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

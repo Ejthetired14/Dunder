@@ -1,6 +1,8 @@
 name: Backup config guard
 
 # SEC-12: fail fast if Android backup / device transfer is ever re-enabled.
+# SEC-13: fail fast if a service/receiver/provider is exported or the boot receiver
+#         listens for LOCKED_BOOT_COMPLETED.
 # Cheap (a few seconds, no Gradle, no Android SDK), so it runs on every push and PR.
 
 on:
@@ -15,7 +17,7 @@ permissions:
 
 jobs:
   backup-guard:
-    name: Check backup config
+    name: Check backup config and exported components
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -23,7 +25,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run guard self-tests
-        run: python3 tools/test_check_backup_config.py
+        run: |
+          python3 tools/test_check_backup_config.py
+          python3 tools/test_check_manifest_exports.py
 
       - name: Check backup config
         run: python3 tools/check_backup_config.py
+
+      - name: Check exported components and boot receiver
+        run: python3 tools/check_manifest_exports.py
