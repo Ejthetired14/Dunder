@@ -15,7 +15,7 @@
      rules files below exclude everything as defense in depth if this is ever flipped. -->
     <application
         android:name=".AgoriaApplication"
-        android:allowBackup="false"
+        android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
