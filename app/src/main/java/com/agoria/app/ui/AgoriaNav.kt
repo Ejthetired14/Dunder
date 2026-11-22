@@ -51,9 +51,10 @@ private data class TopDestination(
     val icon: ImageVector,
 )
 
+// The office is the app's home now, so it comes first.
 private val topDestinations = listOf(
-    TopDestination("home", "Home", Icons.Default.Home),
     TopDestination("office", "Office", Icons.Default.Business),
+    TopDestination("home", "Home", Icons.Default.Home),
     TopDestination("project", "Project", Icons.Default.Folder),
     TopDestination("approvals", "Approvals", Icons.Default.FactCheck),
     TopDestination("connectors", "Connect", Icons.Default.Hub),
@@ -106,8 +107,8 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     onNavigate = { route ->
                         if (currentRoute != route) {
                             navController.navigate(route) {
-                                // Pop back to start destination (home) to avoid stacking duplicate tabs
-                                // saveState = true preserves each tab's ViewModel and scroll position
+                                // Pop back to the start destination (the office) so tabs do not stack.
+                                // saveState = true preserves each tab's ViewModel and scroll position.
                                 popUpTo(navController.graph.startDestinationId) {
                                     saveState = true
                                 }
@@ -127,19 +128,9 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
         Box(modifier = touchDetector) {
             NavHost(
                 navController = navController,
-                startDestination = "home",
+                startDestination = "office",
                 modifier = Modifier.padding(innerPadding),
             ) {
-                composable("home") {
-                    HomeScreen(
-                        viewModel = viewModel,
-                        onOpenAgent = { id -> navController.navigate("agent/$id") },
-                        onOpenSettings = { navController.navigate("settings") },
-                        onOpenApprovals = { navController.navigate("approvals") },
-                        onOpenDiary = { navController.navigate("diary") },
-                        onOpenOffice = { navController.navigate("office") },
-                    )
-                }
                 composable("office") {
                     OfficeScreen(
                         viewModel = viewModel,
@@ -149,51 +140,67 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                         onOpenApprovals = { navController.navigate("approvals") },
                     )
                 }
-            composable("project") {
-                ProjectScreen(
-                    viewModel = viewModel,
-                    onOpenAgent = { id -> navController.navigate("agent/$id") },
-                    onOpenBrowsers = { navController.navigate("browsers") },
-                )
-            }
-            composable("browsers") {
-                BrowsersScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable("diary") {
-                DiaryScreen(
-                    viewModel = viewModel,
-                    onOpenAgent = { id -> navController.navigate("agent/$id") },
-                )
-            }
-            composable("approvals") {
-                ApprovalsScreen(
-                    viewModel = viewModel,
-                    onOpenConnectors = { navController.navigate("connectors") },
-                )
-            }
-            composable("connectors") {
-                ConnectorsScreen(viewModel = viewModel)
-            }
-            composable("settings") {
-                SettingsScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable("agent/{agentId}") { entry ->
-                val agentId = entry.arguments?.getString("agentId") ?: return@composable
-                AgentScreen(
-                    viewModel = viewModel,
-                    agentId = agentId,
-                    onBack = { navController.popBackStack() },
-                )
+                composable("home") {
+                    HomeScreen(
+                        viewModel = viewModel,
+                        onOpenAgent = { id -> navController.navigate("agent/$id") },
+                        onOpenSettings = { navController.navigate("settings") },
+                        onOpenApprovals = { navController.navigate("approvals") },
+                        onOpenDiary = { navController.navigate("diary") },
+                        // Go back to the existing office instead of stacking a second one on top of it.
+                        onOpenOffice = {
+                            navController.navigate("office") {
+                                popUpTo("office")
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                }
+                composable("project") {
+                    ProjectScreen(
+                        viewModel = viewModel,
+                        onOpenAgent = { id -> navController.navigate("agent/$id") },
+                        onOpenBrowsers = { navController.navigate("browsers") },
+                    )
+                }
+                composable("browsers") {
+                    BrowsersScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("diary") {
+                    DiaryScreen(
+                        viewModel = viewModel,
+                        onOpenAgent = { id -> navController.navigate("agent/$id") },
+                    )
+                }
+                composable("approvals") {
+                    ApprovalsScreen(
+                        viewModel = viewModel,
+                        onOpenConnectors = { navController.navigate("connectors") },
+                    )
+                }
+                composable("connectors") {
+                    ConnectorsScreen(viewModel = viewModel)
+                }
+                composable("settings") {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("agent/{agentId}") { entry ->
+                    val agentId = entry.arguments?.getString("agentId") ?: return@composable
+                    AgentScreen(
+                        viewModel = viewModel,
+                        agentId = agentId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
         }
     }
-}
 }
 
 @Composable

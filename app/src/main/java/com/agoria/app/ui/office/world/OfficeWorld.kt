@@ -78,6 +78,12 @@ class CameraState {
     var viewH by mutableFloatStateOf(0f)
     private var placed = false
 
+    // Animated focus (fly to a spot). Cancelled as soon as the user pans or zooms.
+    private var animating = false
+    private var targetX = 0f
+    private var targetY = 0f
+    private var targetScale = DEFAULT_SCALE
+
     private fun minScale(): Float =
         if (viewW <= 0f) 1f else viewW / OfficeLayout.worldW
 
@@ -92,10 +98,32 @@ class CameraState {
     }
 
     fun reset() {
+        animating = false
         scale = max(minScale(), DEFAULT_SCALE)
         cx = OfficeLayout.worldW / 2f
         cy = 420f
         clamp()
+    }
+
+    /** Smoothly pans and zooms so the world point (x, y) ends up in the middle of the view. */
+    fun focusOn(x: Float, y: Float, zoomTo: Float = 2.5f) {
+        targetX = x
+        targetY = y
+        targetScale = max(scale, zoomTo).coerceIn(minScale(), MAX_SCALE)
+        animating = true
+    }
+
+    /** Called every frame from the game loop. */
+    fun step(dt: Float) {
+        if (!animating) return
+        val f = 1f - kotlin.math.exp(-9f * dt)
+        scale += (targetScale - scale) * f
+        cx += (targetX - cx) * f
+        cy += (targetY - cy) * f
+        clamp()
+        if (abs(targetX - cx) < 0.6f && abs(targetY - cy) < 0.6f && abs(targetScale - scale) < 0.01f) {
+            animating = false
+        }
     }
 
     fun worldToScreen(x: Float, y: Float): Offset =
@@ -111,6 +139,7 @@ class CameraState {
     fun spritePx(): Float = 32f * max(2, scale.roundToInt()).coerceAtMost(8)
 
     fun transform(centroid: Offset, pan: Offset, zoom: Float) {
+        animating = false
         val before = screenToWorld(centroid)
         scale = (scale * zoom).coerceIn(minScale(), MAX_SCALE)
         cx = before.x - (centroid.x - viewW / 2f) / scale - pan.x / scale
@@ -135,6 +164,7 @@ fun OfficeWorld(
     selectedId: String?,
     selectedHotspotId: String?,
     deskAlert: Boolean,
+    tint: Color,
     debug: Boolean,
     onSelect: (String?) -> Unit,
     onHotspot: (HotspotDef?) -> Unit,
@@ -169,7 +199,9 @@ fun OfficeWorld(
                 val dtNs = now - last
                 if (dtNs < FRAME_NS) continue
                 last = now
-                sim.update((dtNs / 1_000_000_000f).coerceAtMost(0.1f))
+                val dt = (dtNs / 1_000_000_000f).coerceAtMost(0.1f)
+                camera.step(dt)
+                sim.update(dt)
                 frame = now
             }
         }
@@ -320,6 +352,9 @@ fun OfficeWorld(
                 )
             }
         }
+
+        // Time of day: a soft colour wash over the world (not over bubbles or tags).
+        if (tint.alpha > 0.005f) drawRect(tint)
 
         // Pass 2: bubbles and name tags on top of everything.
         val showTags = camera.scale >= 1.6f

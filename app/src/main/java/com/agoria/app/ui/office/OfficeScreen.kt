@@ -1,6 +1,8 @@
 package com.agoria.app.ui.office
 
+import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -18,6 +21,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -25,6 +31,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -48,10 +57,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +72,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
+import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
@@ -95,8 +110,8 @@ fun OfficeScreen(
     onOpenBrowsers: () -> Unit = {},
     onOpenApprovals: () -> Unit = {},
 ) {
-    // Scope OfficeViewModel to the root nav graph so it survives tab switching
-    val rootEntry = navController.getBackStackEntry("home")
+    // Scope OfficeViewModel to the start destination (the office) so it survives tab switching
+    val rootEntry = navController.getBackStackEntry("office")
     val officeViewModel: OfficeViewModel = viewModel(rootEntry)
     val sim = officeViewModel.sim
     val camera = officeViewModel.camera
@@ -142,6 +157,21 @@ private fun OfficeWorldScreen(
     val logs by viewModel.connectorLogs.collectAsStateWithLifecycle()
     val builds by viewModel.builds.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val autonomyOn = settings?.autonomyEnabled ?: false
+
+    // Day and night: a soft colour wash that follows the phone's clock.
+    val tint by produceState(initialValue = officeTint()) {
+        while (true) {
+            delay(60_000)
+            value = officeTint()
+        }
+    }
+
+    // First-run hints, shown once.
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("dunder_office", Context.MODE_PRIVATE) }
+    var hintsSeen by remember { mutableStateOf(prefs.getBoolean("hints_seen", false)) }
 
     var selectedId by remember { mutableStateOf<String?>(null) }
     var hotspot by remember { mutableStateOf<HotspotDef?>(null) }
@@ -180,6 +210,21 @@ private fun OfficeWorldScreen(
     val statusLine = remember(sim.revision, selectedId) { actor?.statusText() }
     val latestDiary = diary.firstOrNull { it.agentId == selectedId }?.content
 
+    fun focusAgent(id: String) {
+        sim.actors.firstOrNull { it.agentId == id }?.let { camera.focusOn(it.x, it.y - 24f) }
+    }
+    fun focusDesk() {
+        val d = com.agoria.app.ui.office.world.OfficeLayout.deskHotspot
+        camera.focusOn(d.ax.toFloat(), d.y1.toFloat() + 40f)
+    }
+
+    // The selected agent's latest reply to you, for the quick-chat box.
+    val messageFlow = remember(selectedId) {
+        selectedId?.let { viewModel.messagesFor(it) } ?: flowOf(emptyList<MessageEntity>())
+    }
+    val messages by messageFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val lastReply = messages.lastOrNull { it.role == "agent" }
+
     LaunchedEffect(hudActivityTick) {
         hudVisible.value = true
         delay(hudAutoHideDelay)
@@ -213,6 +258,7 @@ private fun OfficeWorldScreen(
             selectedId = selectedId,
             selectedHotspotId = hotspot?.id,
             deskAlert = pending > 0,
+            tint = tint,
             debug = debug,
             onSelect = {
                 selectedId = it
@@ -264,7 +310,11 @@ private fun OfficeWorldScreen(
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             Text("THE OFFICE", style = PixelLabel)
                             Text(
-                                text = "${agents.size} agents · live",
+                                text = "${agents.size} agents · " + when {
+                                    !autonomyOn -> "paused"
+                                    runtimeState.ticking -> "thinking"
+                                    else -> "open"
+                                },
                                 style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
                             )
                         }
@@ -276,6 +326,8 @@ private fun OfficeWorldScreen(
                             onClick = {
                                 selectedId = null
                                 hotspot = null
+                                chatterOpen = false
+                                focusDesk()
                                 deskOpen = true
                             },
                         )
@@ -294,9 +346,42 @@ private fun OfficeWorldScreen(
                             }
                         },
                     )
-                    PixelIconButton(Icons.Default.Public, "Agent browsers", onOpenBrowsers)
+                    PixelIconButton(
+                        if (autonomyOn) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (autonomyOn) "Pause the office" else "Start the office",
+                        { viewModel.setAutonomy(!autonomyOn) },
+                    )
                     PixelIconButton(Icons.Default.MyLocation, "Reset view", { camera.reset() })
                     PixelIconButton(Icons.AutoMirrored.Filled.List, "List view", onShowList)
+                }
+            }
+        }
+
+        if (!hintsSeen) {
+            PixelPanel(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("WELCOME TO YOUR OFFICE", style = PixelLabel)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Tap an agent to see what they are thinking, or to talk to them.", style = PixelBody)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Tap a room to open the part of the app it stands for.", style = PixelBody)
+                    Spacer(Modifier.height(4.dp))
+                    Text("A yellow ! means someone needs you. Tap your desk to approve.", style = PixelBody)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Drag to look around, pinch to zoom.", style = PixelBody)
+                    Spacer(Modifier.height(12.dp))
+                    PixelButton(
+                        text = "Got it",
+                        onClick = {
+                            prefs.edit().putBoolean("hints_seen", true).apply()
+                            hintsSeen = true
+                        },
+                    )
                 }
             }
         }
@@ -323,6 +408,7 @@ private fun OfficeWorldScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .imePadding()
                 .padding(12.dp),
         ) {
             when {
@@ -347,6 +433,7 @@ private fun OfficeWorldScreen(
                     onPick = { id ->
                         chatterOpen = false
                         selectedId = id
+                        focusAgent(id)
                     },
                     onClose = { chatterOpen = false },
                 )
@@ -391,6 +478,20 @@ private fun OfficeWorldScreen(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        if (lastReply != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "${selectedAgent.name} says: ${lastReply.content.take(200)}",
+                                style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        QuickChat(
+                            name = selectedAgent.name,
+                            onSend = { viewModel.sendMessage(selectedAgent.id, it) },
+                        )
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             PixelButton(
@@ -431,6 +532,74 @@ private fun OfficeWorldScreen(
             }
         }
     }
+}
+
+/** One-line message box: talk to an agent without leaving the office. */
+@Composable
+private fun QuickChat(name: String, onSend: (String) -> Unit) {
+    var draft by remember { mutableStateOf("") }
+    fun send() {
+        val text = draft.trim()
+        if (text.isNotEmpty()) {
+            onSend(text)
+            draft = ""
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .background(Color(0x14000000))
+                .border(2.dp, Pal.ink)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+        ) {
+            if (draft.isEmpty()) {
+                Text(
+                    text = "Say something to ${name}...",
+                    style = PixelBody.copy(fontSize = 13.sp, color = Color(0xFF6B6050)),
+                    maxLines = 1,
+                )
+            }
+            BasicTextField(
+                value = draft,
+                onValueChange = { draft = it.take(400) },
+                singleLine = true,
+                textStyle = PixelBody.copy(fontSize = 14.sp),
+                cursorBrush = SolidColor(Pal.ink),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { send() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        PixelButton(text = "Send", onClick = { send() })
+    }
+}
+
+/**
+ * Colour wash for the time of day: dark blue at night, a hint of orange at dawn and dusk,
+ * nothing during the day. Keyframes are (minute of day, colour).
+ */
+private fun officeTint(): Color {
+    val c = java.util.Calendar.getInstance()
+    val m = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)
+    val night = Color(0x4D0B1030)
+    val keys = listOf(
+        0 to night,
+        5 * 60 to night,
+        7 * 60 to Color(0x1AFFB27A),
+        8 * 60 to Color(0x00FFFFFF),
+        17 * 60 to Color(0x00FFFFFF),
+        18 * 60 + 30 to Color(0x1FFF9A3C),
+        20 * 60 to Color(0x3A1B1B4B),
+        22 * 60 to night,
+        24 * 60 to night,
+    )
+    var i = 0
+    while (i < keys.size - 2 && m >= keys[i + 1].first) i++
+    val (m0, c0) = keys[i]
+    val (m1, c1) = keys[i + 1]
+    val t = ((m - m0).toFloat() / (m1 - m0).toFloat()).coerceIn(0f, 1f)
+    return lerp(c0, c1, t)
 }
 
 // ---------------------------------------------------------------------------------------------
