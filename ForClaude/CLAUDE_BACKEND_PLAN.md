@@ -161,7 +161,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - ✅ Throwaway PR #6 (branch `test-sec12-fail`, commit `c1c3855`) with `allowBackup="true"`: guard run 45035887609 **failed** as expected; PR closed, branch deleted.
 
 ### SEC-13 - BootReceiver is exported and probably never gets LOCKED_BOOT_COMPLETED
-- Status: IN-PROGRESS (2026-11-22) - implemented + guard self-tests pass locally; **CI run and device/emulator reboot check pending**. Commit: _fill in after push_ | Effort: S
+- Status: IN-PROGRESS (2026-11-22) - implemented, **CI green on main (run 45038393115), Gradle build green (run 45038393077), device/emulator reboot check pending**. Commit: `7536d44` | Effort: S
 - Evidence (from `AndroidManifest.xml`, reviewed 2026-11-22): `<receiver android:name=".service.BootReceiver" android:enabled="true" android:exported="true">` with intent filters for `BOOT_COMPLETED` **and** `LOCKED_BOOT_COMPLETED`. It has no `android:directBootAware="true"`.
 - Problem 1: system broadcasts such as `BOOT_COMPLETED` are delivered to non-exported receivers too, so `exported="true"` only lets any other app on the phone send this receiver crafted intents. Its job is to start the foreground autonomy service (see RUN-3), so a third-party app could try to trigger that.
 - Problem 2: without `directBootAware`, the `LOCKED_BOOT_COMPLETED` filter is never delivered before first unlock; if it is made direct-boot aware, the receiver must not touch credential-encrypted storage (Room, `filesDir`, Keystore-backed secrets).
@@ -173,11 +173,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - `service/BootReceiver.kt`: accepts only `Intent.ACTION_BOOT_COMPLETED`; class KDoc documents the SEC-13 reasoning. Behavior otherwise unchanged (seed, read `autonomyEnabled`, start service only if enabled).
   - New sibling guard `tools/check_manifest_exports.py` (+ `tools/test_check_manifest_exports.py`, 12 `unittest` cases). Checks main + variant manifests: every `<service>`/`<receiver>`/`<provider>` must set `exported="false"` (empty allowlist); an `<activity>` may be `exported="true"` only with a MAIN/LAUNCHER filter; an activity with an intent-filter must declare `exported`; any component listening for `LOCKED_BOOT_COMPLETED` must be `directBootAware="true"`. Stdlib only, `::error` annotations in Actions, exit 0/1/2 like SEC-12.
   - `.github/workflows/backup-guard.yml`: now runs both self-test files, then both guards (workflow name kept so the existing SEC-12 check name and any branch protection keep working).
-- Verified (2026-11-22, local sandbox):
+- Verified (2026-11-22):
   - ✅ 12/12 self-tests pass (`python3 tools/test_check_manifest_exports.py`).
   - ✅ Guard exits 0 on the new manifest; exits 1 on a copy with `BootReceiver` flipped back to `exported="true"`.
-  - ❌ Not run: GitHub Actions (nothing pushed from the session that wrote this), Gradle build, device/emulator reboot, `am broadcast` negative test.
-- Remaining to close this task: (1) push and confirm the `Backup config guard` run is green on `main`; (2) on a device/emulator: enable autonomy, reboot, confirm the service restarts; disable autonomy, reboot, confirm it does not; from `adb shell`, `am broadcast -a android.intent.action.BOOT_COMPLETED -n com.agoria.app/.service.BootReceiver` should be refused/not start the service on a non-rooted device; (3) throwaway-PR red check like SEC-12; (4) fill in the commit link, flip to `DONE`.
+  - ✅ GitHub Actions run 45038393115 ("Backup config guard") green on `main` commit `7536d44`.
+  - ✅ GitHub Actions run 45038393077 ("Build APK") green on `main` commit `7536d44`.
+- Remaining to close this task: (1) on a device/emulator: enable autonomy, reboot, confirm the service restarts; disable autonomy, reboot, confirm it does not; from `adb shell`, `am broadcast -a android.intent.action.BOOT_COMPLETED -n com.agoria.app/.service.BootReceiver` should be refused/not start the service on a non-rooted device; (2) throwaway-PR red check like SEC-12; (3) flip to `DONE`.
 
 ---
 
@@ -426,6 +427,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-12 CI verified (GitHub Actions run 45035735896, commit `583c74f`); updated SEC-12 status with commit link and "CI green on main". |
 | 2026-11-22 | Claude | SEC-12 throwaway PR test passed (PR #6, run 45035887609 failed as expected); set SEC-12 to DONE. |
 | 2026-11-22 | Claude | SEC-13 implemented (non-exported `BootReceiver`, `BOOT_COMPLETED` only, new `tools/check_manifest_exports.py` guard + tests, `backup-guard.yml` runs both guards); status IN-PROGRESS pending CI and device check. Added RUN-5 (silent boot-restart failure). Updated section 1 (Service/CI/Tools rows), RUN-3, TEST-1, sections 8 and 9. Added work-log entry. |
+| 2026-11-22 | Claude | SEC-13 CI verified (GitHub Actions run 45038393115, commit `7536d44`); updated SEC-13 status with commit link and "CI green on main". Build also green (run 45038393077). |
 
 ---
 
