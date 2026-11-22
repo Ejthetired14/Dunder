@@ -39,7 +39,7 @@ fun PixelScaffold(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
-    snackbarHost: @Composable (SnackbarHostState) -> Unit = { SnackbarHost(it) },
+    snackbarHost: @Composable (SnackbarHostState) -> Unit = { state -> SnackbarHost(state) },
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
