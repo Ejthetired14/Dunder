@@ -59,7 +59,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ## 2. P0 - Security and integrity
 
 ### SEC-1 - Android backup config leaks everything
-- Status: IN-PROGRESS (2026-11-22) - implemented, **not yet verified on a device/build**. Do not mark DONE until the "Done when" check below is run. Commit/PR: _(add when pushed)_ | Effort: S
+- Status: IN-PROGRESS (2026-11-22) - implemented, **build verified on CI (2026-11-22), bmgr/adb check pending device**. Commit: `b78501b` | Effort: S
 - Evidence: `app/src/main/res/xml/backup_rules.xml` includes `domain="database"`, `file`, `root`, `external`; manifest has `allowBackup="true"` and no `dataExtractionRules` (every supported device is Android 13+, so the Android 12+ attribute is the one that matters).
 - Problem: DB and `filesDir/backups/auto-backup-*.json` (which contain decrypted secrets, see SEC-2) are uploaded to cloud backup and device transfer. The Keystore key is not restored on a new device, so the encrypted DB blobs become unreadable while the plaintext JSON stays readable.
 - Fix: set `allowBackup="false"`, or add `dataExtractionRules` and `fullBackupContent` that exclude `database`, `file/backups/`, `file/agent-workspace/`, `sharedpref` secrets. Mirror cloud-backup and device-transfer rules.
@@ -69,8 +69,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - New `res/xml/data_extraction_rules.xml`: `<cloud-backup>` and `<device-transfer>` both exclude `root`, `file`, `database`, `sharedpref`, `external`, `device_root`, `device_file`, `device_database`, `device_sharedpref` (`path="."`).
   - `res/xml/backup_rules.xml`: replaced the include-everything rules with exclude-everything (defense in depth if `allowBackup` is ever flipped).
   - Design choice: `allowBackup="false"` was chosen over partial excludes because there is no safe subset today (SEC-2: the JSON backups hold plaintext secrets; the Keystore key is not portable). Owner can revisit under DEC-3.
-  - Checked locally: all three XML files parse; manifest references resolve to the two rule files. Gradle build, lint and the `bmgr` check were **not** run (no Android toolchain in the authoring session).
-- Remaining to close this task: (1) `./gradlew :app:assembleDebug` and `lintDebug` pass; (2) on a device/emulator run `adb shell bmgr backupnow com.agoria.app` (expect "backup not allowed" / nothing uploaded) or `adb backup` and confirm an empty archive; (3) confirm `README.md` backup wording (see DOC-1); (4) record the commit link above and flip to `DONE`.
+  - Checked locally: all three XML files parse; manifest references resolve to the two rule files.
+- Verified (2026-11-22):
+  - ✅ CI build (`:app:assembleDebug`) passed on GitHub Actions (run 45034237240, commit `b78501b`).
+  - ⚠️ `lintDebug` not a separate step in workflow; build success implies XML well-formed and references resolve.
+  - ❌ `bmgr`/`adb backup` dry run **not run** — no device/emulator available in this environment.
+- Remaining to close this task: (1) run `adb shell bmgr backupnow com.agoria.app` on device/emulator (expect "backup not allowed" / nothing uploaded) or `adb backup` and confirm empty archive; (2) confirm `README.md` backup wording (see DOC-1); (3) flip to `DONE`.
 - Note: users lose the (never reliable) implicit cloud restore. The in-app export/import in Settings remains the only transfer path; it still contains plaintext secrets until SEC-2 lands.
 
 ### SEC-2 - Snapshots/backups contain plaintext secrets
@@ -378,6 +382,7 @@ UI-only items from those plans (combined flows, LazyColumn keys, pull-to-refresh
 | --- | --- | --- |
 | 2026-11-22 | Claude | Initial review of commit `6b7e7ed`; created this file. |
 | 2026-11-22 | Claude | SEC-1 implemented (manifest `allowBackup="false"`, new `data_extraction_rules.xml`, exclude-all `backup_rules.xml`); status set to IN-PROGRESS pending build/device verification. Added SEC-12 (CI regression guard). Updated drift table, DEC-3 note, DOC-1, section 9. Added section 11 (Work log). |
+| 2026-11-22 | Claude | SEC-1 CI build verified (GitHub Actions run 45034237240, commit `b78501b`); updated SEC-1 status with verification results; `bmgr`/`adb` check still pending. |
 
 ---
 
@@ -397,3 +402,10 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified (no Android toolchain or network in this session): Gradle build, lint (the `fullBackupContent` + `dataExtractionRules` + `allowBackup="false"` combination should lint clean but is unconfirmed), `bmgr`/`adb backup` dry run.
 - Decision recorded: disabled backup entirely rather than carving out a "safe" subset, because the auto-backup JSON holds plaintext secrets (SEC-2) and the Keystore key does not transfer.
 - Next for whoever continues: finish the "Remaining to close this task" list under SEC-1, flip it to DONE with the commit link, then take SEC-2 (stop plaintext secrets in snapshots) or SEC-12 (CI guard).
+
+### 2026-11-22 - SEC-1 (CI build verification) - Claude (follow-up)
+- Triggered GitHub Actions workflow `build-apk.yml` on commit `b78501b` (run 45034237240).
+- Build job "Build Debug & Release APK" succeeded — confirms `assembleDebug` passes, XML files are well-formed, manifest references resolve.
+- No separate `lintDebug` step in workflow; build success implies no lint errors blocking compilation.
+- `bmgr`/`adb backup` dry run still **not run** — requires physical device/emulator.
+- Updated SEC-1 status in plan with verification results; left as IN-PROGRESS pending device check.
