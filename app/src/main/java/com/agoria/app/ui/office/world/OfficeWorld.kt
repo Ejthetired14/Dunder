@@ -211,7 +211,7 @@ fun OfficeWorld(
         val baseImage = map
         if (baseImage != null) {
             val topLeft = camera.worldToScreen(0f, 0f)
-            val side = OfficeLayout.WORLD * camera.scale
+            val side = OfficeLayout.worldW * camera.scale
             drawImage(
                 image = baseImage,
                 srcOffset = IntOffset.Zero,
@@ -225,7 +225,7 @@ fun OfficeWorld(
         val objectsImage = objects
         if (objectsImage != null) {
             val topLeft = camera.worldToScreen(0f, 0f)
-            val side = OfficeLayout.WORLD * camera.scale
+            val side = OfficeLayout.worldW * camera.scale
             drawImage(
                 image = objectsImage,
                 srcOffset = IntOffset.Zero,
@@ -297,7 +297,7 @@ fun OfficeWorld(
             when (a.bubble) {
                 Bubble.ALERT -> drawAlert(s.x, headY, sim.elapsed)
                 Bubble.TALK -> drawTalk(s.x, headY, sim.elapsed)
-                Bubble.NONE -> Unit
+                Bubble.NONE, Bubble.THINK, Bubble.ERROR, Bubble.ZZZ -> Unit
             }
             val selected = a.agentId == selectedId
             if ((showTags || selected) && a.name.isNotEmpty()) {
@@ -376,25 +376,23 @@ private fun DrawScope.drawTalk(cx: Float, headY: Float, t: Float) {
     drawRect(Pal.ink, Offset(cx - 3.dp.toPx(), tl.y + h + 2.dp.toPx()), Size(6.dp.toPx(), 3.dp.toPx()))
 }
 
-/** Shows the walking graph, every spot, your desk and the map bounds. Long-press the title to toggle. */
+/** Shows every spot, your desk and the map bounds. Long-press the title to toggle. */
 private fun DrawScope.drawDebug(cam: CameraState) {
-    val g = OfficeLayout.graph
     val line = Color(0xAA00E5FF)
-    for (i in 0 until g.size) {
-        val a = cam.worldToScreen(g.xs[i], g.ys[i])
-        for (j in g.adj[i]) {
-            if (j > i) {
-                val b = cam.worldToScreen(g.xs[j], g.ys[j])
-                drawLine(line, a, b, strokeWidth = 2.dp.toPx())
+    // Draw walkable grid edges (simplified)
+    for (ty in 0 until OfficeLayout.grid.rowCount) {
+        for (tx in 0 until OfficeLayout.grid.cols) {
+            if (OfficeLayout.grid.walkable(tx, ty)) {
+                val cx = tx * OfficeLayout.TILE + OfficeLayout.TILE / 2f
+                val cy = ty * OfficeLayout.TILE + 26f
+                val p = cam.worldToScreen(cx, cy)
+                val dot = 2.dp.toPx()
+                drawRect(Color(0x8800E5FF), Offset(p.x - dot / 2f, p.y - dot / 2f), Size(dot, dot))
             }
         }
     }
-    val dot = 4.dp.toPx()
-    for (i in 0 until g.size) {
-        val p = cam.worldToScreen(g.xs[i], g.ys[i])
-        drawRect(Color(0xFF00E5FF), Offset(p.x - dot / 2f, p.y - dot / 2f), Size(dot, dot))
-    }
-    for (s in g.spots) {
+    // Draw spots
+    for (s in OfficeLayout.spots) {
         val p = cam.worldToScreen(s.x, s.y)
         val r = 5.dp.toPx()
         drawOval(Color(0xFFFF8A00), topLeft = Offset(p.x - r, p.y - r), size = Size(r * 2f, r * 2f), style = Stroke(2.dp.toPx()))
