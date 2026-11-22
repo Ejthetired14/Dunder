@@ -234,7 +234,7 @@ fun SettingsScreen(
                         text = when {
                             isRunning && isTicking -> "Autonomy: RUNNING (ticking)"
                             isRunning -> "Autonomy: RUNNING (idle)"
-                            else -> "Autonomy: STOPPED",
+                            else -> "Autonomy: STOPPED"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isRunning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
