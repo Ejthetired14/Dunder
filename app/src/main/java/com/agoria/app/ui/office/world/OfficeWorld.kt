@@ -190,7 +190,7 @@ fun OfficeWorld(
                     } else if (OfficeLayout.deskHotspot.rect.contains(camera.screenToWorld(tap))) {
                         // Check hotspot
                         val worldPos = camera.screenToWorld(tap)
-                        val hs = OfficeLayout.hotspots.firstOrNull { it.contains(worldPos) }
+                        val hs = OfficeLayout.hotspots.firstOrNull { it.rect.contains(worldPos) }
                         if (hs != null) {
                             onHotspotNow(hs)
                         } else {
