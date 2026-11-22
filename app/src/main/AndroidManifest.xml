@@ -10,9 +10,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- SEC-1: backup is off. The database holds Keystore-encrypted secrets that cannot be
+     restored on another device, and files/backups/*.json may hold sensitive data. The
+     rules files below exclude everything as defense in depth if this is ever flipped. -->
     <application
         android:name=".AgoriaApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
