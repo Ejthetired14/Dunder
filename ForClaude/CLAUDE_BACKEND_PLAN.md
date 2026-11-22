@@ -17,7 +17,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 5. If a claim in this file is wrong, fix the claim and note it in the Changelog.
 6. Never put secrets, tokens, keystores or user data in this repo, in issues, or in this file.
 7. Statuses: `TODO`, `IN-PROGRESS`, `DONE`, `BLOCKED`, `NEEDS-DECISION`, `WONTFIX`.
-8. Append one line to the Changelog (bottom) on every edit of this file.
+8. Append one line to the Changelog (bottom) on every edit of this file, and one entry to the Work log (section 11) when you implement a task.
 9. Effort: S = under 1 hour, M = about half a day, L = a day or more.
 
 ---
@@ -49,7 +49,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | README says | Code says |
 | --- | --- |
 | Gmail and Google Calendar connectors with pasted OAuth tokens | No `gmail`/`calendar` executor or definition. Replaced by the WebView-based `accounts` ("Office Browser") connector. |
-| "Database is excluded from backup" | `res/xml/backup_rules.xml` **includes** database, files, root, external. See SEC-1. |
+| "Database is excluded from backup" | Before SEC-1 `res/xml/backup_rules.xml` included database, files, root, external. **After SEC-1 (2026-11-22) the claim is true again** (`allowBackup="false"` plus exclude-all rules). Re-check wording under DOC-1. |
 | "Export a JSON snapshot (without secrets)" | `Repository.exportSnapshot()` exports connector configs **decrypted** and `agent.apiToken` in plaintext. See SEC-2. |
 | Connector table lists 15 connectors | Catalog has 25: also PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers (and `stripe` is referenced but missing, see BUG-1). |
 | App name Agoria | Package `com.agoria.app`, but UI/strings/User-Agent/CI say Dunder. Pick one. |
@@ -59,11 +59,19 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ## 2. P0 - Security and integrity
 
 ### SEC-1 - Android backup config leaks everything
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-22) - implemented, **not yet verified on a device/build**. Do not mark DONE until the "Done when" check below is run. Commit/PR: _(add when pushed)_ | Effort: S
 - Evidence: `app/src/main/res/xml/backup_rules.xml` includes `domain="database"`, `file`, `root`, `external`; manifest has `allowBackup="true"` and no `dataExtractionRules` (every supported device is Android 13+, so the Android 12+ attribute is the one that matters).
 - Problem: DB and `filesDir/backups/auto-backup-*.json` (which contain decrypted secrets, see SEC-2) are uploaded to cloud backup and device transfer. The Keystore key is not restored on a new device, so the encrypted DB blobs become unreadable while the plaintext JSON stays readable.
 - Fix: set `allowBackup="false"`, or add `dataExtractionRules` and `fullBackupContent` that exclude `database`, `file/backups/`, `file/agent-workspace/`, `sharedpref` secrets. Mirror cloud-backup and device-transfer rules.
 - Done when: a `bmgr`/`adb backup` dry run shows no DB, secrets or `backups/` content; README matches.
+- Implemented (2026-11-22):
+  - `AndroidManifest.xml`: `allowBackup="false"`; added `android:dataExtractionRules="@xml/data_extraction_rules"`; kept `fullBackupContent="@xml/backup_rules"`; comment explains why.
+  - New `res/xml/data_extraction_rules.xml`: `<cloud-backup>` and `<device-transfer>` both exclude `root`, `file`, `database`, `sharedpref`, `external`, `device_root`, `device_file`, `device_database`, `device_sharedpref` (`path="."`).
+  - `res/xml/backup_rules.xml`: replaced the include-everything rules with exclude-everything (defense in depth if `allowBackup` is ever flipped).
+  - Design choice: `allowBackup="false"` was chosen over partial excludes because there is no safe subset today (SEC-2: the JSON backups hold plaintext secrets; the Keystore key is not portable). Owner can revisit under DEC-3.
+  - Checked locally: all three XML files parse; manifest references resolve to the two rule files. Gradle build, lint and the `bmgr` check were **not** run (no Android toolchain in the authoring session).
+- Remaining to close this task: (1) `./gradlew :app:assembleDebug` and `lintDebug` pass; (2) on a device/emulator run `adb shell bmgr backupnow com.agoria.app` (expect "backup not allowed" / nothing uploaded) or `adb backup` and confirm an empty archive; (3) confirm `README.md` backup wording (see DOC-1); (4) record the commit link above and flip to `DONE`.
+- Note: users lose the (never reliable) implicit cloud restore. The in-app export/import in Settings remains the only transfer path; it still contains plaintext secrets until SEC-2 lands.
 
 ### SEC-2 - Snapshots/backups contain plaintext secrets
 - Status: TODO | Effort: M
@@ -130,6 +138,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Evidence: `AgentRuntime.generateWebhookSecret()` makes a random `whsec_...` that Stripe never issued; it is embedded in the Worker source and printed to the diary and chat (`setup_billing`).
 - Fix: create the endpoint via Stripe API (`POST /v1/webhook_endpoints`) and use the returned `secret`; store it as a Worker secret binding, never in source; never log it; compare signatures in constant time. (Also see DEC-2: the whole webhook-to-phone design may be unworkable.)
 - Done when: no secret reaches diary/messages/logs; signature check uses the real Stripe secret.
+
+### SEC-12 - Regression guard for backup config (CI check)
+- Status: TODO | Effort: S | Depends on: SEC-1 verified
+- Evidence: added 2026-11-22 after SEC-1. Nothing stops a later edit (or an AI session) from flipping `allowBackup` back to `true` or re-adding `<include>` rules to `backup_rules.xml` / `data_extraction_rules.xml`; the leak would be silent.
+- Fix: add a small CI step (shell or Gradle task, run before the build in `build-apk.yml` or a new lint workflow) that fails when: `AndroidManifest.xml` lacks `android:allowBackup="false"`; either rules file contains an `<include` element; `data_extraction_rules.xml` lacks `<cloud-backup>` or `<device-transfer>` exclude blocks; the manifest has no `dataExtractionRules` attribute. A `grep`-based script under `tools/` is enough.
+- Done when: CI fails on a PR that sets `allowBackup="true"` or adds an `<include>`, and passes on `main`.
 
 ---
 
@@ -308,7 +322,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 ### DOC-1 - Bring README and docs in line with the code
 - Status: TODO | Effort: S
-- Fix: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2.
+- Fix: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2 (SEC-1 now makes "database excluded from backup" accurate; also state that backup/transfer is fully disabled and in-app export is the only path).
 
 ---
 
@@ -316,7 +330,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 - **DEC-1 - Keep or cut monetization?** Status: NEEDS-DECISION. Today the whole Stripe/Cloudflare/revenue path is dead (BUG-1..5, SEC-4, SEC-11). Option A: finish it properly (ledger, verified events, approvals). Option B: remove `record_revenue`, `reinvest`, `check_revenue`, `setup_billing`, `deploy_service`, revenue tables usage, prompts, and the Stripe/Worker code.
 - **DEC-2 - Webhooks cannot reach a phone.** `deploy_webhook_handler` forwards to `appCallbackUrl`, but the example is a LAN address (`http://192.168.x.x:8080/...`); a Cloudflare Worker cannot call that. Polling Stripe events (what `check_revenue` does) is the only workable path without a relay server. Decide: polling only, or add a small relay.
-- **DEC-3 - Backup policy.** Cloud backup on or off? Is a passphrase-encrypted export acceptable?
+- **DEC-3 - Backup policy.** Cloud backup on or off? Is a passphrase-encrypted export acceptable? (Interim state since 2026-11-22: backup and device transfer are fully **off** via SEC-1.)
 - **DEC-4 - Product name and package.** Agoria or Dunder (affects strings, User-Agent, release names, package id).
 - **DEC-5 - Free-tier budget.** Target number of agent cycles per hour across all agents.
 
@@ -350,7 +364,7 @@ UI-only items from those plans (combined flows, LazyColumn keys, pull-to-refresh
 
 ## 9. Suggested order of work
 
-1. **Stop the bleeding (P0 security):** SEC-1, SEC-2, SEC-3, SEC-4, SEC-5, SEC-7.
+1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify), SEC-2, SEC-3, SEC-4, SEC-5, SEC-7, then SEC-12 (guard).
 2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
 4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-10, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
@@ -363,3 +377,23 @@ UI-only items from those plans (combined flows, LazyColumn keys, pull-to-refresh
 | Date | Who | Change |
 | --- | --- | --- |
 | 2026-11-22 | Claude | Initial review of commit `6b7e7ed`; created this file. |
+| 2026-11-22 | Claude | SEC-1 implemented (manifest `allowBackup="false"`, new `data_extraction_rules.xml`, exclude-all `backup_rules.xml`); status set to IN-PROGRESS pending build/device verification. Added SEC-12 (CI regression guard). Updated drift table, DEC-3 note, DOC-1, section 9. Added section 11 (Work log). |
+
+---
+
+## 11. Work log
+
+Append-only. One entry per implementation session: what changed, how it was checked, what is left.
+
+### 2026-11-22 - SEC-1 (backup config) - Claude (free-tier session)
+- Picked SEC-1: highest-priority P0 item that is small (S), self-contained, and needs no knowledge of the unreviewed Kotlin files.
+- Read: `ForClaude/CLAUDE_BACKEND_PLAN.md`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml` at commit `0283f7e`.
+- Changed:
+  - `app/src/main/AndroidManifest.xml` - `allowBackup="true"` -> `"false"`; added `android:dataExtractionRules="@xml/data_extraction_rules"`; kept `fullBackupContent`; explanatory comment.
+  - `app/src/main/res/xml/data_extraction_rules.xml` - new; cloud-backup and device-transfer exclude every domain (`root`, `file`, `database`, `sharedpref`, `external`, `device_*`).
+  - `app/src/main/res/xml/backup_rules.xml` - include-everything -> exclude-everything.
+  - This file - SEC-1 status/implementation notes, new task SEC-12, drift table, DEC-3, DOC-1, section 9, changelog, this log.
+- Verified: all three XML files parse (Python `ElementTree`); manifest attributes point at existing rule files; rules contain zero `<include>` elements.
+- NOT verified (no Android toolchain or network in this session): Gradle build, lint (the `fullBackupContent` + `dataExtractionRules` + `allowBackup="false"` combination should lint clean but is unconfirmed), `bmgr`/`adb backup` dry run.
+- Decision recorded: disabled backup entirely rather than carving out a "safe" subset, because the auto-backup JSON holds plaintext secrets (SEC-2) and the Keystore key does not transfer.
+- Next for whoever continues: finish the "Remaining to close this task" list under SEC-1, flip it to DONE with the commit link, then take SEC-2 (stop plaintext secrets in snapshots) or SEC-12 (CI guard).
