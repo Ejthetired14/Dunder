@@ -3,8 +3,8 @@ package com.agoria.app.util
 import java.io.File
 import java.io.FileInputStream
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.nio.charset.Charsets
 
 /**
  * SEC-10: pure (no Android classes) rules for the self-updater, so they are unit-testable.
@@ -91,8 +91,8 @@ object UpdatePolicy {
         val want = normalizeSha256(expected) ?: return false
         val got = sha256Hex(file)
         return MessageDigest.isEqual(
-            want.toByteArray(Charsets.US_ASCII),
-            got.toByteArray(Charsets.US_ASCII),
+            want.toByteArray(StandardCharsets.US_ASCII),
+            got.toByteArray(StandardCharsets.US_ASCII),
         )
     }
 
