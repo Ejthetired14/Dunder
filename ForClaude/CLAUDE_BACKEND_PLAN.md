@@ -33,7 +33,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | Connectors | `core/ConnectorCatalog.kt`, `core/ConnectorExecutor.kt` (~129 KB) | 25 connector definitions; one giant executor with a `when` dispatch. |
 | Builds | `core/BuildRunner.kt` | LLM generates a file list, written under the project workspace, zipped. |
 | Data | `data/*` | Room DB v4 (14 entities), `Repository.kt` (~41 KB), seed data, export/import JSON snapshot, daily auto-backup. |
-| Service | `service/AutonomyService.kt`, `BootReceiver.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`. |
+| Service | `service/AutonomyService.kt`, `BootReceiver.kt`, `BootStatus.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`; since RUN-5 it reads settings read-only with a timeout and reports failures through `BootStatus` + a notification. Explicit stops persist `autonomyEnabled=false` (RUN-3). |
 | Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON. |
 | CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13) checks the backup config and exported components on every push/PR. |
 | Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/office_gen` | Backup-config and exported-component regression guards + their self-tests (stdlib Python only). |
@@ -170,7 +170,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Reviewed first (2026-11-22): `service/BootReceiver.kt` already checked `intent.action` and read `settings.autonomyEnabled` before `AutonomyService.start(context)`, so only the action filter needed tightening. Its `seedIfNeeded()` + settings read also confirms Problem 2 (Room is credential-encrypted, unusable before first unlock).
 - Implemented (2026-11-22):
   - `AndroidManifest.xml`: `BootReceiver` now `android:exported="false"` and listens for `BOOT_COMPLETED` only; comment explains why (and that `LOCKED_BOOT_COMPLETED` is deliberately absent).
-  - `service/BootReceiver.kt`: accepts only `Intent.ACTION_BOOT_COMPLETED`; class KDoc documents the SEC-13 reasoning. Behavior otherwise unchanged (seed, read `autonomyEnabled`, start service only if enabled).
+  - `service/BootReceiver.kt`: accepts only `Intent.ACTION_BOOT_COMPLETED`; class KDoc documents the SEC-13 reasoning. Behavior otherwise unchanged (seed, read `autonomyEnabled`, start service only if enabled). *(RUN-5 later removed the seed call and added the timeout and failure reporting.)*
   - New sibling guard `tools/check_manifest_exports.py` (+ `tools/test_check_manifest_exports.py`, 12 `unittest` cases). Checks main + variant manifests: every `<service>`/`<receiver>`/`<provider>` must set `exported="false"` (empty allowlist); an `<activity>` may be `exported="true"` only with a MAIN/LAUNCHER filter; an activity with an intent-filter must declare `exported`; any component listening for `LOCKED_BOOT_COMPLETED` must be `directBootAware="true"`. Stdlib only, `::error` annotations in Actions, exit 0/1/2 like SEC-12.
   - `.github/workflows/backup-guard.yml`: now runs both self-test files, then both guards (workflow name kept so the existing SEC-12 check name and any branch protection keep working).
 - Verified (2026-11-22):
@@ -260,6 +260,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Status: TODO | Effort: M
 - Evidence: `Repository.updateSettings` reads the whole row then upserts the whole row; `updateInfrastructureFund` is read-modify-write with no transaction; the UI and the runtime both write settings.
 - Fix: atomic SQL (`UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta)`), `@Transaction` DAO methods, or a ledger table (preferred, see BUG-8).
+- Note (2026-11-22): RUN-3's stop path now adds one more `updateSettings` writer (`autonomyEnabled=false`); it is a single-field write and shares this lost-update risk until DATA-1 lands.
 
 ### DATA-2 - Unbounded tables and full-table reads on every cycle
 - Status: TODO | Effort: M | Verify first: `Daos.kt` was not reviewed
@@ -298,9 +299,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: global requests-per-hour and tokens-per-hour budget, adaptive cooldown, skip a cycle when nothing changed (event-driven wake on new user message/approval/result), prompt size cap with token estimate, per-provider quota tracking in `ProviderEntity`.
 
 ### RUN-3 - AutonomyService battery and lifecycle
-- Status: TODO | Effort: M | Verify first: `AutonomyService.kt` stop path (`BootReceiver.kt` reviewed 2026-11-22 under SEC-13: it does read `settings.autonomyEnabled`)
-- Evidence: `AutonomyService.acquireWakeLock()` takes a `PARTIAL_WAKE_LOCK` with no timeout and holds it for the whole service life; the notification "Stop autonomy" action calls `runtime.stop()` but does not update `settings.autonomyEnabled`, so `BootReceiver` (which restarts the service when that flag is true) may restart it after the next reboot.
+- Status: IN-PROGRESS (2026-11-22) - **stop-path flag implemented (part 1 of 3)**; wake-lock scope and watchdog still TODO | Effort: M
+- Evidence: `AutonomyService.acquireWakeLock()` takes a `PARTIAL_WAKE_LOCK` with no timeout and holds it for the whole service life; the notification "Stop autonomy" action calls `runtime.stop()` but did not update `settings.autonomyEnabled`, so `BootReceiver` (which restarts the service when that flag is true) could restart it after the next reboot. (Re-read `AutonomyService.kt` on 2026-11-22: confirmed both points; `onDestroy` also stops the runtime, which is right for system kills.)
 - Fix: hold the wake lock only while a cycle runs (with a timeout), write `autonomyEnabled=false` on every stop path, add a WorkManager watchdog, and test on Android 15 foreground-service-from-boot rules. See also SEC-13 (receiver export and boot filters; done) and RUN-5.
+- Part 1 implemented (2026-11-22): `AutonomyService.stopAutonomy()` (reached from the notification action and from `AutonomyService.stop(context)`) now stops the runtime, persists `autonomyEnabled=false` through `Repository.updateSettings` on `appScope`, and only then calls `stopSelf()` (in `finally`, so a failed write still stops the service). System kills still go through `onDestroy` only and leave the flag alone on purpose, so autonomy resumes after a reboot if the user did not turn it off. If the UI already writes the flag before calling `stop()`, the second write is idempotent.
+- Part 1 verified: file re-read for brace/paren balance only. **Not compiled** (no Kotlin toolchain, no network in the session); CI must confirm.
+- Remaining: (2) wake lock only while a cycle runs, with a timeout (needs `AgentRuntime.kt`, ~42 KB, not read yet); (3) WorkManager watchdog; (4) Android 15 foreground-service-from-boot check; (5) device check: tap "Stop autonomy", reboot, confirm the service does not come back.
 
 ### RUN-4 - Approval outcome is classified by string prefix
 - Status: TODO | Effort: S
@@ -308,11 +312,24 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: return a sealed `ExecutionResult(ok, summary, retryable)` from each executor.
 
 ### RUN-5 - Boot restart fails silently and can outlive the receiver's time budget
-- Status: TODO | Effort: S | Found while doing SEC-13 (2026-11-22)
-- Evidence: `service/BootReceiver.kt` runs `seedIfNeeded()` and a settings read on `CoroutineScope(Dispatchers.IO)` under `goAsync()`, then `AutonomyService.start(context)`. A broadcast receiver has roughly 10 s before the system treats it as unresponsive; a cold Room open on a slow phone can exceed that. The `catch (_: Exception)` swallows everything (including a foreground-service-start refusal from the OS), logs nothing, shows nothing, and the comment promises a retry "the next time the app opens" that no code implements.
+- Status: IN-PROGRESS (2026-11-22) - implemented, **CI build + device check pending** | Effort: S | Found while doing SEC-13 (2026-11-22)
+- Evidence: `service/BootReceiver.kt` ran `seedIfNeeded()` and a settings read on `CoroutineScope(Dispatchers.IO)` under `goAsync()`, then `AutonomyService.start(context)`. A broadcast receiver has roughly 10 s before the system treats it as unresponsive; a cold Room open on a slow phone can exceed that. The `catch (_: Exception)` swallowed everything (including a foreground-service-start refusal from the OS), logged nothing, showed nothing, and the comment promised a retry "the next time the app opens" that no code implemented. `AutonomyService.start()` already returned `false` when Android refused both start modes, but the receiver ignored that result.
 - Effect: after a reboot the office can be silently dead while the user believes autonomy is on.
 - Fix: do not seed from the receiver (the app does it on first launch); read `autonomyEnabled` and hand the work to `WorkManager` (expedited) or start the service immediately and let it load state; log failures to the persisted audit trail (OBS-1) and set a "restart failed" flag the UI shows on next open, plus a notification; unit-test with a fake repository.
 - Done when: a simulated failure in the boot path is visible to the user (flag or notification) and a normal reboot with autonomy enabled restarts the service within the receiver time budget.
+- Implemented (2026-11-22):
+  - `service/BootReceiver.kt`: removed `seedIfNeeded()` and the `repository.settings()` call (which could upsert default settings and race the app's own seed); now reads `app.database.settingsDao().get()?.autonomyEnabled` read-only inside `withTimeout(8_000 ms)` (under the ~10 s receiver budget); starts the service only when enabled. Three failure paths are reported: `AutonomyService.start()` returned `false`; settings read timed out; any other exception. Each one logs (`Log.w`), calls `BootStatus.recordFailure`, and posts a notification "Autonomy did not restart" via `Notifier.notifyLocal` (wrapped in `runCatching`). A successful start calls `BootStatus.clear`. `pending.finish()` stays in `finally`.
+  - New `service/BootStatus.kt`: tiny SharedPreferences store (`recordFailure`, `lastFailure(): Failure?`, `clear`) so the failure outlives the notification and does not need Room, which may be slow or locked right after boot. Reasons are fixed sentences plus an exception class name, no secrets, no exception messages.
+  - `service/AutonomyService.kt`: `onCreate` calls `BootStatus.clear(this)` (a running service means the old failure is stale).
+- Design choices: SharedPreferences instead of a new Room column or a settings field (no migration, no DAO change, readable before Room opens); kept the work in the receiver on a bounded timeout rather than adding WorkManager (not a dependency yet, see TEST-1/CI-1 for dependency work); only the "Failed" notification is new, no new permission.
+- Verified (2026-11-22): the three Kotlin files re-read for brace/paren balance; call signatures checked against code read in this session (`AutonomyService.start(Context): Boolean`, `Notifier.notifyLocal(Context, String, String)`, `AgoriaApplication.database`, `SettingsDao.get()` used as a suspend nullable in `Repository`). **Not compiled, not run** (no Kotlin toolchain or network in the session).
+- Remaining to close this task: (1) confirm `Build APK` is green on `main` after the push; (2) on a device/emulator: force a failure (for example revoke the foreground-start allowance or `adb shell am broadcast` BOOT_COMPLETED with the app force-stopped is not enough, use a debug build with a forced `AutonomyService.start` failure) and confirm the notification and `BootStatus.lastFailure` appear; do a normal reboot with autonomy on and confirm restart; (3) UI surface for `BootStatus.lastFailure` is RUN-6; (4) flip to `DONE`.
+
+### RUN-6 - Show the boot-restart failure inside the app
+- Status: TODO | Effort: S | Depends on: RUN-5 | Added 2026-11-22
+- Evidence: RUN-5 stores the failure in `BootStatus` and posts a notification, but nothing in the UI reads `BootStatus.lastFailure(context)`. If notifications are off (or the user swiped it away) the failure is only in logs.
+- Fix: on app start and when the Office screen resumes, read `BootStatus.lastFailure`; if present show a one-line banner ("Autonomy did not restart after the last reboot: <reason>") with a "Turn autonomy on" button that calls `AutonomyService.start` and `BootStatus.clear`. UI files were not reviewed (section 8), so read the Office/Settings screen first.
+- Done when: forcing the failure from RUN-5 shows the banner after opening the app, and starting autonomy removes it.
 
 ### CONN-1 - Read-only gating ignores action aliases and `check_revenue`
 - Status: TODO | Effort: S
@@ -346,7 +363,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ### TEST-1 - There are no tests
 - Status: TODO | Effort: L
 - Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.)
-- Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved).
+- Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved). Boot path (RUN-5) and stop path (RUN-3) are good early candidates once a fake `SettingsDao` exists.
 
 ### CI-1 - CI hygiene
 - Status: TODO | Effort: M
@@ -382,7 +399,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 | Item | Source plan | Seen in code? |
 | --- | --- | --- |
-| Paged DAO/Repository queries for builds, diary, messages | next-improvements P3 | Repository methods exist; DAO and UI use not verified |
+| Paged DAO/Repository queries for builds, diary, messages | next-improvements P3 | Repository methods exist (`pagedBuildsForAgent`, `pagedDiaryForAgent`, `pagedMessagesForAgent` + counts); DAO and UI use not verified |
 | `BuildProgress` + `buildProgress` flow | next-improvements P2 | Exists; `Failed` never emitted (BUG-9) |
 | Build cancellation | next-improvements P5 | Not implemented |
 | `RevenueEntity` + profit split settings + migration | monetization Phase 1 | Done (v1->2) |
@@ -400,16 +417,16 @@ UI-only items from those plans (combined flows, LazyColumn keys, pull-to-refresh
 
 ## 8. Not reviewed yet (do these before trusting this plan fully)
 
-`data/Daos.kt`, `data/SeedData.kt`, `core/ProviderCatalog.kt`, `core/AgentModels.kt`, `service/AutonomyService.kt` (stop path, see RUN-3), `util/Files.kt`, `util/Json.kt`, `util/Notifier.kt`, `util/Share.kt`, `browser/*` (BrowserHub, AgentBrowserActivity), `viewer/*`, all of `ui/*`, `gradle.properties`, `proguard-rules.pro`, `tools/office_gen`, `docs/pixel-office.md`, `.gitignore`.
+`data/Daos.kt`, `data/SeedData.kt`, `core/ProviderCatalog.kt`, `core/AgentModels.kt`, `util/Files.kt`, `util/Json.kt`, `util/Share.kt`, `browser/*` (BrowserHub, AgentBrowserActivity), `viewer/*`, all of `ui/*`, `gradle.properties`, `proguard-rules.pro`, `tools/office_gen`, `docs/pixel-office.md`, `.gitignore`.
 
-Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`, `res/xml/backup_rules.xml`, `.github/workflows/build-apk.yml` (all while doing SEC-12), and `service/BootReceiver.kt` (while doing SEC-13; produced RUN-5). Manifest items looked at and left alone: `REQUEST_INSTALL_PACKAGES` is used by the self-updater (see SEC-10); `FileProvider` is correctly `exported="false"`; `AutonomyService` is `exported="false"`; `MainActivity` is the only exported component (launcher).
+Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`, `res/xml/backup_rules.xml`, `.github/workflows/build-apk.yml` (all while doing SEC-12), `service/BootReceiver.kt` (SEC-13; produced RUN-5), and, while doing RUN-5/RUN-3: `service/AutonomyService.kt` (stop path confirmed, see RUN-3), `util/Notifier.kt`, `AgoriaApplication.kt`, and `data/Repository.kt` (read in full; it confirms the DATA-1, DATA-3 and DATA-4-related claims about `updateSettings`, `importSnapshot` and `exportSnapshot`). Manifest items looked at and left alone: `REQUEST_INSTALL_PACKAGES` is used by the self-updater (see SEC-10); `FileProvider` is correctly `exported="false"`; `AutonomyService` is `exported="false"`; `MainActivity` is the only exported component (launcher).
 
 ---
 
 ## 9. Suggested order of work
 
 1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3, SEC-4, SEC-5, SEC-7.
-2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5.
+2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5 (implemented, verify), RUN-3 (part 1 done), RUN-6.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
 4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-10, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
 5. **Quality:** TEST-1 (start alongside step 1), CI-1, OBS-1, ARCH-1, DOC-1.
@@ -428,6 +445,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-12 throwaway PR test passed (PR #6, run 45035887609 failed as expected); set SEC-12 to DONE. |
 | 2026-11-22 | Claude | SEC-13 implemented (non-exported `BootReceiver`, `BOOT_COMPLETED` only, new `tools/check_manifest_exports.py` guard + tests, `backup-guard.yml` runs both guards); status IN-PROGRESS pending CI and device check. Added RUN-5 (silent boot-restart failure). Updated section 1 (Service/CI/Tools rows), RUN-3, TEST-1, sections 8 and 9. Added work-log entry. |
 | 2026-11-22 | Claude | SEC-13 CI verified (GitHub Actions run 45038393115, commit `7536d44`); updated SEC-13 status with commit link and "CI green on main". Build also green (run 45038393077). |
+| 2026-11-22 | Claude | RUN-5 implemented (`BootReceiver` read-only bounded settings read + visible failure reporting, new `BootStatus.kt`, `AutonomyService` clears stale status) and RUN-3 part 1 implemented (stop path persists `autonomyEnabled=false`); both IN-PROGRESS pending CI build and device check. Added RUN-6 (show boot failure in the UI). Updated section 1 (Service row), DATA-1 note, TEST-1, sections 7 (paged-query names), 8 and 9. Added work-log entry. Not compiled in the session. |
 
 ---
 
@@ -485,3 +503,18 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified: Gradle build of the Kotlin change, GitHub Actions run, device/emulator reboot behavior, `am broadcast` negative test. The SEC-12 self-tests were not re-run here (that script was not changed).
 - Found: RUN-5 (boot start swallows all errors and may exceed the receiver time budget).
 - Next for whoever continues: push these files; confirm `Backup config guard` is green on `main` and `assembleDebug` still passes; do the device reboot checks and a throwaway-PR red check; fill in the commit link under SEC-13 and flip to `DONE`; then take RUN-5 (S) or SEC-2 (M).
+
+### 2026-11-22 - RUN-5 (boot restart visibility) + RUN-3 part 1 (stop flag) - Claude (free-tier session, GitHub connector + sandbox)
+- Picked RUN-5 as the task the previous log recommended, plus RUN-3 part 1 because both live in the same two small files (`BootReceiver.kt`, `AutonomyService.kt`) and share the "autonomy state must match what the user chose" goal. Both fit in one session without opening `AgentRuntime.kt` or `ConnectorExecutor.kt`.
+- Note on inputs: the brief again said `ForClaude/claudebackend.md`; the repo file is `ForClaude/CLAUDE_BACKEND_PLAN.md` (the only file in `ForClaude/`, kept its name). Repo state read via the GitHub connector at commit `b9458f7`. The sandbox has no network and no Kotlin toolchain, so this plan file was rewritten from the version read there. **A merge reviewer should diff it against `main` and confirm only RUN-3, RUN-5, new RUN-6, the section 1 Service row, DATA-1 note, TEST-1, section 7 (paged-query names), sections 8/9, the SEC-13 "Implemented" bullet about `BootReceiver.kt` (a trailing italic note), changelog and this log changed.**
+- Read: this plan, `service/AutonomyService.kt`, `service/BootReceiver.kt`, `util/Notifier.kt`, `AgoriaApplication.kt`, `data/Repository.kt` (full).
+- Changed:
+  - `service/BootReceiver.kt` - dropped `seedIfNeeded()` and `repository.settings()`; read-only `database.settingsDao().get()` inside `withTimeout(8 s)`; reports the three failure paths (service start refused, timeout, other exception) via `Log.w`, `BootStatus`, and a notification; clears the status on success.
+  - `service/BootStatus.kt` - new SharedPreferences-backed failure flag (`recordFailure`, `lastFailure`, `clear`).
+  - `service/AutonomyService.kt` - `onCreate` clears the stale boot failure; `stopAutonomy()` persists `autonomyEnabled=false` via `appScope` and calls `stopSelf()` in `finally`.
+  - This file - RUN-3 and RUN-5 status and notes, new task RUN-6, DATA-1 note, TEST-1, section 1, 7, 8, 9, changelog, this log.
+- Design choices: SharedPreferences rather than a Room column (no migration, works before Room is open); bounded timeout in the receiver rather than adding WorkManager (not a dependency; can be revisited in RUN-3 part 3); system kills deliberately do not clear `autonomyEnabled`, only explicit stops do; reasons stored are fixed strings plus an exception class name, never exception messages, so nothing secret can reach prefs or the notification.
+- Verified: brace/paren balance of the three Kotlin files; signatures cross-checked by reading the callers/callees in this session.
+- NOT verified: compilation (no `kotlinc`/Gradle here), `Build APK` on GitHub Actions, any device or emulator behavior. In particular `SettingsDao.get()` was not read (`Daos.kt` unreviewed); it is used as a suspend function returning a nullable `SettingsEntity` in `Repository.seedIfNeeded`/`settings()`, which the new code relies on.
+- Found: nothing blocking. Added RUN-6 (UI banner for `BootStatus.lastFailure`), and a note under DATA-1 that RUN-3's stop write adds another `updateSettings` writer.
+- Next for whoever continues: push these files and confirm `Build APK` and `Backup config guard` are green on `main`; fix any compile error first (most likely spots: the `withTimeout` block return type and the `catch (_: TimeoutCancellationException)` syntax); then do the device checks listed under RUN-5 and RUN-3, flip RUN-5 to `DONE`, and take RUN-6 (S) or SEC-2 (M).

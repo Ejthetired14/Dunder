@@ -17,6 +17,7 @@ import com.agoria.app.AgoriaApplication
 import com.agoria.app.MainActivity
 import com.agoria.app.R
 import com.agoria.app.util.Notifier
+import kotlinx.coroutines.launch
 
 class AutonomyService : Service() {
 
@@ -27,6 +28,8 @@ class AutonomyService : Service() {
         Notifier.ensureChannels(this)
         startForegroundCompat()
         acquireWakeLock()
+        // RUN-5: the service is running, so any earlier "restart after reboot failed" note is stale.
+        BootStatus.clear(this)
         // Start ticking from the service itself, so the office keeps working even when the
         // activity that asked for autonomy is long gone.
         (application as AgoriaApplication).runtime.start()
@@ -73,9 +76,24 @@ class AutonomyService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * RUN-3: every explicit stop (notification action, [stop]) also persists
+     * `autonomyEnabled = false`, otherwise [BootReceiver] would bring the loop back after the next
+     * reboot. The service stays alive until the write finishes, so the process is not reclaimed
+     * mid-write. System kills go through [onDestroy] only and deliberately leave the flag alone.
+     */
     private fun stopAutonomy() {
-        (application as AgoriaApplication).runtime.stop()
-        stopSelf()
+        val app = application as AgoriaApplication
+        app.runtime.stop()
+        app.appScope.launch {
+            try {
+                app.repository.updateSettings { it.copy(autonomyEnabled = false) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not persist autonomyEnabled=false: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                stopSelf()
+            }
+        }
     }
 
     private fun startForegroundCompat() {
