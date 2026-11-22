@@ -207,15 +207,12 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     val setupConnectorId = _setupConnectorId.asStateFlow()
 
     val settingsScreenState = combine(
-        settings,
-        providers,
-        providerTests,
-        revenue,
-        connectors,
+        combine(settings, providers, providerTests, revenue, connectors) { s, p, t, r, c ->
+            SettingsScreenState(s, p, t, r, c, com.agoria.app.core.RuntimeState())
+        },
         runtime.state,
-    ) { s, p, t, r, c, rt ->
-        SettingsScreenState(s, p, t, r, c, rt)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList(), emptyList(), com.agoria.app.core.RuntimeState()))
+    ) { base, rt -> base.copy(runtimeState = rt) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsScreenState(null, emptyList(), emptyMap(), emptyList(), emptyList(), com.agoria.app.core.RuntimeState()))
 
     // Agent screen state is per-agent, created on demand via agentScreenState(agentId)
     private val agentScreenStates = MutableStateFlow<Map<String, kotlinx.coroutines.flow.StateFlow<AgentScreenState>>>(emptyMap())
