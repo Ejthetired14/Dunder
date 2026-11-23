@@ -3,7 +3,6 @@ package com.agoria.app.ui.components
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -20,8 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -37,12 +34,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,7 +42,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,8 +52,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ColumnScope
 import com.agoria.app.R
 import com.agoria.app.data.AgentEntity
+import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelPill
 
 fun statusColor(status: String): Color {
     return when (status) {
@@ -148,56 +144,41 @@ fun StatusDot(status: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(11.dp)
-            .clip(CircleShape)
             .background(color)
-            .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
-            .alpha(if (status == "thinking") pulse else 1f),
-    )
-}
-
-@Composable
-fun StatusPill(status: String, modifier: Modifier = Modifier) {
-    val color = statusColor(status)
-    Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
+            .border(1.5.dp, MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (status == "thinking") {
             Box(
                 Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(color),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = statusLabel(status),
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
+                    .size(5.dp)
+                    .background(color)
+                    .graphicsLayer { alpha = pulse },
             )
         }
     }
 }
 
 @Composable
+fun StatusPill(status: String, modifier: Modifier = Modifier) {
+    val color = statusColor(status)
+    PixelPill(
+        text = statusLabel(status),
+        modifier = modifier,
+        fill = color.copy(alpha = 0.14f),
+        textColor = color,
+    )
+}
+
+@Composable
 fun RiskBadge(risk: String, modifier: Modifier = Modifier) {
     val color = riskColor(risk)
-    Surface(
+    PixelPill(
+        text = "${risk.replaceFirstChar { it.uppercase() }} risk",
         modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text(
-            text = "${risk.replaceFirstChar { it.uppercase() }} risk",
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
+        fill = color.copy(alpha = 0.14f),
+        textColor = color,
+    )
 }
 
 @Composable
@@ -206,74 +187,18 @@ fun Pill(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.secondary,
 ) {
-    Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
+    PixelPill(text = text, modifier = modifier, fill = color.copy(alpha = 0.14f), textColor = color)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Square-cornered card: cream fill, 2 dp ink border, offset shadow. Content is a Column. */
 @Composable
-fun AgentCard(
-    agent: AgentEntity,
-    latestDiary: String?,
-    onClick: () -> Unit,
+fun PixelCard(
     modifier: Modifier = Modifier,
+    fill: Color = Pal.cream,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AgentAvatar(agent, 50.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(agent.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        agent.role,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                StatusPill(agent.status)
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "GOAL",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = agent.goal,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!latestDiary.isNullOrBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "“${latestDiary.take(120)}”",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+    PixelPanel(modifier = modifier, fill = fill) {
+        Column(Modifier.fillMaxWidth(), content = content)
     }
 }
 

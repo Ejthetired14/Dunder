@@ -16,23 +16,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +38,11 @@ import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.util.Time
+import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelCard
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelPill
+import com.agoria.app.ui.components.PixelScaffold
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,21 +54,10 @@ fun OfficeScreen(
     val diary by viewModel.diary.collectAsStateWithLifecycle()
     val latest = diary.firstOrNull()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("The office", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${agents.size} agents · tap a desk to talk",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-            )
-        },
+    PixelScaffold(
+        title = "The office",
+        subtitle = "${agents.size} agents · tap a desk to talk",
+        onBack = {},
     ) { padding ->
         Column(
             modifier = Modifier
@@ -77,14 +66,11 @@ fun OfficeScreen(
         ) {
             if (latest != null) {
                 val agent = agents.firstOrNull { it.id == latest.agentId }
-                Card(
+                PixelCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    ),
+                    fill = Pal.teal.copy(alpha = 0.15f),
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -93,19 +79,19 @@ fun OfficeScreen(
                         Icon(
                             AutoAwesome,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = Pal.teal,
                         )
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = "${agent?.name ?: "Office"} is thinking",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = Pal.ink,
                             )
                             Text(
                                 text = latest.content,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -114,7 +100,7 @@ fun OfficeScreen(
                         Text(
                             text = Time.relativeTime(latest.createdAt),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -139,19 +125,16 @@ fun OfficeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AgentDesk(
     agent: AgentEntity,
     latestDiary: String?,
     onClick: () -> Unit,
 ) {
-    Surface(
+    PixelPanel(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
+        fill = Pal.cream,
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,10 +162,10 @@ private fun AgentDesk(
             )
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill(text = "Talk")
+                PixelPill(text = "Talk")
                 if (agent.status == "waiting_approval") {
                     Spacer(Modifier.width(6.dp))
-                    Pill(text = "Approval", color = MaterialTheme.colorScheme.tertiary)
+                    PixelPill(text = "Approval", fill = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f), textColor = MaterialTheme.colorScheme.tertiary)
                 }
             }
         }

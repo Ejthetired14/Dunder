@@ -1,0 +1,260 @@
+package com.agoria.app.ui.office.world
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/** Palette pulled from the office map: navy walls, teal floor, warm wood, paper cream. */
+object Pal {
+    val ink = Color(0xFF14161F)
+    val navy = Color(0xFF232842)
+    val teal = Color(0xFF2E6B69)
+    val cream = Color(0xFFF3E5C5)
+    val tan = Color(0xFFD9B98B)
+    val wood = Color(0xFFB5703B)
+    val amber = Color(0xFFFFC83D)
+    val red = Color(0xFFD9534F)
+}
+
+/** Labels use the system monospace for now. Drop a pixel font (e.g. Silkscreen) into res/font and swap it in here. */
+val PixelLabel = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Bold,
+    fontSize = 12.sp,
+    letterSpacing = 0.6.sp,
+    color = Pal.ink,
+)
+
+/** Body copy stays a normal readable sans. Diary and chat text must never be pixel font. */
+val PixelBody = TextStyle(
+    fontSize = 13.sp,
+    lineHeight = 18.sp,
+    color = Pal.ink,
+)
+
+/** Square-cornered panel with a hard 2 dp border and an offset drop shadow. No blur, no rounding. */
+@Composable
+fun PixelPanel(
+    modifier: Modifier = Modifier,
+    fill: Color = Pal.cream,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .drawBehind {
+                val o = 3.dp.toPx()
+                drawRect(Color(0x66000000), topLeft = Offset(o, o), size = size)
+            }
+            .background(fill)
+            .border(2.dp, Pal.ink),
+    ) {
+        content()
+    }
+}
+
+/** Square-cornered card: cream fill, 2 dp ink border, offset shadow. Content is a Column. */
+@Composable
+fun PixelCard(
+    modifier: Modifier = Modifier,
+    fill: Color = Pal.cream,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    PixelPanel(modifier = modifier, fill = fill) {
+        Column(Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+/** `small = true` gives a 36 dp tall, 11 sp variant for dense cards. Default look is unchanged. */
+@Composable
+fun PixelButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    fill: Color = Pal.amber,
+    small: Boolean = false,
+) {
+    Box(
+        modifier = modifier
+            .heightIn(min = if (small) 36.dp else 44.dp)
+            .background(fill)
+            .border(2.dp, Pal.ink)
+            .clickable(onClick = {
+                OfficeSound.play(OfficeSound.Fx.CLICK)
+                onClick()
+            })
+            .padding(horizontal = if (small) 10.dp else 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text.uppercase(),
+            style = if (small) PixelLabel.copy(fontSize = 11.sp) else PixelLabel,
+        )
+    }
+}
+
+@Composable
+fun PixelIconButton(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PixelPanel(modifier = modifier.size(44.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = {
+                    OfficeSound.play(OfficeSound.Fx.CLICK)
+                    onClick()
+                }),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = description,
+                tint = Pal.ink,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Square flat text box: cream fill, 2 dp ink border, ink cursor, 14 sp body text.
+ * Replaces OutlinedTextField (task T-FIELDS). `singleLine = false` makes a taller (88 dp min) multi-line box.
+ */
+@Composable
+fun PixelTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    singleLine: Boolean = true,
+) {
+    Column(modifier = modifier) {
+        if (label != null) {
+            Text(
+                text = label.uppercase(),
+                style = PixelLabel.copy(color = Pal.amber, fontSize = 11.sp),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            textStyle = PixelBody.copy(fontSize = 14.sp),
+            cursorBrush = SolidColor(Pal.ink),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = if (singleLine) 44.dp else 88.dp)
+                .background(Pal.cream)
+                .border(2.dp, Pal.ink)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        )
+    }
+}
+
+/**
+ * Square flat switch (56 x 32 dp): teal track when on, navy when off, square cream thumb.
+ * Replaces the Material Switch (task T-FIELDS). `onChange` is the last parameter so trailing-lambda calls work.
+ */
+@Composable
+fun PixelSwitch(
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+    onChange: (Boolean) -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .width(56.dp)
+            .height(32.dp)
+            .background(if (checked) Pal.teal else Pal.navy)
+            .border(2.dp, Pal.ink)
+            .clickable(onClick = {
+                OfficeSound.play(OfficeSound.Fx.CLICK)
+                onChange(!checked)
+            })
+            .padding(3.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .background(Pal.cream)
+                .border(2.dp, Pal.ink),
+        )
+    }
+}
+
+/**
+ * Square flat checkbox (28 x 28 dp): ink border, cream fill when checked with ink checkmark.
+ * Replaces Material Checkbox.
+ */
+@Composable
+fun PixelCheckbox(
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+    onChange: (Boolean) -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .background(if (checked) Pal.cream else Pal.cream)
+            .border(2.dp, Pal.ink)
+            .clickable(onClick = {
+                OfficeSound.play(OfficeSound.Fx.CLICK)
+                onChange(!checked)
+            }),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Text(
+                text = "✓",
+                style = PixelLabel.copy(fontSize = 16.sp, color = Pal.ink),
+            )
+        }
+    }
+}
+
+/** Pixel-styled pill: square corners, 2 dp border, amber/ink colors. */
+@Composable
+fun PixelPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    fill: Color = Pal.amber,
+    textColor: Color = Pal.ink,
+) {
+    Box(
+        modifier = modifier
+            .background(fill)
+            .border(2.dp, Pal.ink)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = PixelLabel.copy(color = textColor, fontSize = 10.sp))
+    }
+}
