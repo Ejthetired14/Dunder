@@ -94,6 +94,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 composable("settings") {
                     SettingsScreen(
                         viewModel = viewModel,
+                        onOpenConnectors = { navController.navigate("connectors") },
                         onBack = { navController.popBackStack("office", false) },
                     )
                 }

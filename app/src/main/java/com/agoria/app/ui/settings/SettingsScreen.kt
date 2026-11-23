@@ -98,6 +98,7 @@ fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> 
 @Composable
 fun SettingsScreen(
     viewModel: AgoriaViewModel,
+    onOpenConnectors: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -350,10 +351,12 @@ fun SettingsScreen(
                 val paymentConnectors = state.connectors?.filter { it.category == "Payments" } ?: emptyList()
                 if (paymentConnectors.isEmpty()) {
                     Text(
-                        text = "No payment connector configured. Go to the Connectors tab to add PayPal or Polar.",
+                        text = "No payment connector configured. Open Connectors to add PayPal or Polar.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Dim,
                     )
+                    Spacer(Modifier.height(6.dp))
+                    PixelButton("Open Connectors", onOpenConnectors, small = true, fill = Pal.tan)
                 } else {
                     paymentConnectors.forEach { connector ->
                         val def = ConnectorCatalog.get(connector.id)
@@ -383,9 +386,7 @@ fun SettingsScreen(
                                     color = Dim,
                                 )
                             }
-                            PixelButton("Configure", {
-                                // Navigate to connectors screen would need navigation (see T-SETTINGS-NAV)
-                            }, small = true, fill = Pal.tan)
+                            PixelButton("Configure", onOpenConnectors, small = true, fill = Pal.tan)
                         }
                         Spacer(Modifier.height(8.dp))
                     }
