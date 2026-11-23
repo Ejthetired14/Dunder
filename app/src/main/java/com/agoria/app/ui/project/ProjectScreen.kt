@@ -49,6 +49,7 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
@@ -109,7 +110,7 @@ fun ProjectScreen(
                 Text(
                     text = project.description.ifBlank { "Everything the office is building." },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = { showLead = true }) { Text("Lead") }
@@ -266,7 +267,7 @@ private fun ProgressTab(
                     Text(
                         text = agent?.name ?: "Agent",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                     if (task.description.isNotBlank()) {
                         Spacer(Modifier.height(4.dp))
@@ -285,7 +286,7 @@ private fun ProgressTab(
                     Text(
                         text = "${task.progress}% · ${Time.relativeTime(task.updatedAt)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        color = Pal.wood,
                     )
                 }
             }
@@ -337,7 +338,7 @@ private fun BuildsTab(
                     Text(
                         text = "${agent?.name ?: "Agent"} · ${Time.relativeTime(build.createdAt)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                     if (build.description.isNotBlank()) {
                         Text(
@@ -404,7 +405,7 @@ private fun FilesTab(project: ProjectEntity, onView: (File) -> Unit) {
                 Text(
                     text = Files.prettySize(file.length()),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
+                    color = Pal.wood,
                 )
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = { onView(file) }) { Text("View") }

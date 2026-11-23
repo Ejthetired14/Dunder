@@ -37,6 +37,7 @@ import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Time
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,7 +121,7 @@ fun DiaryScreen(
                                 Text(
                                     text = day,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = Pal.amber,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                                 )
                             }
@@ -172,7 +173,7 @@ private fun DiaryEntryCard(
                     Text(
                         text = Time.clock(entry.createdAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -186,7 +187,7 @@ private fun DiaryEntryCard(
                 Text(
                     text = "★".repeat(entry.importance.coerceIn(1, 5)) + " importance",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 )
             }
         }

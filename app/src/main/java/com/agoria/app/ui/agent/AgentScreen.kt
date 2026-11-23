@@ -95,6 +95,7 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import java.io.File
@@ -310,7 +311,7 @@ private fun AgentHeader(
             Text(
                 text = "Goal: ${agent.goal}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.tan,
                 maxLines = if (goalOpen) Int.MAX_VALUE else 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -387,7 +388,7 @@ private fun ChatTab(
                         Text(
                             text = "${agent.name} is thinking...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.tan,
                             modifier = Modifier.padding(12.dp),
                         )
                     }
@@ -460,7 +461,7 @@ private fun CopyMessageButton(text: String) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
             contentDescription = "Copy message",
-            tint = MaterialTheme.colorScheme.outline,
+            tint = Pal.wood,
             modifier = Modifier.size(15.dp),
         )
     }
@@ -476,13 +477,13 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
             ) {
                 Surface(
                     shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 ) {
                     SelectionContainer {
                         Text(
                             text = message.content,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = Pal.ink,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
@@ -512,7 +513,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Pal.cream,
                                 )
                                 CopyMessageButton(message.content)
                             }
@@ -526,7 +527,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
@@ -535,7 +536,7 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = Pal.teal.copy(alpha = 0.14f),
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(
@@ -546,12 +547,12 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                         Icon(
                             imageVector = Icons.Default.Build,
                             contentDescription = "Tool",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = Pal.teal,
                         )
                         Text(
                             text = message.content,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.teal,
                         )
                     }
                 }
@@ -759,18 +760,18 @@ private fun DiaryEntryCard(entry: DiaryEntryEntity) {
                 Text(
                     text = entry.kind.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 )
                 Text(
                     text = Time.relativeTime(entry.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
             }
             Text(
                 text = entry.content,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.cream,
             )
         }
     }
@@ -798,14 +799,14 @@ private fun TaskCard(task: TaskEntity) {
                 Text(
                     text = Time.relativeTime(task.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
             }
             if (task.description.isNotBlank()) {
                 Text(
                     text = task.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
             }
             Row(
@@ -816,7 +817,7 @@ private fun TaskCard(task: TaskEntity) {
                 Text(
                     text = "${task.progress}% complete",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 )
             }
         }
@@ -839,18 +840,18 @@ private fun MemoryCard(memory: MemoryEntity) {
                 Text(
                     text = memory.kind.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 )
                 Text(
                     text = "Importance: ${memory.importance}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
             }
             Text(
                 text = memory.content,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.cream,
             )
         }
     }

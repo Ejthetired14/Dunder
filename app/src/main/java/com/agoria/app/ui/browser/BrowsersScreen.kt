@@ -39,6 +39,7 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.PixelScaffold
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Time
 
 /**
@@ -70,7 +71,7 @@ fun BrowserOverlay() {
                         Text(
                             text = session.url.ifBlank { "about:blank" },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.tan,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -155,7 +156,7 @@ fun BrowsersScreen(
                                     else -> session.title.ifBlank { session.url }
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = Pal.tan,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -163,7 +164,7 @@ fun BrowsersScreen(
                                 Text(
                                     text = "${session.url.take(60)} · ${Time.relativeTime(session.updatedAt)}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
+                                    color = Pal.wood,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -187,7 +188,7 @@ fun BrowsersScreen(
                             "They load in the background, and the sign-in stays in the office browser " +
                             "instead of the phone's accounts.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        color = Pal.wood,
                         modifier = Modifier.padding(16.dp),
                     )
                 }

@@ -28,7 +28,7 @@ fun AgoriaRoot() {
         when {
             settings == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    CircularProgressIndicator(color = Pal.amber)
                 }
             }
             !settings.setupComplete -> {
