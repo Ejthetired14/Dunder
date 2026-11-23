@@ -36,12 +36,12 @@ jobs:
           cache: 'gradle'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           api-level: 34
           build-tools-version: 34.0.0
           emulator: false
-          ndk-version: r26c
+          ndk-version: r27c
           cache: 'gradle'
 
       - name: Accept Android SDK licenses
