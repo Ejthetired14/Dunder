@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.navArgument
 import androidx.navigation.compose.rememberNavController
 import com.agoria.app.ui.agent.AgentScreen
 import com.agoria.app.ui.approvals.ApprovalsScreen
@@ -87,10 +86,9 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     )
                 }
                 composable(
-                    route = "connectors?focus={focus}",
-                    arguments = listOf(navArgument("focus") { nullable = true })
+                    route = "connectors"
                 ) { entry ->
-                    val focusId = entry.arguments?.getString("focus")
+                    val focusId = entry.getString("focus")
                     ConnectorsScreen(
                         viewModel = viewModel,
                         onBack = { navController.popBackStack("office", false) },

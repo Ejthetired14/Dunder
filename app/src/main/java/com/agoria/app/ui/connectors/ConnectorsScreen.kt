@@ -1,8 +1,5 @@
 package com.agoria.app.ui.connectors
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,17 +31,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.outline.RoundedRectOutline
-import androidx.compose.ui.graphics.outline.asOutline
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -85,7 +78,7 @@ fun ConnectorsScreen(
     var error by remember { mutableStateOf("") }
     var showLogs by remember { mutableStateOf(false) }
     // One short list per category instead of every connector on one endless page.
-    var expanded by remember { mutableStateOf(setOf("Needs attention")) }
+    val expanded = remember { mutableStateOf(setOf("Needs attention")) }
 
     // LazyListState for scrolling to focused connector
     val listState = rememberLazyListState()
@@ -108,13 +101,13 @@ fun ConnectorsScreen(
                 
                 // Expand the correct category
                 if (isInAttention) {
-                    expanded = expanded + "Needs attention"
+                    expanded.value = expanded.value + "Needs attention"
                 } else {
-                    expanded = expanded + category
+                    expanded.value = expanded.value + category
                 }
                 
                 // Build flat list to find index
-                val items = buildFlatList(connectors, requests, logs, expanded)
+                val items = buildFlatList(connectors, requests, logs, expanded.value)
                 val index = items.indexOfFirst { it.connectorId == focusId }
                 if (index >= 0) {
                     // Small delay to let layout happen, then scroll and highlight
@@ -155,9 +148,7 @@ fun ConnectorsScreen(
         connectors = connectors,
         requests = requests,
         logs = logs,
-        expanded = expanded,
-        onConnectorOpen = { id -> selectedId = id },
-        onConnectorToggle = { id, on -> viewModel.toggleConnector(id, on) },
+        expanded = expanded.value,
     )
 
     PixelScaffold(
@@ -183,7 +174,12 @@ fun ConnectorsScreen(
                         CategoryHeaderRow(
                             title = item.title,
                             isExpanded = item.isExpanded,
-                            onToggle = item.onToggle,
+                            onToggle = {
+                                // Toggle category expansion
+                                val current = expanded.value
+                                val newSet = if (item.title in current) current - item.title else current + item.title
+                                expanded.value = newSet
+                            },
                             onCount = item.onCount,
                             totalCount = item.totalCount,
                         )
@@ -191,8 +187,8 @@ fun ConnectorsScreen(
                     is FlatItem.ConnectorRow -> {
                         ConnectorRow(
                             connector = item.connector,
-                            onOpen = item.onOpen,
-                            onToggle = item.onToggle,
+                            onOpen = { selectedId = item.connector.id },
+                            onToggle = { enabled -> viewModel.toggleConnector(item.connector.id, enabled) },
                             isHighlighted = highlightId == item.connector.id,
                         )
                     }
@@ -303,9 +299,7 @@ private fun buildFlatList(
     connectors: List<ConnectorEntity>,
     requests: List<ConnectorRequestEntity>,
     logs: List<ConnectorLogEntity>,
-    expanded: MutableState<Set<String>>,
-    onConnectorOpen: (String) -> Unit,
-    onConnectorToggle: (String, Boolean) -> Unit,
+    expanded: Set<String>,
 ): List<FlatItem> {
     val items = mutableListOf<FlatItem>()
 
@@ -319,17 +313,17 @@ private fun buildFlatList(
         val onCount = attention.count { it.status != "disabled" }
         items.add(FlatItem.CategoryHeader(
             title = "Needs attention",
-            isExpanded = "Needs attention" in expanded.value,
-            onToggle = { expanded.value = if ("Needs attention" in expanded.value) expanded.value - "Needs attention" else expanded.value + "Needs attention" },
+            isExpanded = "Needs attention" in expanded,
+            onToggle = { /* handled in CategoryHeaderRow */ },
             onCount = onCount,
             totalCount = attention.size,
         ))
-        if ("Needs attention" in expanded.value) {
+        if ("Needs attention" in expanded) {
             attention.forEach { connector ->
                 items.add(FlatItem.ConnectorRow(
                     connector = connector,
-                    onOpen = { onConnectorOpen(connector.id) },
-                    onToggle = { enabled -> onConnectorToggle(connector.id, enabled) },
+                    onOpen = { /* handled in ConnectorRow */ },
+                    onToggle = { /* handled in ConnectorRow */ },
                 ))
             }
         }
@@ -340,17 +334,17 @@ private fun buildFlatList(
             val onCount = rows.count { it.status != "disabled" }
             items.add(FlatItem.CategoryHeader(
                 title = category,
-                isExpanded = category in expanded.value,
-                onToggle = { expanded.value = if (category in expanded.value) expanded.value - category else expanded.value + category },
+                isExpanded = category in expanded,
+                onToggle = { /* handled in CategoryHeaderRow */ },
                 onCount = onCount,
                 totalCount = rows.size,
             ))
-            if (category in expanded.value) {
+            if (category in expanded) {
                 rows.forEach { connector ->
                     items.add(FlatItem.ConnectorRow(
                         connector = connector,
-                        onOpen = { onConnectorOpen(connector.id) },
-                        onToggle = { enabled -> onConnectorToggle(connector.id, enabled) },
+                        onOpen = { /* handled in ConnectorRow */ },
+                        onToggle = { /* handled in ConnectorRow */ },
                     ))
                 }
             }
@@ -432,30 +426,21 @@ private fun ConnectorRow(
     val def = ConnectorCatalog.get(connector.id)
     val enabled = connector.status != "disabled"
     
-    // Highlight animation
-    val highlightAlpha by animateFloatAsState(
-        targetValue = if (isHighlighted) 1f else 0f,
-        animationSpec = tween(500)
-    )
-    val highlightColor by animateColorAsState(
-        targetValue = if (isHighlighted) Pal.amber.copy(alpha = 0.3f) else Color.Transparent,
-        animationSpec = tween(500)
-    )
-    val borderWidth by animateFloatAsState(
-        targetValue = if (isHighlighted) 2f else 0f,
-        animationSpec = tween(500)
-    )
+    // Simple highlight - amber border when highlighted
+    val borderWidth = if (isHighlighted) 2.dp else 0.dp
+    val borderColor = if (isHighlighted) Pal.amber else Color.Transparent
+    val backgroundColor = if (isHighlighted) Pal.amber.copy(alpha = 0.1f) else Color.Transparent
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .border(
-                width = borderWidth.dp,
-                color = Pal.amber.copy(alpha = highlightAlpha),
+                width = borderWidth,
+                color = borderColor,
                 shape = MaterialTheme.shapes.medium
             )
-            .background(color = highlightColor)
+            .background(color = backgroundColor)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
