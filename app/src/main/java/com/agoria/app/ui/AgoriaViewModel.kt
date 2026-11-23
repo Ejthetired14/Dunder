@@ -828,7 +828,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     fun saveBuildToDownloads(context: Context, build: BuildEntity, onResult: (Uri?) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val file = File(build.zipPath)
-            val uri = Share.saveToDownloads(context, file, "agoria-${build.name}-${build.id.take(8)}.zip")
+            val uri = Share.saveToDownloads(context, file, "agoria-${build.name}-${build.id.take(8)}.zip", "application/zip")
             withContext(Dispatchers.Main) {
                 onResult(uri)
             }
