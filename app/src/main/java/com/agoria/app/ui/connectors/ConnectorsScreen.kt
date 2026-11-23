@@ -1,5 +1,8 @@
 package com.agoria.app.ui.connectors
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +15,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -32,22 +40,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.outline.RoundedRectOutline
+import androidx.compose.ui.graphics.outline.asOutline
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.ConnectorAuth
 import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ConnectorLogEntity
+import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.connectorIcon
 import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Time
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +71,7 @@ import org.json.JSONObject
 fun ConnectorsScreen(
     viewModel: AgoriaViewModel,
     onBack: () -> Unit,
+    initialFocusId: String? = null,
 ) {
     val connectors by viewModel.connectors.collectAsStateWithLifecycle()
     val requests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
@@ -68,6 +85,49 @@ fun ConnectorsScreen(
     var showLogs by remember { mutableStateOf(false) }
     // One short list per category instead of every connector on one endless page.
     var expanded by remember { mutableStateOf(setOf("Needs attention")) }
+
+    // LazyListState for scrolling to focused connector
+    val listState = rememberLazyListState()
+    // Track which connector is currently highlighted
+    var highlightId by remember { mutableStateOf<String?>(null) }
+    // Track if we've already handled the initial focus
+    var focusHandled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialFocusId) {
+        val focusId = initialFocusId
+        if (focusId != null && !focusHandled) {
+            focusHandled = true
+            // Find the connector and its category
+            val allConnectors = connectors
+            val connector = allConnectors.find { it.id == focusId }
+            if (connector != null) {
+                val category = connector.category.ifBlank { "Other" }
+                val attention = allConnectors.filter { it.status == "error" || it.status == "needs_setup" }
+                val isInAttention = connector in attention
+                
+                // Expand the correct category
+                if (isInAttention) {
+                    expanded = expanded + "Needs attention"
+                } else {
+                    expanded = expanded + category
+                }
+                
+                // Build flat list to find index
+                val items = buildFlatList(connectors, requests, logs, expanded)
+                val index = items.indexOfFirst { it.connectorId == focusId }
+                if (index >= 0) {
+                    // Small delay to let layout happen, then scroll and highlight
+                    launch {
+                        delay(100)
+                        listState.animateScrollToItem(index)
+                        highlightId = focusId
+                        delay(2000)
+                        highlightId = null
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(setupConnectorId) {
         val id = setupConnectorId
@@ -89,73 +149,64 @@ fun ConnectorsScreen(
         }
     }
 
+    // Build flat list of items for LazyColumn
+    val flatItems = buildFlatList(
+        connectors = connectors,
+        requests = requests,
+        logs = logs,
+        expanded = expanded,
+        onConnectorOpen = { id -> selectedId = id },
+        onConnectorToggle = { id, on -> viewModel.toggleConnector(id, on) },
+    )
+
     PixelScaffold(
         title = "Connectors",
         subtitle = "Office integrations and agent tools",
         onBack = onBack,
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 8.dp),
+            state = listState,
+            contentPadding = PaddingValues(0.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            requests.forEach { request ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Agent asks for ${request.connectorId}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    TextButton(onClick = { viewModel.approveConnectorRequest(request.id) }) { Text("Approve") }
-                    TextButton(onClick = { viewModel.denyConnectorRequest(request.id) }) { Text("Deny") }
-                }
-            }
-
-            val attention = connectors.filter { it.status == "error" || it.status == "needs_setup" }
-            val rest = connectors.filterNot { it in attention }
-            if (attention.isNotEmpty()) {
-                ConnectorGroup(
-                    title = "Needs attention",
-                    connectors = attention,
-                    expanded = "Needs attention" in expanded,
-                    onToggleGroup = {
-                        expanded = if ("Needs attention" in expanded) expanded - "Needs attention" else expanded + "Needs attention"
-                    },
-                    onOpen = { id -> selectedId = id },
-                    onToggle = { id, on -> viewModel.toggleConnector(id, on) },
-                )
-            }
-            rest.groupBy { it.category.ifBlank { "Other" } }
-                .toSortedMap()
-                .forEach { (category, rows) ->
-                    ConnectorGroup(
-                        title = category,
-                        connectors = rows,
-                        expanded = category in expanded,
-                        onToggleGroup = {
-                            expanded = if (category in expanded) expanded - category else expanded + category
-                        },
-                        onOpen = { id -> selectedId = id },
-                        onToggle = { id, on -> viewModel.toggleConnector(id, on) },
-                    )
-                }
-
-            if (logs.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { showLogs = !showLogs }, contentPadding = PaddingValues(0.dp)) {
-                    Text(if (showLogs) "Hide recent calls" else "Recent calls (${logs.size})")
-                }
-                if (showLogs) {
-                    logs.take(6).forEach { log -> ConnectorLogRow(log) }
+            itemsIndexed(flatItems) { index, item ->
+                when (item) {
+                    is FlatItem.Request -> {
+                        RequestRow(request = item.request, viewModel = viewModel)
+                    }
+                    is FlatItem.CategoryHeader -> {
+                        CategoryHeaderRow(
+                            title = item.title,
+                            isExpanded = item.isExpanded,
+                            onToggle = item.onToggle,
+                            onCount = item.onCount,
+                            totalCount = item.totalCount,
+                        )
+                    }
+                    is FlatItem.ConnectorRow -> {
+                        ConnectorRow(
+                            connector = item.connector,
+                            onOpen = item.onOpen,
+                            onToggle = item.onToggle,
+                            isHighlighted = highlightId == item.connector.id,
+                        )
+                    }
+                    is FlatItem.LogsToggle -> {
+                        LogsToggleRow(
+                            isExpanded = showLogs,
+                            onToggle = { showLogs = !showLogs },
+                            count = logs.size,
+                        )
+                    }
+                    is FlatItem.LogRow -> {
+                        if (showLogs) {
+                            ConnectorLogRow(log = item.log)
+                        }
+                    }
                 }
             }
         }
@@ -210,43 +261,163 @@ fun ConnectorsScreen(
     }
 }
 
+// Flat item types for LazyColumn
+sealed interface FlatItem {
+    data class Request(val request: ConnectorRequestEntity) : FlatItem {
+        override val connectorId: String? = null
+    }
+    data class CategoryHeader(
+        val title: String,
+        val isExpanded: Boolean,
+        val onToggle: () -> Unit,
+        val onCount: Int,
+        val totalCount: Int,
+    ) : FlatItem {
+        override val connectorId: String? = null
+    }
+    data class ConnectorRow(
+        val connector: ConnectorEntity,
+        val onOpen: () -> Unit,
+        val onToggle: (Boolean) -> Unit,
+    ) : FlatItem {
+        override val connectorId: String = connector.id
+    }
+    data class LogsToggle(
+        val isExpanded: Boolean,
+        val onToggle: () -> Unit,
+        val count: Int,
+    ) : FlatItem {
+        override val connectorId: String? = null
+    }
+    data class LogRow(val log: ConnectorLogEntity) : FlatItem {
+        override val connectorId: String? = null
+    }
+    
+    val connectorId: String?
+}
+
+// Build flat list of items for LazyColumn
 @Composable
-private fun ConnectorGroup(
-    title: String,
+private fun buildFlatList(
     connectors: List<ConnectorEntity>,
-    expanded: Boolean,
-    onToggleGroup: () -> Unit,
-    onOpen: (String) -> Unit,
-    onToggle: (String, Boolean) -> Unit,
+    requests: List<ConnectorRequestEntity>,
+    logs: List<ConnectorLogEntity>,
+    expanded: MutableState<Set<String>>,
+    onConnectorOpen: (String) -> Unit,
+    onConnectorToggle: (String, Boolean) -> Unit,
+): List<FlatItem> {
+    val items = mutableListOf<FlatItem>()
+
+    requests.forEach { request ->
+        items.add(FlatItem.Request(request))
+    }
+
+    val attention = connectors.filter { it.status == "error" || it.status == "needs_setup" }
+    val rest = connectors.filterNot { it in attention }
+    if (attention.isNotEmpty()) {
+        val onCount = attention.count { it.status != "disabled" }
+        items.add(FlatItem.CategoryHeader(
+            title = "Needs attention",
+            isExpanded = "Needs attention" in expanded.value,
+            onToggle = { expanded.value = if ("Needs attention" in expanded.value) expanded.value - "Needs attention" else expanded.value + "Needs attention" },
+            onCount = onCount,
+            totalCount = attention.size,
+        ))
+        if ("Needs attention" in expanded.value) {
+            attention.forEach { connector ->
+                items.add(FlatItem.ConnectorRow(
+                    connector = connector,
+                    onOpen = { onConnectorOpen(connector.id) },
+                    onToggle = { enabled -> onConnectorToggle(connector.id, enabled) },
+                ))
+            }
+        }
+    }
+    rest.groupBy { it.category.ifBlank { "Other" } }
+        .toSortedMap()
+        .forEach { (category, rows) ->
+            val onCount = rows.count { it.status != "disabled" }
+            items.add(FlatItem.CategoryHeader(
+                title = category,
+                isExpanded = category in expanded.value,
+                onToggle = { expanded.value = if (category in expanded.value) expanded.value - category else expanded.value + category },
+                onCount = onCount,
+                totalCount = rows.size,
+            ))
+            if (category in expanded.value) {
+                rows.forEach { connector ->
+                    items.add(FlatItem.ConnectorRow(
+                        connector = connector,
+                        onOpen = { onConnectorOpen(connector.id) },
+                        onToggle = { enabled -> onConnectorToggle(connector.id, enabled) },
+                    ))
+                }
+            }
+        }
+
+    if (logs.isNotEmpty()) {
+        items.add(FlatItem.LogsToggle(
+            isExpanded = false, // Will be handled in component
+            onToggle = { /* handled in component */ },
+            count = logs.size,
+        ))
+        logs.take(6).forEach { log ->
+            items.add(FlatItem.LogRow(log))
+        }
+    }
+
+    return items
+}
+
+@Composable
+private fun RequestRow(
+    request: ConnectorRequestEntity,
+    viewModel: AgoriaViewModel,
 ) {
-    val on = connectors.count { it.status != "disabled" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Agent asks for ${request.connectorId}",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        TextButton(onClick = { viewModel.approveConnectorRequest(request.id) }) { Text("Approve") }
+        TextButton(onClick = { viewModel.denyConnectorRequest(request.id) }) { Text("Deny") }
+    }
+}
+
+@Composable
+private fun CategoryHeaderRow(
+    title: String,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    onCount: Int,
+    totalCount: Int,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onToggleGroup, contentPadding = PaddingValues(horizontal = 4.dp)) {
+        TextButton(onClick = onToggle, contentPadding = PaddingValues(horizontal = 4.dp)) {
             Text(
-                text = (if (expanded) "▾ " else "▸ ") + title,
+                text = (if (isExpanded) "▾ " else "▸ ") + title,
                 style = MaterialTheme.typography.titleSmall,
             )
         }
         Spacer(Modifier.weight(1f))
         Text(
-            text = "$on/${connectors.size} on",
+            text = "$onCount/$totalCount on",
             style = MaterialTheme.typography.labelSmall,
             color = Pal.wood,
         )
-    }
-    if (expanded) {
-        connectors.forEach { connector ->
-            ConnectorRow(
-                connector = connector,
-                onOpen = { onOpen(connector.id) },
-                onToggle = { enabled -> onToggle(connector.id, enabled) },
-            )
-        }
     }
 }
 
@@ -255,13 +426,36 @@ private fun ConnectorRow(
     connector: ConnectorEntity,
     onOpen: () -> Unit,
     onToggle: (Boolean) -> Unit,
+    isHighlighted: Boolean,
 ) {
     val def = ConnectorCatalog.get(connector.id)
     val enabled = connector.status != "disabled"
+    
+    // Highlight animation
+    val highlightAlpha by animateFloatAsState(
+        targetValue = if (isHighlighted) 1f else 0f,
+        animationSpec = tween(500)
+    )
+    val highlightColor by animateColorAsState(
+        targetValue = if (isHighlighted) Pal.amber.copy(alpha = 0.3f) : Color.Transparent,
+        animationSpec = tween(500)
+    )
+    val borderWidth by animateFloatAsState(
+        targetValue = if (isHighlighted) 2f else 0f,
+        animationSpec = tween(500)
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 2.dp)
+            .border(
+                width = borderWidth.dp,
+                color = Pal.amber.copy(alpha = highlightAlpha),
+                shape = MaterialTheme.shapes.medium
+            )
+            .background(color = highlightColor)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -284,6 +478,17 @@ private fun ConnectorRow(
         TextButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 8.dp)) {
             Text(if (def?.auth == ConnectorAuth.ACCOUNT || connector.configEnc != null) "Edit" else "Set up")
         }
+    }
+}
+
+@Composable
+private fun LogsToggleRow(
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    count: Int,
+) {
+    TextButton(onClick = onToggle, contentPadding = PaddingValues(0.dp)) {
+        Text(if (isExpanded) "Hide recent calls" else "Recent calls ($count)")
     }
 }
 

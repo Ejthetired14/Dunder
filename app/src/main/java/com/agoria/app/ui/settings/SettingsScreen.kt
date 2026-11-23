@@ -98,7 +98,7 @@ fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> 
 @Composable
 fun SettingsScreen(
     viewModel: AgoriaViewModel,
-    onOpenConnectors: () -> Unit,
+    onOpenConnectors: (String?) -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -356,7 +356,7 @@ fun SettingsScreen(
                         color = Dim,
                     )
                     Spacer(Modifier.height(6.dp))
-                    PixelButton("Open Connectors", onOpenConnectors, small = true, fill = Pal.tan)
+                    PixelButton("Open Connectors", { onOpenConnectors(null) }, small = true, fill = Pal.tan)
                 } else {
                     paymentConnectors.forEach { connector ->
                         val def = ConnectorCatalog.get(connector.id)
@@ -386,7 +386,7 @@ fun SettingsScreen(
                                     color = Dim,
                                 )
                             }
-                            PixelButton("Configure", onOpenConnectors, small = true, fill = Pal.tan)
+                            PixelButton("Configure", { onOpenConnectors(connector.id) }, small = true, fill = Pal.tan)
                         }
                         Spacer(Modifier.height(8.dp))
                     }
