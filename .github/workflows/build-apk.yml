@@ -200,7 +200,7 @@ jobs:
           SIGNED_APK: ${{ steps.sign-apk.outputs.SIGNED_APK }}
         run: |
           set -euo pipefail
-          echo "sha256=$(sha256sum \"$SIGNED_APK\" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "sha256=$(sha256sum $SIGNED_APK | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
