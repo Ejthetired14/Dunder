@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 14:15 UTC.
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 06:05 UTC (CI fix entry).
 
 ---
 
@@ -179,6 +179,70 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
+
+- 2026-11-23 06:05  Claude  CI  **main could not compile at all; the last-green tree was restored.** PR #14 merged to main (merge commit 8962318). Green: Build APK run 45120165921 (#800) on commit 8633715 — Build Debug APK, Unit tests, Build Release APK and Upload APKs all success; Backup config guard run 45120166000 green. [verified]
+
+  Two separate faults, one behind the other.
+
+  **(a) Workflow.** Run #797 (45108717737, commit 51b4884) failed at step 4 "Set up Android SDK" after 13 s:
+
+  ```
+  ##[warning]Unexpected input(s) 'api-level', 'build-tools-version', 'emulator', 'ndk-version', 'cache', valid inputs are ['cmdline-tools-version', 'accept-android-sdk-licenses', 'log-accepted-android-sdk-licenses', 'packages']
+  ##[warning]setup-java v4 is deprecated on the runner; migrate to actions/setup-java@v5
+  ```
+
+  The last green workflow used `android-actions/setup-android@v3` with those extra inputs; 44f7ab1
+  bumped the action to `@v4`, which does not accept them. Fixed in the workflow: `@v4` with only
+  `accept-android-sdk-licenses` and `packages:` (platform-tools, platforms;android-34,
+  platforms;android-35, build-tools;34.0.0, build-tools;35.0.0), `actions/setup-java@v5`, and the
+  3x retry loops removed — no retries and no `|| true` anywhere.
+
+  **(b) The tree.** With (a) fixed, run #799 (45118583197) passed steps 1-9 (SDK step 12 s, no
+  warnings) and failed at step 10 "Build Debug APK" after 26 s. `main` is 71 commits behind the last
+  green commit (compare e12de9f...main: ahead_by 5, behind_by 71): it is a pre-Phase-4 snapshot
+  (`versionCode 140`) with four later commits re-applied on top (FreeLLMAPI add/fix/revert and
+  51b4884 T-AGENT). Missing from the tree: `ui/browser`, `ui/project`, `ui/viewer`,
+  `ui/office/world/{OfficeWorld,OfficeLayout,OfficeSim,Signals,WorldAssets,Chatter,ChatterPanel,DirectoryPanel,OfficeSound}`,
+  `ui/office/OfficeViewModel`, `service/BootStatus`, `util/UpdatePolicy`, `res/raw`,
+  `res/drawable-nodpi`, `app/src/test`, `docs/`, `tools/`. The files it keeps also lost their import
+  blocks: `AgentScreen.kt` has no `androidx.compose.material3` import at all.
+
+  Reproduced locally (main @44f7ab1 sources + the restored Gradle stack): **192 `e:` errors,
+  BUILD FAILED in 2m 11s**, 116 of them in AgentScreen.kt:
+
+  ```
+  e: app/src/main/java/com/agoria/app/core/ConnectorExecutor.kt:179:21 Unresolved reference 'codePointAt'.
+  e: app/src/main/java/com/agoria/app/data/Repository.kt:321:21 Unresolved reference 'codePointAt'.
+  e: app/src/main/java/com/agoria/app/ui/AgoriaNav.kt:43:36 Unresolved reference 'Home'.
+  e: app/src/main/java/com/agoria/app/ui/AgoriaNav.kt:89:21 No value passed for parameter 'onBack'.
+  e: app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt:76:37 Unresolved reference 'PixelScaffold'.
+  e: app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt:94:48 Unresolved reference 'Pause'.
+  e: app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt:178:26 Unresolved reference 'clickable'.
+  e: app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt:181:21 Unresolved reference 'Text'.
+  e: app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt:181:72 Unresolved reference 'sp'.
+  e: app/src/main/java/com/agoria/app/ui/home/HomeScreen.kt:49:37 Unresolved reference 'AgentCard'.
+  e: app/src/main/java/com/agoria/app/ui/home/HomeScreen.kt:270:17 Unresolved reference 'PixelPill'.
+  e: app/src/main/java/com/agoria/app/ui/office/world/PixelUi.kt:105:17 Unresolved reference 'OfficeSound'.
+  e: app/src/main/java/com/agoria/app/ui/office/OfficeScreen.kt:... Unresolved reference 'PixelScaffold'.
+  ```
+
+  Per file: AgentScreen 116, Common.kt 26, PixelUi.kt 10, HomeScreen 8, SettingsScreen 7,
+  OfficeScreen 7, AgoriaNav 7, OnboardingScreen 4, ConnectorsScreen 3, DiaryScreen 1,
+  ApprovalsScreen 1, Repository.kt 1, ConnectorExecutor.kt 1.
+
+  **Root cause:** the rollback deleted the files the newer screens depend on, so the newest features
+  (`PixelScaffold`, `AgentCard`, `PixelPill`, `OfficeSound`, the `Icons` used by `AgoriaNav`) reference
+  symbols that are not in the tree. The ~15 commits from 28874ee onwards were chasing the wrong
+  symptom: they downgraded AGP/Kotlin to 8.2.2/1.9.20, but `org.jetbrains.kotlin.plugin.compose` has
+  no 1.9.20 release (the plugin starts at 2.0.0), so configuration could never succeed either.
+
+  **Fix:** commit 8633715 sets the branch tree to e12de9f's tree (v1.0.218, run #760, the last green
+  build) plus this workflow repair. T-AGENT's pixel Agent page and the phase-6 Home work already
+  exist in that tree in compiling form — 51b4884 was an uncompiled re-add of them onto the stale
+  snapshot. `versionCode` is 218 again. Also gone with the restore: `apks-release.zip` (a 142-byte
+  GitHub 404 JSON), `init.gradle.kts` (dead diagnostic script), `generate-keystore.yml` (superseded by
+  fail-closed signing) and `office_tileset.png` (unused). Handoff zip of the 79 changed files:
+  `dunder-ci-fix.zip`.
 
 - 2026-11-23 14:15  Claude  T-BACK2  PR #11 merged to main (commit d15decc). Build APK run 45078557925 green, Backup guard run 45078557904 green. ApprovalsScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'approvals'; auto-approve settings action in top bar; floating button hidden on Approvals page. [verified]
 - 2026-11-23 12:45  Claude  T-BACK2  PR #10 merged to main (commit ca2ef1e). Build APK run 45072215229 green, Backup guard run 45072215197 green. AgentScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'agent'; pause/resume action in top bar; floating button hidden on Agent page. [verified]
