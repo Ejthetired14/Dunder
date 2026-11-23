@@ -386,13 +386,16 @@ fun OfficeWorld(
         // Time of day: a soft colour wash over the world (not over bubbles or tags).
         if (tint.alpha > 0.005f) drawRect(tint)
 
-        // Night shift: when it is dark, every agent carries a small warm lamp glow.
-        if (tint.alpha > 0.15f) {
-            val glowR = px * 1.5f
+        // Night shift: only when it is properly dark (not at dusk), every agent carries a small warm
+        // lamp glow that fades in with the darkness.
+        val nightness = ((tint.alpha - 0.30f) / 0.25f).coerceIn(0f, 1f)
+        if (nightness > 0f) {
+            val glowR = px * 1.1f
+            val glowColor = Color(0xFFFFE2A0).copy(alpha = 0.30f * nightness)
             for (a in ordered) {
                 val c = Offset(sx(a.x), sy(a.y) - px * 0.4f)
                 drawCircle(
-                    brush = Brush.radialGradient(listOf(Color(0x55FFE2A0), Color.Transparent), center = c, radius = glowR),
+                    brush = Brush.radialGradient(listOf(glowColor, Color.Transparent), center = c, radius = glowR),
                     radius = glowR,
                     center = c,
                 )

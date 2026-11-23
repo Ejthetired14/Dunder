@@ -663,15 +663,15 @@ private fun QuickChat(name: String, onSend: (String) -> Unit) {
 private fun officeTint(): Color {
     val c = java.util.Calendar.getInstance()
     val m = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)
-    val night = Color(0x4D0B1030)
+    val night = Color(0x8C0B1030)
     val keys = listOf(
         0 to night,
         5 * 60 to night,
         7 * 60 to Color(0x1AFFB27A),
         8 * 60 to Color(0x00FFFFFF),
         17 * 60 to Color(0x00FFFFFF),
-        18 * 60 + 30 to Color(0x1FFF9A3C),
-        20 * 60 to Color(0x3A1B1B4B),
+        18 * 60 + 30 to Color(0x2EFF9A3C),
+        20 * 60 to Color(0x661B1B4B),
         22 * 60 to night,
         24 * 60 to night,
     )
