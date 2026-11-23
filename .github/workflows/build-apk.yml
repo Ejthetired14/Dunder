@@ -287,6 +287,10 @@ jobs:
           path: site
           name: github-pages
 
+      # Wait for artifact to be queryable (race condition: deploy-pages can't find artifact immediately)
+      - name: Wait for artifact
+        run: sleep 10
+
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
