@@ -11,17 +11,21 @@ import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
 import com.agoria.app.data.AgentEntity
+import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.BuildEntity
+import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.SettingsEntity
 import com.agoria.app.data.TaskEntity
+import android.util.Log
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
 import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.delay
@@ -123,14 +127,14 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun startPendingApprovalsPolling() {
         viewModelScope.launch {
-            while (isActive) {
+            while (coroutineContext[Job]?.isActive == true) {
                 try {
                     val approvals = repo.getAllPendingApprovals()
                     val requests = repo.getAllPendingConnectorRequests()
                     _pendingApprovals.value = approvals
                     _pendingConnectorRequests.value = requests
                 } catch (e: Exception) {
-                    log("Pending approvals polling error: ${e.message}")
+                    Log.w("AgoriaViewModel", "Pending approvals polling error: ${e.message}")
                 }
                 delay(2000) // Poll every 2 seconds
             }
