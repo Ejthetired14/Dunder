@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ApprovalsScreen(
     viewModel: AgoriaViewModel,
-    onOpenConnectors: () -> Unit,
+    onOpenConnectors: (String?) -> Unit,
     onBack: () -> Unit,
 ) {
     val approvals by viewModel.approvals.collectAsStateWithLifecycle()
@@ -82,7 +82,7 @@ fun ApprovalsScreen(
 
     LaunchedEffect(setupConnectorId) {
         if (setupConnectorId != null) {
-            onOpenConnectors()
+            onOpenConnectors(null)
             viewModel.clearSetupConnector()
             snackbar.showSnackbar("Connector approved. Configure it in the Connectors screen.")
         }
