@@ -128,6 +128,9 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status IN ('pending', 'auto_pending')")
     suspend fun pendingForAgent(agentId: String): List<ApprovalEntity>
 
+    @Query("SELECT * FROM approvals WHERE status IN ('pending', 'auto_pending') ORDER BY createdAt ASC")
+    suspend fun getAllPending(): List<ApprovalEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(approval: ApprovalEntity)
 
@@ -175,6 +178,9 @@ interface ConnectorRequestDao {
 
     @Query("SELECT * FROM connector_requests WHERE agentId = :agentId AND status = 'pending'")
     suspend fun pendingForAgent(agentId: String): List<ConnectorRequestEntity>
+
+    @Query("SELECT * FROM connector_requests WHERE status = 'pending' ORDER BY createdAt ASC")
+    suspend fun getAllPending(): List<ConnectorRequestEntity>
 
     @Query("SELECT * FROM connector_requests WHERE connectorId = :connectorId AND status = 'pending' ORDER BY createdAt DESC LIMIT 1")
     suspend fun pendingForConnector(connectorId: String): ConnectorRequestEntity?
