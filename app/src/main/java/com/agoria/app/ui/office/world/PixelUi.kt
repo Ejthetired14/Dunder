@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -118,5 +122,38 @@ fun PixelIconButton(
                 modifier = Modifier.size(22.dp),
             )
         }
+    }
+}
+
+/** Square flat text box: cream fill, 2 dp ink border, ink cursor, 14 sp body text. Replaces OutlinedTextField (task T-FIELDS). */
+@Composable
+fun PixelTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    singleLine: Boolean = true,
+) {
+    Column(modifier = modifier) {
+        if (label != null) {
+            Text(
+                text = label.uppercase(),
+                style = PixelLabel.copy(color = Pal.amber, fontSize = 11.sp),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            textStyle = PixelBody.copy(fontSize = 14.sp),
+            cursorBrush = SolidColor(Pal.ink),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .background(Pal.cream)
+                .border(2.dp, Pal.ink)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        )
     }
 }
