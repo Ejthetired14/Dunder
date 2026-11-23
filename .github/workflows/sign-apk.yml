@@ -79,14 +79,14 @@ jobs:
             -dname "$DNAME" \
             -noprompt
 
-          # Sign the APK
+          # Sign the APK (input APK must be LAST argument)
           apksigner sign \
             --ks /tmp/keystore.jks \
             --ks-key-alias "$ALIAS" \
             --ks-pass pass:"$STOREPASS" \
             --key-pass pass:"$KEYPASS" \
-            artifacts/release/app-release-unsigned.apk \
-            --out /tmp/dunder-signed-release.apk
+            --out /tmp/dunder-signed-release.apk \
+            artifacts/release/app-release-unsigned.apk
 
           # Verify
           apksigner verify /tmp/dunder-signed-release.apk
