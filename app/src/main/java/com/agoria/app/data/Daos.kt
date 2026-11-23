@@ -53,6 +53,9 @@ interface DiaryDao {
 
     @Query("DELETE FROM diary_entries")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM diary_entries ORDER BY createdAt ASC")
+    suspend fun getAll(): List<DiaryEntryEntity>
 }
 
 @Dao
@@ -60,7 +63,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC")
     fun observeForAgent(agentId: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt ASC LIMIT :limit OFFSET :offset")
+    // Newest first, so page 0 is the live tail of the conversation and later pages walk backwards
+    // into history. The chat renders this order directly in a reversed LazyColumn.
+    @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
     suspend fun pagedForAgent(agentId: String, limit: Int, offset: Int): List<MessageEntity>
 
     @Query("SELECT COUNT(*) FROM messages WHERE agentId = :agentId")
@@ -74,6 +79,9 @@ interface MessageDao {
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM messages ORDER BY createdAt ASC")
+    suspend fun getAll(): List<MessageEntity>
 }
 
 @Dao
@@ -83,6 +91,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE agentId = :agentId ORDER BY updatedAt DESC")
     fun observeForAgent(agentId: String): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE projectId = :projectId ORDER BY updatedAt DESC")
+    fun observeForProject(projectId: String): Flow<List<TaskEntity>>
 
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: String): TaskEntity?
@@ -95,6 +106,9 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM tasks ORDER BY createdAt ASC")
+    suspend fun getAll(): List<TaskEntity>
 }
 
 @Dao
@@ -102,7 +116,7 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<ApprovalEntity>>
 
-    @Query("SELECT * FROM approvals WHERE status = 'pending' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM approvals WHERE status IN ('pending', 'auto_pending') ORDER BY createdAt ASC")
     fun observePending(): Flow<List<ApprovalEntity>>
 
     @Query("SELECT * FROM approvals WHERE agentId = :agentId ORDER BY createdAt DESC")
@@ -111,7 +125,7 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals WHERE id = :id")
     suspend fun get(id: String): ApprovalEntity?
 
-    @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status = 'pending'")
+    @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status IN ('pending', 'auto_pending')")
     suspend fun pendingForAgent(agentId: String): List<ApprovalEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -122,6 +136,9 @@ interface ApprovalDao {
 
     @Query("DELETE FROM approvals")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM approvals ORDER BY createdAt ASC")
+    suspend fun getAll(): List<ApprovalEntity>
 }
 
 @Dao
@@ -131,6 +148,12 @@ interface ConnectorDao {
 
     @Query("SELECT * FROM connectors WHERE id = :id")
     suspend fun get(id: String): ConnectorEntity?
+
+    @Query("SELECT * FROM connectors")
+    suspend fun getAll(): List<ConnectorEntity>
+
+    @Query("DELETE FROM connectors WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(connector: ConnectorEntity)
@@ -179,6 +202,12 @@ interface BuildDao {
 
     @Query("SELECT * FROM builds WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     suspend fun pagedForAgent(agentId: String, limit: Int, offset: Int): List<BuildEntity>
+
+    @Query("SELECT * FROM builds WHERE projectId = :projectId ORDER BY createdAt DESC")
+    fun observeForProject(projectId: String): Flow<List<BuildEntity>>
+
+    @Query("SELECT * FROM builds ORDER BY createdAt ASC")
+    suspend fun getAll(): List<BuildEntity>
 
     @Query("SELECT COUNT(*) FROM builds WHERE agentId = :agentId")
     suspend fun countForAgent(agentId: String): Int
@@ -244,6 +273,36 @@ interface MemoryDao {
     suspend fun insert(memory: MemoryEntity)
 
     @Query("DELETE FROM memories")
+    suspend fun deleteAll()
+
+    @Query("SELECT * FROM memories ORDER BY createdAt ASC")
+    suspend fun getAll(): List<MemoryEntity>
+}
+
+@Dao
+interface ProjectDao {
+    @Query("SELECT * FROM projects ORDER BY createdAt ASC")
+    fun observeAll(): Flow<List<ProjectEntity>>
+
+    @Query("SELECT * FROM projects ORDER BY createdAt ASC")
+    suspend fun getAll(): List<ProjectEntity>
+
+    @Query("SELECT * FROM projects WHERE id = :id")
+    suspend fun get(id: String): ProjectEntity?
+
+    @Query("SELECT * FROM projects WHERE leadAgentId = :agentId LIMIT 1")
+    suspend fun forLead(agentId: String): ProjectEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(project: ProjectEntity)
+
+    @Update
+    suspend fun update(project: ProjectEntity)
+
+    @Query("DELETE FROM projects WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM projects")
     suspend fun deleteAll()
 }
 

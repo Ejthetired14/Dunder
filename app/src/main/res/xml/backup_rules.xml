@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Legacy (Android 11 and lower) Auto Backup rules, defense in depth (SEC-1). Manifest sets allowBackup="false", so these are normally unused. Keep in sync with data_extraction_rules.xml. -->
 <full-backup-content>
-    <!-- Include all app data: databases, shared preferences, files -->
-    <include domain="database" path="." />
-    <include domain="sharedpref" path="." />
-    <include domain="file" path="." />
-    <include domain="external" path="." />
-    <include domain="root" path="." />
-
-    <!-- Exclude cache and temporary files -->
-    <exclude domain="file" path="cache/" />
-    <exclude domain="file" path="code_cache/" />
-    <exclude domain="file" path="no_backup/" />
-    <exclude domain="external" path="cache/" />
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
 </full-backup-content>

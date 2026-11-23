@@ -13,18 +13,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -33,8 +31,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +52,7 @@ import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
 import com.agoria.app.util.Json
 import com.agoria.app.util.Time
@@ -64,6 +63,7 @@ import kotlinx.coroutines.launch
 fun ApprovalsScreen(
     viewModel: AgoriaViewModel,
     onOpenConnectors: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val approvals by viewModel.approvals.collectAsStateWithLifecycle()
     val pending by viewModel.pendingApprovals.collectAsStateWithLifecycle()
@@ -93,25 +93,17 @@ fun ApprovalsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Approvals", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${pending.size} waiting · nothing external runs without you",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showAutoApproveDialog = true }) {
-                        Icon(Settings, contentDescription = "Auto-approve settings")
-                    }
-                },
-            )
+    PixelScaffold(
+        title = "Approvals",
+        subtitle = "${pending.size} waiting · nothing external runs without you",
+        onBack = onBack,
+        actions = {
+            IconButton(onClick = { showAutoApproveDialog = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Auto-approve settings",
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -183,7 +175,16 @@ fun ApprovalsScreen(
             types = autoApproveTypes,
             onEnabledChange = { enabled ->
                 viewModel.updateSettings { s ->
-                    s.copy(autoApproveEnabled = enabled)
+                    val newTypes = if (enabled && s.autoApproveTypes.isBlank()) {
+                        "connector_action" // Default to connector actions when first enabling
+                    } else {
+                        s.autoApproveTypes
+                    }
+                    s.copy(autoApproveEnabled = enabled, autoApproveTypes = newTypes)
+                }
+                // Update local state to reflect the default
+                if (enabled && autoApproveTypes.isBlank()) {
+                    autoApproveTypes = "connector_action"
                 }
             },
             onTypesChange = { types ->
@@ -534,13 +535,16 @@ private fun AutoApproveDialog(
 ) {
     val allTypes = listOf(
         "build_project" to "Build projects",
-        "connector_action" to "Connector actions",
+        "connector_action" to "Connector actions (GitHub, Notion, etc.)",
         "send_email" to "Send emails",
         "publish" to "Publish content",
         "delete" to "Delete resources",
         "spend_api" to "Spend API credits",
         "connector_install" to "Install connectors",
     )
+
+    // Default to connector_action if enabled but no types selected
+    val effectiveTypes = if (enabled && types.isBlank()) "connector_action" else types
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -558,20 +562,20 @@ private fun AutoApproveDialog(
                     Switch(checked = enabled, onCheckedChange = onEnabledChange)
                 }
                 Text(
-                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution.",
+                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution. Connector actions must be checked for GitHub/Notion auto-approve.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Auto-approve these types:", style = MaterialTheme.typography.labelLarge)
                 allTypes.forEach { (typeId, typeLabel) ->
-                    val isChecked = types.split(",").map { it.trim() }.contains(typeId)
+                    val isChecked = effectiveTypes.split(",").map { it.trim() }.contains(typeId)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = isChecked, onCheckedChange = { checked ->
-                            val current = types.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                            val current = effectiveTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
                             if (checked) current.add(typeId) else current.remove(typeId)
                             onTypesChange(current.joinToString(","))
                         })

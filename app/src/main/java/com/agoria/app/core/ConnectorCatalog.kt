@@ -5,9 +5,15 @@ import java.util.Locale
 enum class ConnectorAuth {
     NONE,
     API_KEY,
-    OAUTH_TOKEN,
     WEBHOOK,
     BOT_TOKEN,
+
+    /**
+     * Uses the office's own browser session, never the accounts signed in to this phone. The app never stores a token or a
+     * password for these connectors: it hands the action to the signed-in mail, calendar or
+     * browser app, and the user confirms it there.
+     */
+    ACCOUNT,
 }
 
 data class ConnectorField(
@@ -132,6 +138,7 @@ object ConnectorCatalog {
             fields = emptyList(),
             actions = listOf(
                 ConnectorActionDef("info", "Device info", "Return model, Android version, battery, and time.", false, "{}"),
+                ConnectorActionDef("get_info", "Device info (alias)", "Alias for 'info' action.", false, "{}"),
                 ConnectorActionDef("notify", "Local notification", "Post a local notification on this device.", true, "{\"title\": \"...\", \"body\": \"...\"}"),
             ),
             setupHelp = "No setup needed. This connector only touches this device.",
@@ -157,6 +164,27 @@ object ConnectorCatalog {
             iconKey = "files",
         ),
         ConnectorDef(
+            id = "accounts",
+            name = "Office Browser",
+            category = "Personal",
+            description = "Work inside a browser window that belongs to the office. Sign in there once with the account the office should use, then it can draft Gmail, add Google Calendar events and open any page in that same session. Your phone's own accounts are never touched.",
+            auth = ConnectorAuth.ACCOUNT,
+            fields = emptyList(),
+            actions = listOf(
+                ConnectorActionDef("list", "Browser session", "Report whether the office browser is signed in to Google.", false, "{}"),
+                ConnectorActionDef("signin", "Sign in", "Load the sign-in page in the office browser so you can sign in once.", true, "{\"url\": \"https://accounts.google.com/ServiceLogin\"}"),
+                ConnectorActionDef("email", "Draft an email", "Load a Gmail draft in this agent's browser. You review it and press send.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
+                ConnectorActionDef("event", "Add calendar event", "Load a Google Calendar event form in this agent's browser. You confirm it.", true, "{\"title\": \"...\", \"start\": \"2026-11-20T10:00:00Z\", \"end\": \"2026-11-20T11:00:00Z\", \"location\": \"\"}"),
+                ConnectorActionDef("open_url", "Open a link", "Open a web link in this agent's own browser. It loads in the background.", true, "{\"url\": \"https://mail.google.com\"}"),
+                ConnectorActionDef("read", "Read the page", "Return the visible text of the page in this agent's browser.", false, "{}"),
+                ConnectorActionDef("view", "Show on screen", "Put this agent's browser on screen when the user wants to watch.", false, "{}"),
+            ),
+            setupHelp = "Sign in once inside the office browser with the account the office should use. Every agent then browses in its own background window: it can open pages and read them without covering your screen, and Browsers shows any agent's page when you want to look.",
+            docsUrl = "",
+            risk = "medium",
+            iconKey = "accounts",
+        ),
+        ConnectorDef(
             id = "http",
             name = "HTTP Request",
             category = "Web",
@@ -166,6 +194,7 @@ object ConnectorCatalog {
                 ConnectorField("baseUrl", "Base URL", "For example https://api.example.com. The path is appended.", false, true, "https://api.example.com"),
                 ConnectorField("apiKey", "API key", "Optional. Sent as Authorization: Bearer.", true, false, "sk-..."),
                 ConnectorField("defaultHeaders", "Default headers", "Optional JSON object, for example {\"X-Test\": \"1\"}.", false, false, "{}"),
+                ConnectorField("authSource", "Authentication", "Use this connector's key, or the token of the agent making the call (agent).", false, false, "own"),
             ),
             actions = listOf(
                 ConnectorActionDef("request", "HTTP request", "Make a GET/POST/PUT/PATCH/DELETE request.", true, "{\"method\": \"GET\", \"path\": \"/v1/thing\", \"body\": \"\"}"),
@@ -176,62 +205,24 @@ object ConnectorCatalog {
             iconKey = "http",
         ),
         ConnectorDef(
-            id = "gmail",
-            name = "Gmail",
-            category = "Email",
-            description = "Read and send mail through the Gmail API.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
-            fields = listOf(
-                ConnectorField("accessToken", "OAuth access token", "Paste a token with gmail.readonly and gmail.send scopes.", true, true, "ya29...."),
-                ConnectorField("userEmail", "Account email", "Optional. Used for labels and display.", false, false, "you@example.com"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("list", "List messages", "Search recent messages.", false, "{\"query\": \"is:unread\", \"maxResults\": 5}"),
-                ConnectorActionDef("get", "Read message", "Read one message by id.", false, "{\"messageId\": \"...\"}"),
-                ConnectorActionDef("send", "Send email", "Send a plain-text email. Requires approval.", true, "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}"),
-            ),
-            setupHelp = "Create an OAuth 2.0 access token with the Google OAuth Playground (developers.google.com/oauthplayground) using the Gmail API v1 and the scopes gmail.readonly and gmail.send. Paste the access token below. Tokens expire after about an hour; paste a fresh one when it expires.",
-            docsUrl = "https://developers.google.com/gmail/api",
-            risk = "high",
-            iconKey = "gmail",
-        ),
-        ConnectorDef(
-            id = "calendar",
-            name = "Google Calendar",
-            category = "Calendar",
-            description = "Read and create events in a Google calendar.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
-            fields = listOf(
-                ConnectorField("accessToken", "OAuth access token", "Paste a token with calendar.readonly and calendar.events scopes.", true, true, "ya29...."),
-                ConnectorField("calendarId", "Calendar id", "Defaults to primary.", false, false, "primary"),
-            ),
-            actions = listOf(
-                ConnectorActionDef("list", "List events", "List upcoming events.", false, "{\"maxResults\": 5}"),
-                ConnectorActionDef("create", "Create event", "Create an event. Requires approval.", true, "{\"summary\": \"...\", \"start\": \"2026-11-17T10:00:00Z\", \"end\": \"2026-11-17T11:00:00Z\", \"description\": \"...\"}"),
-            ),
-            setupHelp = "Create an OAuth token with the Google Calendar API v3 and the scopes calendar.readonly and calendar.events in the OAuth Playground. Paste the access token below.",
-            docsUrl = "https://developers.google.com/calendar/api",
-            risk = "high",
-            iconKey = "calendar",
-        ),
-        ConnectorDef(
             id = "github",
             name = "GitHub",
             category = "Code",
-            description = "Full repository access with a classic PAT (create repos, issues, PRs) or fine-grained PAT (limited to selected repos).",
+            description = "Work with GitHub through one fine-grained personal access token.",
             auth = ConnectorAuth.BOT_TOKEN,
             fields = listOf(
-                ConnectorField("token", "Personal access token", "Classic PAT (ghp_...) with 'repo' scope for full access, or fine-grained (github_pat_...) for selected repos.", true, true, "ghp_..."),
-                ConnectorField("repo", "Default repository", "Format owner/name. Required for fine-grained; optional for classic PAT.", false, true, "owner/repo"),
+                ConnectorField("token", "Fine-grained token", "The token decides which repositories are reachable, so there is no owner/name to fill in.", true, true, "github_pat_..."),
+                ConnectorField("repo", "Default repository", "Optional. owner/name used by actions that do not pass a repo. Needed when the token reaches a repository the token's own account does not own.", false, false, "Ejthetired14/Dunder"),
             ),
             actions = listOf(
-                ConnectorActionDef("get_repo", "Get repository", "Read repository metadata.", false, "{}"),
-                ConnectorActionDef("list_issues", "List issues", "List open or closed issues.", false, "{\"state\": \"open\"}"),
-                ConnectorActionDef("create_issue", "Create issue", "Open a new issue. Requires approval.", true, "{\"title\": \"...\", \"body\": \"...\"}"),
-                ConnectorActionDef("create_repo", "Create repository", "Create a new repository (classic PAT with repo scope only).", true, "{\"name\": \"my-repo\", \"private\": true}"),
+                ConnectorActionDef("whoami", "Who am I", "Check the token and the account it belongs to.", false, "{}"),
+                ConnectorActionDef("list_repos", "List repositories", "List the repositories this token can reach.", false, "{}"),
+                ConnectorActionDef("get_repo", "Get repository", "Read repository metadata. Pass repo as owner/name.", false, "{\"repo\": \"owner/name\"}"),
+                ConnectorActionDef("list_issues", "List issues", "List open or closed issues. repo is optional when the token reaches one repository.", false, "{\"repo\": \"owner/name\", \"state\": \"open\"}"),
+                ConnectorActionDef("create_issue", "Create issue", "Open a new issue. Requires approval.", true, "{\"repo\": \"owner/name\", \"title\": \"...\", \"body\": \"...\"}"),
             ),
-            setupHelp = "For full access (create repos, all orgs): Create a classic PAT at github.com/settings/tokens/new with 'repo' scope. For limited access: Create a fine-grained PAT at github.com/settings/personal-access-tokens/new with selected repos and issues:read/write. Paste token below.",
-            docsUrl = "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens",
+            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (read/write to code, issues, metadata, administration), and paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed. Invisible/control characters are stripped automatically.",
+            docsUrl = "https://docs.github.com/en/rest",
             risk = "high",
             iconKey = "github",
         ),
@@ -275,17 +266,18 @@ object ConnectorCatalog {
             id = "notion",
             name = "Notion",
             category = "Docs",
-            description = "Create pages and query a Notion database.",
+            description = "Search, query and create pages in the Notion workspace.",
             auth = ConnectorAuth.BOT_TOKEN,
             fields = listOf(
                 ConnectorField("token", "Integration token", "An internal integration secret.", true, true, "secret_..."),
-                ConnectorField("databaseId", "Database id", "The destination database id.", false, true, "32-character id"),
+                ConnectorField("databaseId", "Database id (optional)", "Leave blank to work with pages the integration can already see.", false, false, "32-character id"),
             ),
             actions = listOf(
-                ConnectorActionDef("query", "Query database", "Read rows from the database.", false, "{\"page_size\": 5}"),
-                ConnectorActionDef("create_page", "Create page", "Create a page. Requires approval.", true, "{\"title\": \"...\", \"content\": \"...\"}"),
+                ConnectorActionDef("search", "Search workspace", "Find pages and databases shared with the integration.", false, "{}"),
+                ConnectorActionDef("query", "Query database", "Read rows from the configured database, or fall back to search.", false, "{\"page_size\": 5}"),
+                ConnectorActionDef("create_page", "Create page", "Create a page in the database or under a parent page. Requires approval.", true, "{\"title\": \"...\", \"content\": \"...\"}"),
             ),
-            setupHelp = "Create an internal integration at notion.so/my-integrations, share the destination database with it, and paste the integration token plus database id.",
+            setupHelp = "Create an internal integration at notion.so/my-integrations and share the pages or database you want it to touch. The token is enough: a database id is optional and can be set later.",
             docsUrl = "https://developers.notion.com/",
             risk = "high",
             iconKey = "notion",
@@ -308,56 +300,6 @@ object ConnectorCatalog {
             docsUrl = "https://core.telegram.org/bots/api",
             risk = "high",
             iconKey = "telegram",
-        ),
-        ConnectorDef(
-            id = "stripe",
-            name = "Stripe",
-            category = "Payments",
-            description = "Create products, prices, subscriptions, and verify API keys for monetization.",
-            auth = ConnectorAuth.API_KEY,
-            fields = listOf(
-                ConnectorField("secretKey", "Secret Key", "Stripe secret key (sk_live_... or sk_test_...)", true, true, "sk_test_..."),
-                ConnectorField("webhookSecret", "Webhook Secret", "Optional. For verifying webhook events (whsec_...)", false, false, "whsec_..."),
-            ),
-            actions = listOf(
-                ConnectorActionDef("create_product", "Create Product", "Create a Stripe product for your API.", true, "{\"name\": \"My API\", \"description\": \"Access to...\"}"),
-                ConnectorActionDef("create_price", "Create Price", "Create a recurring price for a product.", true, "{\"productId\": \"prod_...\", \"amountCents\": 999, \"currency\": \"usd\", \"interval\": \"month\"}"),
-                ConnectorActionDef("create_customer", "Create Customer", "Create a Stripe customer.", false, "{\"email\": \"user@example.com\", \"name\": \"User\"}"),
-                ConnectorActionDef("create_subscription", "Create Subscription", "Subscribe a customer to a price.", true, "{\"customerId\": \"cus_...\", \"priceId\": \"price_...\"}"),
-                ConnectorActionDef("verify_key", "Verify API Key", "Check if a customer's API key is valid and get their subscription status.", false, "{\"apiKey\": \"sk_...\"}"),
-                ConnectorActionDef("usage_record", "Record Usage", "Report usage for metered billing.", true, "{\"subscriptionItemId\": \"si_...\", \"quantity\": 1}"),
-                ConnectorActionDef("list_products", "List Products", "List your Stripe products.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("get_product", "Get Product", "Retrieve a product by ID.", false, "{\"productId\": \"prod_...\"}"),
-                ConnectorActionDef("list_events", "List Events", "List recent Stripe events (for polling revenue).", false, "{\"type\": \"invoice.payment_succeeded\", \"limit\": 10}"),
-            ),
-            setupHelp = "Get your secret key from dashboard.stripe.com/apikeys. For webhooks, add an endpoint in Stripe dashboard and copy the signing secret. The app will only use the key for API calls you approve.",
-            docsUrl = "https://stripe.com/docs/api",
-            risk = "high",
-            iconKey = "stripe",
-        ),
-        ConnectorDef(
-            id = "cloudflare_workers",
-            name = "Cloudflare Workers",
-            category = "Deploy",
-            description = "Deploy JavaScript/TypeScript code as serverless functions at the edge. Free tier: 100k requests/day.",
-            auth = ConnectorAuth.API_KEY,
-            fields = listOf(
-                ConnectorField("apiToken", "API Token", "Cloudflare API token with Workers Scripts:Edit and Account:Read permissions.", true, true, "..."),
-                ConnectorField("accountId", "Account ID", "Your Cloudflare account ID (from dashboard URL).", true, true, "..."),
-                ConnectorField("zoneId", "Zone ID (optional)", "Zone ID for custom domain. Leave empty for workers.dev subdomain.", false, false, "..."),
-            ),
-            actions = listOf(
-                ConnectorActionDef("deploy", "Deploy Worker", "Deploy a Workers script. Requires approval.", true, "{\"name\": \"my-api\", \"code\": \"export default { async fetch(req) { return new Response('Hello') } }\", \"routes\": []}"),
-                ConnectorActionDef("get_script", "Get Script", "Retrieve deployed script content.", false, "{\"name\": \"my-api\"}"),
-                ConnectorActionDef("delete", "Delete Worker", "Delete a deployed worker. Requires approval.", true, "{\"name\": \"my-api\"}"),
-                ConnectorActionDef("list", "List Workers", "List all deployed workers.", false, "{}"),
-                ConnectorActionDef("tail_logs", "Tail Logs", "Stream live logs from a worker.", false, "{\"name\": \"my-api\"}"),
-                ConnectorActionDef("deploy_webhook_handler", "Deploy Stripe Webhook Handler", "Deploy a pre-built worker to receive Stripe webhooks and forward to app. Requires approval.", true, "{\"name\": \"stripe-webhook\", \"stripeWebhookSecret\": \"whsec_...\", \"appCallbackUrl\": \"http://192.168.1.x:8080/webhook\"}"),
-            ),
-            setupHelp = "Create an API token at dash.cloudflare.com/profile/api-tokens with Workers Scripts:Edit and Account:Read. Copy your Account ID from the dashboard overview page. The app will only deploy code you approve.",
-            docsUrl = "https://developers.cloudflare.com/workers/",
-            risk = "high",
-            iconKey = "cloudflare",
         ),
         ConnectorDef(
             id = "paypal",
@@ -386,23 +328,21 @@ object ConnectorCatalog {
             id = "polar",
             name = "Polar",
             category = "Payments",
-            description = "Sell digital products and subscriptions through Polar.sh — the merchant of record for developers.",
+            description = "Sell digital products and subscriptions through Polar.sh - the merchant of record for developers.",
             auth = ConnectorAuth.API_KEY,
             fields = listOf(
                 ConnectorField("accessToken", "Access Token", "Polar access token from your organization settings.", true, true, "polar_oat_..."),
-                ConnectorField("organizationId", "Organization ID", "Your Polar organization ID.", true, true, "..."),
-                ConnectorField("webhookSecret", "Webhook Secret", "Optional. For verifying webhook events.", false, false, "whsec_..."),
+                ConnectorField("organizationId", "Organization ID", "Your Polar organization ID.", false, false, "..."),
             ),
             actions = listOf(
-                ConnectorActionDef("create_product", "Create Product", "Create a digital product.", true, "{\"name\": \"My Course\", \"description\": \"Learn...\", \"priceAmount\": 2900, \"priceCurrency\": \"USD\", \"isRecurring\": false}"),
-                ConnectorActionDef("create_checkout", "Create Checkout", "Create a checkout session for a product.", true, "{\"productId\": \"...\", \"customerEmail\": \"user@example.com\", \"successUrl\": \"https://yourapp.com/success\"}"),
-                ConnectorActionDef("create_subscription", "Create Subscription", "Create a subscription product.", true, "{\"name\": \"Pro Plan\", \"description\": \"Monthly access\", \"priceAmount\": 1900, \"priceCurrency\": \"USD\", \"interval\": \"month\"}"),
-                ConnectorActionDef("get_customer", "Get Customer", "Retrieve customer by email.", false, "{\"email\": \"user@example.com\"}"),
                 ConnectorActionDef("list_products", "List Products", "List all products.", false, "{\"limit\": 10}"),
+                ConnectorActionDef("create_product", "Create Product", "Create a digital product.", true, "{\"name\": \"My Course\", \"description\": \"Learn...\", \"priceAmount\": 2900, \"priceCurrency\": \"USD\"}"),
+                ConnectorActionDef("create_checkout", "Create Checkout", "Create a checkout session for a product.", true, "{\"productId\": \"...\", \"customerEmail\": \"user@example.com\", \"successUrl\": \"https://yourapp.com/success\"}"),
                 ConnectorActionDef("list_orders", "List Orders", "List recent orders.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("verify_license", "Verify License Key", "Check if a license key is valid.", false, "{\"licenseKey\": \"...\"}"),
+                ConnectorActionDef("get_customer", "Get Customer", "Look up customers by email.", false, "{\"email\": \"user@example.com\"}"),
+                ConnectorActionDef("verify_license", "Verify License Key", "Check whether a license key is valid.", false, "{\"licenseKey\": \"...\"}"),
             ),
-            setupHelp = "Get your access token from Polar dashboard (settings → access tokens). Copy your Organization ID from the URL. Add a webhook endpoint pointing to your app if needed. The app will only make API calls you approve.",
+            setupHelp = "Get an access token from Polar (settings, then access tokens). Paste it below; the organization id is optional but lets the app filter by organization.",
             docsUrl = "https://polar.sh/docs/api",
             risk = "high",
             iconKey = "polar",
@@ -415,41 +355,182 @@ object ConnectorCatalog {
             auth = ConnectorAuth.API_KEY,
             fields = listOf(
                 ConnectorField("apiKey", "API Key", "AgentMail API key from your dashboard.", true, true, "am_sk_..."),
-                ConnectorField("domain", "Domain", "Your verified sending domain (optional, uses shared domain if empty).", false, false, "mail.yourapp.com"),
+                ConnectorField("domain", "Domain", "Your verified sending domain (optional, uses the shared domain when empty).", false, false, "mail.yourapp.com"),
             ),
             actions = listOf(
                 ConnectorActionDef("create_inbox", "Create Inbox", "Create a new email inbox.", true, "{\"username\": \"agent-1\", \"domain\": \"mail.yourapp.com\"}"),
                 ConnectorActionDef("list_inboxes", "List Inboxes", "List all inboxes.", false, "{\"limit\": 10}"),
-                ConnectorActionDef("send_email", "Send Email", "Send an email from an inbox. Requires approval.", true, "{\"from\": \"agent-1@mail.yourapp.com\", \"to\": \"user@example.com\", \"subject\": \"Hello\", \"html\": \"<p>Body</p>\"}"),
-                ConnectorActionDef("get_email", "Get Email", "Retrieve a specific email by ID.", false, "{\"inboxId\": \"...\", \"emailId\": \"...\"}"),
+                ConnectorActionDef("send_email", "Send Email", "Send an email from an inbox. Requires approval.", true, "{\"inboxId\": \"agent-1@mail.yourapp.com\", \"to\": \"user@example.com\", \"subject\": \"Hello\", \"text\": \"Body\"}"),
+                ConnectorActionDef("get_email", "Get Email", "Retrieve a specific email by id.", false, "{\"inboxId\": \"...\", \"emailId\": \"...\"}"),
                 ConnectorActionDef("list_emails", "List Emails", "List emails in an inbox.", false, "{\"inboxId\": \"...\", \"limit\": 10}"),
                 ConnectorActionDef("delete_inbox", "Delete Inbox", "Delete an inbox. Requires approval.", true, "{\"inboxId\": \"...\"}"),
             ),
-            setupHelp = "Sign up at agentmail.to, get your API key from the dashboard. Optionally verify your own domain for sending. The app will only make API calls you approve.",
+            setupHelp = "Sign up at agentmail.to and copy an API key from the dashboard. Optionally verify your own domain for sending.",
             docsUrl = "https://agentmail.to/docs",
             risk = "high",
             iconKey = "agentmail",
         ),
         ConnectorDef(
-            id = "gdrive",
-            name = "Google Drive",
-            category = "Storage",
-            description = "Backup and restore app data to Google Drive. Upload JSON snapshots and download for restore.",
-            auth = ConnectorAuth.OAUTH_TOKEN,
+            id = "supabase",
+            name = "Supabase",
+            category = "Data",
+            description = "Postgres tables and rows through the Supabase REST API.",
+            auth = ConnectorAuth.API_KEY,
             fields = listOf(
-                ConnectorField("accessToken", "OAuth Access Token", "Paste a token with drive.file scope.", true, true, "ya29...."),
-                ConnectorField("folderId", "Folder ID (optional)", "Specific folder ID for backups. Leave empty for app root.", false, false, "1ABC...xyz"),
+                ConnectorField("projectUrl", "Project URL", "https://<project-ref>.supabase.co", false, true, "https://xyz.supabase.co"),
+                ConnectorField("serviceKey", "Service key", "Service role key, or the anon key for read-only use.", true, true, "eyJ..."),
             ),
             actions = listOf(
-                ConnectorActionDef("upload_backup", "Upload Backup", "Upload a JSON backup file to Drive.", true, "{\"fileName\": \"agoria-backup-2026-01-15.json\", \"content\": \"{...}\"}"),
-                ConnectorActionDef("download_backup", "Download Backup", "Download a backup file by name.", false, "{\"fileName\": \"agoria-backup-2026-01-15.json\"}"),
-                ConnectorActionDef("list_backups", "List Backups", "List backup files in the Drive folder.", false, "{\"limit\": 20}"),
-                ConnectorActionDef("delete_backup", "Delete Backup", "Delete a backup file by ID. Requires approval.", true, "{\"fileId\": \"...\"}"),
+                ConnectorActionDef("list_rows", "List rows", "Read rows from a table.", false, "{\"table\": \"notes\", \"limit\": 20}"),
+                ConnectorActionDef("insert", "Insert row", "Insert a row into a table. Requires approval.", true, "{\"table\": \"notes\", \"row\": {\"title\": \"Hi\"}}"),
+                ConnectorActionDef("rpc", "Call function", "Call a Postgres function. Requires approval.", true, "{\"fn\": \"my_function\", \"args\": {}}"),
             ),
-            setupHelp = "Create OAuth token with Google Drive API v3 and scope drive.file in OAuth Playground. Paste the access token below. For a dedicated folder, create a folder in Drive and paste its ID from the URL.",
-            docsUrl = "https://developers.google.com/drive/api",
+            setupHelp = "Project settings, API: copy the project URL and the service role key (or the anon key for reads).",
+            docsUrl = "https://supabase.com/docs/guides/api",
             risk = "high",
-            iconKey = "gdrive",
+            iconKey = "supabase",
+        ),
+        ConnectorDef(
+            id = "resend",
+            name = "Resend",
+            category = "Email",
+            description = "Send transactional email from your own verified domain.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("apiKey", "API key", "A Resend API key with sending permission.", true, true, "re_..."),
+                ConnectorField("from", "From address", "A verified sender, for example Dunder <hi@yourdomain.com>.", false, true, "Dunder <hi@yourdomain.com>"),
+            ),
+            actions = listOf(
+                ConnectorActionDef("send_email", "Send email", "Send an email. Requires approval.", true, "{\"to\": \"user@example.com\", \"subject\": \"Hello\", \"text\": \"Body\"}"),
+                ConnectorActionDef("list_emails", "List emails", "List recently sent emails.", false, "{\"limit\": 10}"),
+                ConnectorActionDef("get_email", "Get email", "Read one email by id.", false, "{\"emailId\": \"...\"}"),
+            ),
+            setupHelp = "Create a key at resend.com/api-keys and verify the sending domain first, otherwise sends are rejected.",
+            docsUrl = "https://resend.com/docs/api-reference",
+            risk = "high",
+            iconKey = "resend",
+        ),
+        ConnectorDef(
+            id = "upstash",
+            name = "Upstash Redis",
+            category = "Data",
+            description = "Serverless Redis for caching, rate limits and short-lived sessions.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("redisUrl", "REST URL", "The https URL from the Upstash Redis REST API section.", false, true, "https://xyz.upstash.io"),
+                ConnectorField("redisToken", "REST token", "The matching REST token.", true, true, "..."),
+            ),
+            actions = listOf(
+                ConnectorActionDef("command", "Run command", "Run any Redis command as an array. Requires approval.", true, "{\"command\": [\"INCR\", \"page:views\"]}"),
+                ConnectorActionDef("get", "Get key", "Read a key.", false, "{\"key\": \"page:views\"}"),
+                ConnectorActionDef("set", "Set key", "Write a key with an optional TTL. Requires approval.", true, "{\"key\": \"page:views\", \"value\": \"1\", \"ttlSeconds\": 60}"),
+                ConnectorActionDef("delete", "Delete key", "Delete a key. Requires approval.", true, "{\"key\": \"page:views\"}"),
+            ),
+            setupHelp = "Open the Upstash console for your database, REST API section, and copy the URL and token.",
+            docsUrl = "https://upstash.com/docs/redis/features/restapi",
+            risk = "high",
+            iconKey = "upstash",
+        ),
+        ConnectorDef(
+            id = "huggingface",
+            name = "Hugging Face",
+            category = "AI",
+            description = "Run open-source models through the Hugging Face inference API.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("hfToken", "Access token", "A Hugging Face token with inference permission.", true, true, "hf_..."),
+            ),
+            actions = listOf(
+                ConnectorActionDef("chat", "Chat", "Chat completion through the router.", false, "{\"model\": \"meta-llama/Llama-3.1-8B-Instruct\", \"prompt\": \"Hi\"}"),
+                ConnectorActionDef("infer", "Run model", "Run a model on a text input.", false, "{\"model\": \"distilbert-base-uncased-finetuned-sst-2-english\", \"inputs\": \"I love this\"}"),
+                ConnectorActionDef("models", "Search models", "Search the public model catalog.", false, "{\"query\": \"summarization\"}"),
+            ),
+            setupHelp = "Create a read token at huggingface.co/settings/tokens. Some models take a while to warm up; a 503 means retry shortly.",
+            docsUrl = "https://huggingface.co/docs/api-inference",
+            risk = "low",
+            iconKey = "huggingface",
+        ),
+        ConnectorDef(
+            id = "vercel",
+            name = "Vercel",
+            category = "Deploy",
+            description = "Read projects and deployments from your Vercel account.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("vercelToken", "Access token", "A Vercel access token from account settings.", true, true, "..."),
+            ),
+            actions = listOf(
+                ConnectorActionDef("list_projects", "List projects", "List projects in the account.", false, "{\"limit\": 10}"),
+                ConnectorActionDef("list_deployments", "List deployments", "List recent deployments.", false, "{\"limit\": 10}"),
+                ConnectorActionDef("get_deployment", "Get deployment", "Read one deployment by id.", false, "{\"deploymentId\": \"dpl_...\"}"),
+            ),
+            setupHelp = "Create a token at vercel.com/account/tokens. Reads only in this build.",
+            docsUrl = "https://vercel.com/docs/rest-api",
+            risk = "medium",
+            iconKey = "vercel",
+        ),
+        ConnectorDef(
+            id = "netlify",
+            name = "Netlify",
+            category = "Deploy",
+            description = "Read sites and deploys from your Netlify account.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("netlifyToken", "Personal access token", "A Netlify personal access token.", true, true, "..."),
+            ),
+            actions = listOf(
+                ConnectorActionDef("list_sites", "List sites", "List sites on the account.", false, "{}"),
+                ConnectorActionDef("list_deploys", "List deploys", "List recent deploys for a site.", false, "{\"siteId\": \"...\"}"),
+                ConnectorActionDef("get_site", "Get site", "Read one site by id or name.", false, "{\"siteId\": \"...\"}"),
+            ),
+            setupHelp = "Create a token at app.netlify.com/user/applications, personal access tokens.",
+            docsUrl = "https://docs.netlify.com/api/get-started/",
+            risk = "medium",
+            iconKey = "netlify",
+        ),
+        ConnectorDef(
+            id = "linear",
+            name = "Linear",
+            category = "Tasks",
+            description = "Track issues and projects through the Linear GraphQL API.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("linearKey", "API key", "A Linear personal API key.", true, true, "lin_api_..."),
+            ),
+            actions = listOf(
+                ConnectorActionDef("list_issues", "List issues", "List issues, newest first.", false, "{\"limit\": 10}"),
+                ConnectorActionDef("create_issue", "Create issue", "Create an issue. Requires approval.", true, "{\"title\": \"...\", \"teamId\": \"...\", \"description\": \"...\"}"),
+                ConnectorActionDef("list_teams", "List teams", "List teams.", false, "{}"),
+            ),
+            setupHelp = "Create a personal API key in Linear settings, API, personal API keys.",
+            docsUrl = "https://developers.linear.app/docs/graphql/working-with-the-graphql-api",
+            risk = "high",
+            iconKey = "linear",
+        ),
+        ConnectorDef(
+            id = "cloudflare_workers",
+            name = "Cloudflare Workers",
+            category = "Deploy",
+            description = "Deploy JavaScript/TypeScript code as serverless functions at the edge. Free tier: 100k requests/day.",
+            auth = ConnectorAuth.API_KEY,
+            fields = listOf(
+                ConnectorField("apiToken", "API Token", "Cloudflare API token with Workers Scripts:Edit and Account:Read permissions.", true, true, "..."),
+                ConnectorField("accountId", "Account ID", "Your Cloudflare account ID (from dashboard URL).", true, true, "..."),
+                ConnectorField("zoneId", "Zone ID (optional)", "Zone ID for custom domain. Leave empty for workers.dev subdomain.", false, false, "..."),
+                ConnectorField("contentType", "Script content type", "application/javascript (default) or text/javascript.", false, false, "application/javascript"),
+            ),
+            actions = listOf(
+                ConnectorActionDef("deploy", "Deploy Worker", "Deploy a Workers script. Requires approval.", true, "{\"name\": \"my-api\", \"code\": \"export default { async fetch(req) { return new Response('Hello') } }\", \"routes\": []}"),
+                ConnectorActionDef("get_script", "Get Script", "Retrieve deployed script content.", false, "{\"name\": \"my-api\"}"),
+                ConnectorActionDef("delete", "Delete Worker", "Delete a deployed worker. Requires approval.", true, "{\"name\": \"my-api\"}"),
+                ConnectorActionDef("list", "List Workers", "List all deployed workers.", false, "{}"),
+                ConnectorActionDef("tail_logs", "Tail Logs", "Stream live logs from a worker.", false, "{\"name\": \"my-api\"}"),
+                ConnectorActionDef("deploy_webhook_handler", "Deploy Stripe Webhook Handler", "Deploy a pre-built worker to receive Stripe webhooks and forward to app. Requires approval.", true, "{\"name\": \"stripe-webhook\", \"stripeWebhookSecret\": \"whsec_...\", \"appCallbackUrl\": \"http://192.168.1.x:8080/webhook\"}"),
+            ),
+            setupHelp = "Create an API token at dash.cloudflare.com/profile/api-tokens with Workers Scripts:Edit and Account:Read. Copy your Account ID from the dashboard overview page. The app will only deploy code you approve.",
+            docsUrl = "https://developers.cloudflare.com/workers/",
+            risk = "high",
+            iconKey = "cloudflare",
         ),
     )
 
@@ -457,12 +538,14 @@ object ConnectorCatalog {
 
     fun get(id: String): ConnectorDef? = byId[id]
 
-    fun defaultStatus(def: ConnectorDef): String =
-        if (def.fields.any { it.required } || def.auth != ConnectorAuth.NONE) "needs_setup" else "ready"
+    fun defaultStatus(def: ConnectorDef): String = when {
+        def.auth == ConnectorAuth.ACCOUNT -> "ready"
+        def.fields.any { it.required } || def.auth != ConnectorAuth.NONE -> "needs_setup"
+        else -> "ready"
+    }
 
     fun defaultScopes(def: ConnectorDef): String = when (def.id) {
-        "gmail" -> "gmail.readonly, gmail.send"
-        "calendar" -> "calendar.readonly, calendar.events"
+        "accounts" -> "in-app browser session only"
         "github" -> "repo, issues"
         "notion" -> "pages, databases"
         else -> def.fields.filter { it.required }.joinToString(", ") { it.key }
@@ -475,6 +558,7 @@ object ConnectorCatalog {
         return when (connectorId) {
             "wikipedia", "hn", "search", "weather", "currency" -> true
             "device" -> true
+            "accounts" -> action == "list"
             "files" -> action == "list" || action == "read"
             else -> false
         }

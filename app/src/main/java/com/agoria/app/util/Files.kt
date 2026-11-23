@@ -20,6 +20,22 @@ object Files {
         return dir
     }
 
+    /** Shared project folder. Every build of the office lands here, not in a per-agent folder. */
+    fun projectWorkspace(context: Context, folder: String): File {
+        val dir = File(workspace(context), "projects/${safeName(folder)}")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun projectFiles(root: File): List<File> =
+        root.walkTopDown()
+            .filter { it.isFile }
+            .sortedBy { it.relativeTo(root).path }
+            .toList()
+
+    fun relativePath(root: File, file: File): String =
+        file.relativeTo(root).path.replace('\\', '/')
+
     fun exports(context: Context): File {
         val base = context.getExternalFilesDir(null) ?: context.filesDir
         val dir = File(base, "exports")

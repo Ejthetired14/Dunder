@@ -20,21 +20,47 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,9 +71,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
@@ -58,23 +88,17 @@ import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.TaskEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.AgentScreenState
+import com.agoria.app.ui.PaginationState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import java.io.File
-import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.ui.office.world.PixelButton
-import com.agoria.app.ui.office.world.PixelCard
-import com.agoria.app.ui.office.world.PixelLabel
-import com.agoria.app.ui.office.world.PixelPanel
-import com.agoria.app.ui.office.world.PixelSwitch
-import com.agoria.app.ui.office.world.PixelTextField
-import com.agoria.app.ui.office.world.PixelPill
-import com.agoria.app.ui.components.PixelScaffold
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentScreen(
     viewModel: AgoriaViewModel,
@@ -87,16 +111,20 @@ fun AgentScreen(
 
     PixelScaffold(
         title = agent?.name ?: "Agent",
+        subtitle = agent?.role,
         onBack = onBack,
         actions = {
             if (agent != null) {
-                PixelIconButton(
-                    icon = if (agent.autonomy) Pause else PlayArrow,
-                    description = if (agent.autonomy) "Pause" else "Resume",
+                IconButton(
                     onClick = {
                         if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
                     },
-                )
+                ) {
+                    Icon(
+                        imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (agent.autonomy) "Pause" else "Resume",
+                    )
+                }
             }
         },
     ) { padding ->
@@ -111,7 +139,7 @@ fun AgentScreen(
             AgentContent(
                 viewModel = viewModel,
                 agent = agent,
-                onShareBuild = { build -> Share.shareZip(context, File(build.zipPath)) },
+                onBack = onBack,
             )
         }
     }
@@ -121,13 +149,13 @@ fun AgentScreen(
 private fun AgentContent(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
-    onShareBuild: (BuildEntity) -> Unit,
+    onBack: () -> Unit,
 ) {
     val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
         AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
     ).value
 
-    val messages = state.messages
+    val newestMessageId = state.messages.lastOrNull()?.id
     val diary = state.diary
     val tasks = state.tasks
     val builds = state.builds
@@ -140,12 +168,6 @@ private fun AgentContent(
     var showDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.scrollToItem(0)
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -157,97 +179,21 @@ private fun AgentContent(
                 if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
             },
             onEdit = { showEdit = true },
+            onDelete = { showDelete = true },
         )
 
-        // Custom tab row with PixelPill
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PixelPill(
-                text = "Chat",
-                modifier = Modifier.weight(1f),
-                fill = if (tab == 0) Pal.amber else Pal.cream,
-                textColor = Pal.ink,
-            ).also { modifier ->
-                Box(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .clickable { tab = 0 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("CHAT", style = PixelLabel.copy(fontSize = 10.sp))
-                }
-            }
-            PixelPill(
-                text = "Diary",
-                modifier = Modifier.weight(1f),
-                fill = if (tab == 1) Pal.amber else Pal.cream,
-                textColor = Pal.ink,
-            ).also { modifier ->
-                Box(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .clickable { tab = 1 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("DIARY", style = PixelLabel.copy(fontSize = 10.sp))
-                }
-            }
-            PixelPill(
-                text = "Tasks",
-                modifier = Modifier.weight(1f),
-                fill = if (tab == 2) Pal.amber else Pal.cream,
-                textColor = Pal.ink,
-            ).also { modifier ->
-                Box(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .clickable { tab = 2 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("TASKS", style = PixelLabel.copy(fontSize = 10.sp))
-                }
-            }
-            PixelPill(
-                text = "Memory",
-                modifier = Modifier.weight(1f),
-                fill = if (tab == 3) Pal.amber else Pal.cream,
-                textColor = Pal.ink,
-            ).also { modifier ->
-                Box(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .clickable { tab = 3 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("MEMORY", style = PixelLabel.copy(fontSize = 10.sp))
-                }
-            }
-            PixelPill(
-                text = "Builds",
-                modifier = Modifier.weight(1f),
-                fill = if (tab == 4) Pal.amber else Pal.cream,
-                textColor = Pal.ink,
-            ).also { modifier ->
-                Box(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .clickable { tab = 4 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("BUILDS", style = PixelLabel.copy(fontSize = 10.sp))
-                }
-            }
+        TabRow(selectedTabIndex = tab) {
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Chat") })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Diary") })
+            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Tasks") })
+            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Memory") })
         }
 
         when (tab) {
             0 -> ChatTab(
                 viewModel = viewModel,
                 agent = agent,
-                messages = messages,
+                newestMessageId = newestMessageId,
                 input = input,
                 onInput = { input = it },
                 onSend = {
@@ -258,10 +204,9 @@ private fun AgentContent(
                 },
                 listState = listState,
             )
-            1 -> DiaryTab(diary = diary)
+            1 -> DiaryTab(viewModel = viewModel, agentId = agent.id, diary = diary)
             2 -> TasksTab(tasks = tasks)
-            3 -> MemoryTab(memories = memories, onAdd = { showMemory = true })
-            else -> BuildsTab(viewModel = viewModel, agentId = agent.id, onShare = onShareBuild)
+            else -> MemoryTab(memories = memories, onAdd = { showMemory = true })
         }
     }
 
@@ -276,6 +221,7 @@ private fun AgentContent(
             onDelete = {
                 viewModel.deleteAgent(agent.id)
                 showEdit = false
+                onBack()
             },
         )
     }
@@ -291,13 +237,18 @@ private fun AgentContent(
     }
 
     if (showDelete) {
-        DeleteAgentDialog(
-            agent = agent,
-            onDismiss = { showDelete = false },
-            onDelete = {
-                viewModel.deleteAgent(agent.id)
-                showDelete = false
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("Delete this agent?") },
+            text = { Text("This removes the agent, its diary, messages, tasks, and builds from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAgent(agent.id)
+                    showDelete = false
+                    onBack()
+                }) { Text("Delete") }
             },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancel") } },
         )
     }
 }
@@ -307,8 +258,12 @@ private fun AgentHeader(
     agent: AgentEntity,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    PixelCard(modifier = Modifier.fillMaxWidth(), fill = Pal.navy) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(agent, 54.dp)
@@ -325,7 +280,33 @@ private fun AgentHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                PixelButton("EDIT", onEdit, fill = Pal.cream, small = true)
+                var menu by remember { mutableStateOf(false) }
+                TextButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    Spacer(Modifier.width(6.dp))
+                    Text("Edit")
+                }
+                Box {
+                    IconButton(onClick = { menu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Edit agent") },
+                            onClick = {
+                                menu = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete agent") },
+                            onClick = {
+                                menu = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
             Text(
@@ -335,7 +316,7 @@ private fun AgentHeader(
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PixelSwitch(checked = agent.autonomy, onChange = { onToggle() })
+                Switch(checked = agent.autonomy, onCheckedChange = { onToggle() })
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = if (agent.autonomy) "Autonomy on" else "Autonomy paused",
@@ -350,21 +331,38 @@ private fun AgentHeader(
 private fun ChatTab(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
-    messages: List<MessageEntity>,
+    newestMessageId: String?,
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
+    val agentId = agent.id
+    // Both of these are observed state now. Reading a snapshot once per composition meant new
+    // messages never appeared until the screen was reopened.
+    val pagedMessagesByAgent by viewModel.pagedMessagesByAgent.collectAsStateWithLifecycle()
+    val pagedMessages = pagedMessagesByAgent[agentId].orEmpty()
+    val paginationByAgent by viewModel.messagesPaginationByAgent.collectAsStateWithLifecycle()
+    val messagesPagination = paginationByAgent[agentId] ?: PaginationState()
+
+    // Load the newest page on entry and again whenever a message is added, then stay on the tail.
+    LaunchedEffect(newestMessageId) {
+        viewModel.loadPagedMessages(agentId, refresh = true)
+        if (newestMessageId != null) {
+            listState.scrollToItem(0)
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            // Newest first in a reversed list: index 0 sits at the bottom, next to the composer.
             reverseLayout = true,
         ) {
-            if (messages.isEmpty()) {
+            if (pagedMessages.isEmpty() && !messagesPagination.isLoading) {
                 item {
                     EmptyState(
                         title = "Say hello",
@@ -372,116 +370,149 @@ private fun ChatTab(
                     )
                 }
             } else {
-                items(messages.reversed(), key = { it.id }) { message ->
+                items(pagedMessages, key = { it.id }) { message ->
                     MessageRow(message = message, agent = agent)
                 }
             }
             if (agent.status == "thinking") {
                 item {
-                    PixelPanel(
-                        modifier = Modifier.fillMaxWidth(),
-                        fill = Pal.tan.copy(alpha = 0.3f),
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
                     ) {
                         Text(
                             text = "${agent.name} is thinking...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pal.ink,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(12.dp),
                         )
                     }
                 }
             }
+
+            // Older messages live above the newest ones, so this control sits at the top.
+            if (messagesPagination.hasMore) {
+                item {
+                    if (messagesPagination.isLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { viewModel.loadPagedMessages(agentId) },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        ) {
+                            Text("Load older messages")
+                        }
+                    }
+                }
+            }
         }
 
-        PixelPanel(modifier = Modifier.fillMaxWidth(), fill = Pal.cream) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 4.dp,
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                PixelTextField(
+                OutlinedTextField(
                     value = input,
                     onValueChange = onInput,
-                    modifier = Modifier.weight(1f),
-                    label = "Message ${agent.name}...",
-                    singleLine = false,
+                    label = { Text("Message") },
+                    placeholder = { Text("Ask ${agent.name}...") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    keyboardActions = KeyboardActions(onDone = { onSend() }),
                 )
                 Spacer(Modifier.width(8.dp))
-                PixelIconButton(
-                    icon = Send,
-                    description = "Send",
-                    onClick = onSend,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
+                IconButton(onClick = onSend, enabled = input.isNotBlank()) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
-    val context = LocalContext.current
-    val copyToClipboard = { text: String ->
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.primaryClip = ClipData.newPlainText("Agent Message", text)
+private fun CopyMessageButton(text: String) {
+    val clipboard = LocalClipboardManager.current
+    IconButton(
+        onClick = { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) },
+        modifier = Modifier.size(28.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.ContentCopy,
+            contentDescription = "Copy message",
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(15.dp),
+        )
     }
+}
 
+@Composable
+private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
     when (message.role) {
         "user" -> {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                PixelPanel(
-                    modifier = Modifier.widthIn(max = 280.dp),
-                    fill = Pal.amber,
+                Surface(
+                    shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+                    color = MaterialTheme.colorScheme.primary,
                 ) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Pal.ink,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
         }
         "agent" -> {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.Start,
             ) {
-                AgentAvatar(agent, 30.dp, showStatus = false)
-                Spacer(Modifier.width(8.dp))
-                PixelPanel(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .combinedClickable(
-                            onLongClick = { copyToClipboard(message.content) },
-                            onClick = {}
-                        ),
-                    fill = Pal.cream,
+                Surface(
+                    shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(
-                                text = message.content,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            PixelIconButton(
-                                icon = ContentCopy,
-                                description = "Copy message",
-                                onClick = { copyToClipboard(message.content) },
-                            )
+                            AgentAvatar(agent, 32.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = message.content,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                CopyMessageButton(message.content)
+                            }
                         }
-                        Text(
-                            text = Time.clock(message.createdAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
                     }
                 }
             }
@@ -492,147 +523,30 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                     text = message.content,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp, vertical = 4.dp)
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onLongClick = { copyToClipboard(message.content) },
-                            onClick = {}
-                        ),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
         }
         "tool" -> {
-            PixelPanel(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onLongClick = { copyToClipboard(message.content) },
-                        onClick = {}
-                    ),
-                fill = Pal.tan.copy(alpha = 0.3f),
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top,
                     ) {
-                        Text(
-                            text = "CONNECTOR RESULT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Pal.ink,
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Tool",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        PixelIconButton(
-                            icon = ContentCopy,
-                            description = "Copy result",
-                            onClick = { copyToClipboard(message.content) },
-                        )
-                    }
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = Pal.ink,
-                    )
-                }
-            }
-        }
-        else -> {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onLongClick = { copyToClipboard(message.content) },
-                        onClick = {}
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiaryTab(diary: List<DiaryEntryEntity>) {
-    if (diary.isEmpty()) {
-        EmptyState(
-            title = "No diary yet",
-            body = "Start autonomy or send a message. Every cycle produces a private thought here.",
-        )
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(diary, key = { it.id }) { entry ->
-                PixelCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            PixelPill(text = entry.kind)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = Time.dateTime(entry.createdAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(entry.content, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "★".repeat(entry.importance.coerceIn(1, 5)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TasksTab(tasks: List<TaskEntity>) {
-    if (tasks.isEmpty()) {
-        EmptyState(
-            title = "No tasks yet",
-            body = "Agents can create tasks when they want to track a plan. They will show up here.",
-        )
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(tasks, key = { it.id }) { task ->
-                PixelCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(task.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            PixelPill(text = task.status)
-                        }
-                        if (task.description.isNotBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = task.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        // Use a simple pixel progress bar
-                        PixelProgressBar(progress = task.progress.coerceIn(0, 100) / 100f)
-                        Text(
-                            text = "${task.progress}% · updated ${Time.relativeTime(task.updatedAt)}",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = message.content,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -643,221 +557,74 @@ private fun TasksTab(tasks: List<TaskEntity>) {
 }
 
 @Composable
-private fun PixelProgressBar(progress: Float) {
-    PixelPanel(modifier = Modifier.fillMaxWidth().height(8.dp), fill = Pal.navy.copy(alpha = 0.2f)) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(fraction = progress)
-                .background(Pal.amber)
-        )
+private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<DiaryEntryEntity>) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (diary.isEmpty()) {
+            EmptyState(
+                title = "Diary is empty",
+                body = "${viewModel.agents.collectAsStateWithLifecycle().value.firstOrNull { it.id == agentId }?.name ?: "Agent"} hasn't written anything yet.",
+            )
+        } else {
+            diary.forEach { entry ->
+                DiaryEntryCard(entry)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TasksTab(tasks: List<TaskEntity>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (tasks.isEmpty()) {
+            EmptyState(
+                title = "No tasks",
+                body = "Tasks created by agents will appear here.",
+            )
+        } else {
+            tasks.forEach { task ->
+                TaskCard(task)
+            }
+        }
     }
 }
 
 @Composable
 private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Memories", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onAdd) {
+                Text("Add")
+            }
+        }
         if (memories.isEmpty()) {
             EmptyState(
-                title = "No long-term memory",
-                body = "Agents store facts, values, and plans here. Add one yourself if you want them to remember something.",
+                title = "No memories",
+                body = "Memories help agents remember important facts across conversations.",
             )
         } else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(16.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(memories, key = { it.id }) { memory ->
-                        PixelCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    PixelPill(text = memory.kind)
-                                    Spacer(Modifier.weight(1f))
-                                    Text(
-                                        text = Time.relativeTime(memory.createdAt),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Text(memory.content, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                }
-                PixelPanel(fill = Pal.cream) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        PixelButton("ADD MEMORY", onAdd)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BuildsTab(
-    viewModel: AgoriaViewModel,
-    agentId: String,
-    onShare: (BuildEntity) -> Unit,
-) {
-    val context = LocalContext.current
-    val buildProgress by viewModel.buildProgress.collectAsStateWithLifecycle()
-    val pagedBuilds by viewModel.pagedBuilds.collectAsStateWithLifecycle()
-    val buildsPagination by viewModel.buildsPagination.collectAsStateWithLifecycle()
-    var savingBuildId by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadPagedBuilds(agentId, refresh = true)
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        buildProgress?.let { progress ->
-            when (progress) {
-                is BuildProgress.Started -> ProgressBanner(message = "Starting build...")
-                is BuildProgress.GeneratingFiles -> ProgressBanner(message = "Generating project files...")
-                is BuildProgress.WritingFiles -> ProgressBanner(
-                    message = "Writing files (${progress.written}/${progress.total})",
-                    progress = progress.written / progress.total.toFloat()
-                )
-                is BuildProgress.Zipping -> ProgressBanner(message = "Creating ZIP archive...")
-                is BuildProgress.Completed -> ProgressBanner(
-                    message = "Build complete: ${progress.build.name}",
-                    progress = 1f,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                is BuildProgress.Failed -> ProgressBanner(
-                    message = "Build failed: ${progress.error}",
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-
-        if (pagedBuilds.isEmpty() && !buildsPagination.isLoading) {
-            EmptyState(
-                title = "No builds yet",
-                body = "When an agent proposes a build and you approve it, the generated project appears here as a downloadable ZIP.",
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(16.dp),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(pagedBuilds, key = { it.id }) { build ->
-                    PixelCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(build.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                PixelPill(text = "${build.fileCount} files")
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = build.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "Built ${Time.dateTime(build.createdAt)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PixelButton("SHARE ZIP", { onShare(build) }, small = true)
-                                PixelButton(
-                                    text = if (savingBuildId == build.id) "SAVING..." else "SAVE TO DEVICE",
-                                    onClick = {
-                                        savingBuildId = build.id
-                                        viewModel.saveBuildToDownloads(context, build) { uri ->
-                                            savingBuildId = null
-                                        }
-                                    },
-                                    enabled = savingBuildId != build.id,
-                                    fill = Pal.cream,
-                                    small = true,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (buildsPagination.hasMore) {
-                    item {
-                        if (buildsPagination.isLoading) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                            ) {
-                                androidx.compose.material3.CircularProgressIndicator(
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
-                        } else {
-                            PixelButton("LOAD MORE", { viewModel.loadPagedBuilds(agentId) }, fill = Pal.cream, small = true)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProgressBanner(
-    message: String,
-    progress: Float = -1f,
-    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
-) {
-    PixelPanel(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-            .animateContentSize(),
-        fill = color.copy(alpha = 0.1f),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (progress >= 0f) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        progress = progress,
-                        color = color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                } else {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        color = color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                }
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = color,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            if (progress >= 0f && progress < 1f) {
-                Spacer(Modifier.height(8.dp))
-                PixelProgressBar(progress = progress)
+            memories.forEach { memory ->
+                MemoryCard(memory)
             }
         }
     }
@@ -874,169 +641,213 @@ private fun EditAgentDialog(
     var role by remember { mutableStateOf(agent.role) }
     var persona by remember { mutableStateOf(agent.persona) }
     var goal by remember { mutableStateOf(agent.goal) }
-    var confirmDelete by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        PixelPanel(modifier = Modifier.fillMaxWidth()) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Agent") },
+        text = {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("EDIT ${agent.name.uppercase()}", style = PixelLabel)
-                PixelTextField(
+                OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    label = "Name",
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = role,
                     onValueChange = { role = it },
+                    label = { Text("Role") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    label = "Role",
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = persona,
                     onValueChange = { persona = it },
+                    label = { Text("Persona") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    label = "Persona",
-                    singleLine = false,
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = goal,
                     onValueChange = { goal = it },
+                    label = { Text("Goal") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    label = "Goal",
-                    singleLine = false,
                 )
-                PixelButton(
-                    text = if (confirmDelete) "TAP AGAIN TO DELETE" else "DELETE AGENT",
-                    onClick = { confirmDelete = !confirmDelete },
-                    fill = Pal.cream,
-                )
-                if (confirmDelete) {
-                    Text(
-                        text = "This permanently removes the agent and all of its data on this device.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Pal.red,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton(
-                        text = if (confirmDelete) "DELETE" else "SAVE",
-                        onClick = {
-                            if (confirmDelete) {
-                                onDelete()
-                            } else {
-                                onSave(
-                                    agent.copy(
-                                        name = name.trim().ifBlank { agent.name },
-                                        role = role.trim().ifBlank { agent.role },
-                                        persona = persona.ifBlank { agent.persona },
-                                        goal = goal.ifBlank { agent.goal },
-                                    ),
-                                )
-                            }
-                        },
-                    )
-                    PixelButton("CANCEL", onDismiss, fill = Pal.cream)
-                }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(agent.copy(name = name, role = role, persona = persona, goal = goal))
+                },
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
 private fun AddMemoryDialog(
     onDismiss: () -> Unit,
-    onAdd: (kind: String, content: String, importance: Int) -> Unit,
+    onAdd: (String, String, Int) -> Unit,
 ) {
     var kind by remember { mutableStateOf("fact") }
     var content by remember { mutableStateOf("") }
     var importance by remember { mutableStateOf(3f) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        PixelPanel(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("ADD A MEMORY", style = PixelLabel)
-                PixelTextField(
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add a memory") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
                     value = kind,
                     onValueChange = { kind = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Kind (fact, value, plan...)",
+                    label = { Text("Kind (fact, value, plan...)") },
+                    singleLine = true,
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "What should the agent remember?",
-                    singleLine = false,
+                    label = { Text("What should the agent remember?") },
+                    minLines = 3,
                 )
-                Text("Importance: ${importance.toInt()}", style = PixelLabel)
+                Text("Importance: ${importance.toInt()}")
                 androidx.compose.material3.Slider(
                     value = importance,
                     onValueChange = { importance = it },
                     valueRange = 1f..5f,
                     steps = 3,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton("ADD", { if (content.isNotBlank()) onAdd(kind, content, importance.toInt()) })
-                    PixelButton("CANCEL", onDismiss, fill = Pal.cream)
-                }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (content.isNotBlank()) onAdd(kind, content, importance.toInt())
+                },
+            ) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
-private fun DeleteAgentDialog(
-    agent: AgentEntity,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        PixelPanel(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("DELETE ${agent.name.uppercase()}?", style = PixelLabel)
-                Text(
-                    text = "This removes the agent, its diary, messages, tasks, and builds from this device.",
-                    style = PixelLabel.copy(fontSize = 12.sp),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton("DELETE", onDelete, fill = Pal.red)
-                    PixelButton("CANCEL", onDismiss, fill = Pal.cream)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PixelIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    description: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .size(44.dp)
-            .background(Pal.cream)
-            .border(2.dp, Pal.ink)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+private fun DiaryEntryCard(entry: DiaryEntryEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
     ) {
-        androidx.compose.material3.Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = Pal.ink,
-            modifier = Modifier.size(22.dp),
-        )
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = entry.kind.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = Time.relativeTime(entry.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = entry.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskCard(task: TaskEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = Time.relativeTime(task.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (task.description.isNotBlank()) {
+                Text(
+                    text = task.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                StatusPill(task.status)
+                Text(
+                    text = "${task.progress}% complete",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryCard(memory: MemoryEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = memory.kind.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Importance: ${memory.importance}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = memory.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

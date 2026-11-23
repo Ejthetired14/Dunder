@@ -121,7 +121,7 @@ class AgentRuntime(
 
     suspend fun approve(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
-        if (approval.status != "pending") return
+        if (approval.status != "pending" && approval.status != "auto_pending") return
         val now = Time.now()
         val decided = approval.copy(
             status = "approved",
@@ -138,7 +138,7 @@ class AgentRuntime(
 
     suspend fun deny(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
-        if (approval.status != "pending") return
+        if (approval.status != "pending" && approval.status != "auto_pending") return
         val now = Time.now()
         val decided = approval.copy(
             status = "denied",
@@ -260,12 +260,18 @@ class AgentRuntime(
         val settings = repo.settings()
         if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
 
-        val autoApproveTypes = settings.autoApproveTypes.split(",").map { it.trim() }.toSet()
+        val autoApproveTypes = settings.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val autoPending = repo.approvals.first()
-            .filter { it.status == "auto_pending" && it.type in autoApproveTypes }
+            .filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
 
         autoPending.forEach { approval ->
-            executeApproval(approval)
+            val decided = approval.copy(
+                status = "approved",
+                decidedAt = Time.now(),
+                result = "Auto-approved",
+            )
+            repo.updateApproval(decided)
+            executeApproval(decided)
         }
     }
 
@@ -360,9 +366,10 @@ class AgentRuntime(
         }
 
         var nextStatus = "idle"
+        val cycleStart = Time.now()
 
         when (action) {
-            "none", "think" -> {
+            "none", "think", "ask_user" -> {
                 // A cycle can be just a thought.
             }
 
@@ -402,10 +409,25 @@ class AgentRuntime(
                 }
             }
 
+            "say" -> {
+                val toName = Json.string(input, "to", Json.string(input, "agent"))
+                val text = Json.string(input, "text", Json.string(input, "message")).trim()
+                val peer = repo.allAgents().firstOrNull {
+                    it.id != agentId && it.name.equals(toName.trim(), ignoreCase = true)
+                }
+                if (peer == null || text.isBlank()) {
+                    log("${agent.name} tried to talk to someone who is not in the office.", "error")
+                } else {
+                    repo.addDiary(agentId, "say", AgentPolicy.sayLine(peer.name, text), 2)
+                    log("${agent.name} said something to ${peer.name}.")
+                }
+            }
+
             "request_connector" -> {
                 val draft = AgentPolicy.connectorRequestFor(processed)
                 if (draft != null) {
-                    repo.addConnectorRequest(agentId, draft.connectorId, draft.reason, draft.scopes)
+                    val request = repo.addConnectorRequest(agentId, draft.connectorId, draft.reason, draft.scopes)
+                    // Connector requests don't have auto-approve, always waiting_approval
                     nextStatus = "waiting_approval"
                     log("${agent.name} requested connector ${draft.connectorId}.")
                 } else {
@@ -434,7 +456,7 @@ class AgentRuntime(
                     log("${agent.name} used $connectorId.$actionName")
                 } else {
                     val def = ConnectorCatalog.get(connectorId)
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to use ${def?.name ?: connectorId}",
@@ -442,14 +464,14 @@ class AgentRuntime(
                         details = input.toString(2),
                         risk = def?.risk ?: "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                     log("${agent.name} requested approval for $connectorId.$actionName.")
                 }
             }
 
             "request_approval" -> {
                 val draft = AgentPolicy.approvalFor(processed, agent.name)
-                repo.addApproval(
+                val approval = repo.addApproval(
                     agentId = agentId,
                     type = draft.type,
                     title = draft.title,
@@ -457,13 +479,15 @@ class AgentRuntime(
                     details = draft.details,
                     risk = draft.risk,
                 )
-                nextStatus = "waiting_approval"
+                nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 log("${agent.name} requested approval: ${draft.title}")
-                Notifier.notifyApproval(
-                    context,
-                    "Approval needed: ${draft.title}",
-                    "${agent.name}: ${draft.summary}",
-                )
+                if (approval.status != "auto_pending") {
+                    Notifier.notifyApproval(
+                        context,
+                        "Approval needed: ${draft.title}",
+                        "${agent.name}: ${draft.summary}",
+                    )
+                }
             }
 
             "record_revenue" -> {
@@ -498,7 +522,7 @@ class AgentRuntime(
                     repo.addMessage(agentId, "tool", summary)
                 } else {
                     val def = ConnectorCatalog.get("cloudflare_workers")
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to deploy service '$name'",
@@ -506,7 +530,7 @@ class AgentRuntime(
                         details = JSONObject().put("name", name).put("code", code.take(2000)).put("routes", routes).toString(2),
                         risk = "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 }
             }
 
@@ -537,7 +561,7 @@ class AgentRuntime(
                     }
                 } else {
                     val def = ConnectorCatalog.get("stripe")
-                    repo.addApproval(
+                    val approval = repo.addApproval(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to create Stripe product '$productName'",
@@ -545,7 +569,7 @@ class AgentRuntime(
                         details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
                         risk = "high",
                     )
-                    nextStatus = "waiting_approval"
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                 }
             }
 
@@ -624,6 +648,22 @@ class AgentRuntime(
             }
         }
 
+        // Anything the policy auto-approved is run now, in this cycle. It is never left as a
+        // question the user has to answer a second time.
+        repo.approvalsFor(agentId).first()
+            .filter { it.status == "auto_pending" && it.createdAt >= cycleStart }
+            .forEach { auto ->
+                val decided = auto.copy(
+                    status = "approved",
+                    decidedAt = Time.now(),
+                    result = "Auto-approved",
+                )
+                repo.updateApproval(decided)
+                executeApproval(decided)
+                nextStatus = "idle"
+                log("Auto-approved: ${auto.title}")
+            }
+
         val summary = processed.message.ifBlank { processed.diary }
         _state.update {
             it.copy(
@@ -670,12 +710,20 @@ class AgentRuntime(
 
         val outcome = when (approval.type) {
             "build_project" -> {
-                val details = Json.tryObject(approval.details) ?: JSONObject()
-                val build = buildRunner.build(agent, approval)
-                if (build != null) {
-                    "Build complete: ${build.name} (${build.fileCount} files)"
+                // The shared project folder has one owner. Other agents can still plan, write tasks
+                // and report progress; only the lead agent writes into the project.
+                val project = repo.ensureProject()
+                val lead = project.leadAgentId
+                if (lead.isNotBlank() && lead != agent.id) {
+                    val leadName = repo.agent(lead)?.name ?: "the lead agent"
+                    "Build skipped: only $leadName can build in ${project.name}. Ask $leadName to run it."
                 } else {
-                    "Build failed: no files were generated."
+                    val build = buildRunner.build(agent, approval)
+                    if (build != null) {
+                        "Build complete: ${build.name} (${build.fileCount} files)"
+                    } else {
+                        "Build failed: no files were generated."
+                    }
                 }
             }
 
@@ -715,6 +763,7 @@ class AgentRuntime(
         }
 
         val ok = !outcome.startsWith("Failed") && !outcome.startsWith("Build failed") &&
+            !outcome.startsWith("Build skipped") &&
             !outcome.contains("no longer exists") && !outcome.startsWith("Approval data")
         repo.updateApproval(
             approval.copy(
@@ -752,7 +801,10 @@ class AgentRuntime(
         val approvals = repo.approvalsFor(agent.id).first()
         val builds = repo.buildsFor(agent.id).first()
 
-        val connectors = repo.connectors.first().map { connector ->
+        val allowed = agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }
+        val connectors = repo.connectors.first()
+            .filter { it.status != "disabled" && (allowed.isEmpty() || it.id in allowed) }
+            .map { connector ->
             val def = ConnectorCatalog.get(connector.id)
             ConnectorBrief(
                 id = connector.id,
@@ -785,6 +837,20 @@ class AgentRuntime(
             )
         }
 
+        // Recent talk between agents (diary kind "say")
+        val chatter = repo.agents.first().flatMap { a ->
+            repo.diaryFor(a.id).first()
+                .filter { it.kind == "say" }
+                .mapNotNull { e ->
+                    val m = AgentPolicy.SAY_REGEX.find(e.content.trim()) ?: return@mapNotNull null
+                    ChatterLine(a.name, m.groupValues[1].trim(), m.groupValues[2].trim(), e.createdAt)
+                }
+        }
+            .filter { it.fromName == agent.name || it.toName.equals(agent.name, ignoreCase = true) }
+            .sortedByDescending { it.at }
+            .take(8)
+            .reversed()
+
         val agentRevenue = repo.totalRevenueForAgent(agent.id)
         val infraFund = repo.getInfrastructureFund()
 
@@ -806,6 +872,7 @@ class AgentRuntime(
             infrastructureFundCents = infraFund,
             agentProfitSharePercent = settings.agentProfitSharePercent,
             userProfitSharePercent = settings.userProfitSharePercent,
+            chatter = chatter,
         )
     }
 

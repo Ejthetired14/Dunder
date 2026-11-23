@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 (Agent restyle + OfficeScreen round).
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 14:15 UTC.
 
 ---
 
@@ -26,11 +26,13 @@ Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 (Agent restyle + Of
 
 ## 1b. First things to do when you pick this up
 
-1. **Verify the newest commit builds.** The latest log entry (Home restyle) was written without a
-   compiler and pushed to main on the owner's request. Run/check the "Build Debug & Release APK"
-   workflow. If it is red, fix the compile error first (suspects are listed in that log line).
+1. Apply `dunder-phase5-pixel-office.zip` (cumulative over Phase 4) on a branch, open a PR, get a
+   green build. It was written without a compiler. Likely compile suspects: `viewModel.runtimeState`
+   / `RuntimeState.ticking`, `settings?.autonomyEnabled`, `viewModel.messagesFor(id)`,
+   `viewModel.sendMessage(agentId, text)`, `Icons.Default.Menu/Pause/PlayArrow/Forum`,
+   `Brush.radialGradient`, `surfaceContainerHighest` in the theme, `Surface(border=...)`.
 2. Install on the phone and run the checklist in section 7.
-3. Then take the top item of "Open" below.
+3. Then take T-BACK, then T-SCREENS.
 
 ## 2. Rules
 
@@ -48,15 +50,10 @@ Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 (Agent restyle + Of
    Canvas where avoidable; bitmaps decoded with `inScaled=false`; keep the PNGs small.
 5. **No DB migration without a plan:** agent talk is stored as diary entries (`kind="say"`,
    content `To <Name>: <text>`). A real messages table is task T-MSG.
-6. **Build:** the repo's CI is "Build Debug & Release APK". Code written without a compiler should go
-   on a branch + PR with a green build before merging. (The owner may explicitly ask for a direct push
-   to main; if so, log it as UNVERIFIED and make the next AI check CI first, see 1b.) Push with the
-   owner's credentials (the default GITHUB_TOKEN does not trigger the build workflow).
+6. **Build:** the repo's CI is "Build Debug & Release APK". Code written without a compiler must go
+   on a branch + PR, and a green build is required before merging. Push with the owner's
+   credentials (the default GITHUB_TOKEN does not trigger the build workflow).
 7. **Tell the truth in the log:** say what was compiled, what was run on a phone, what was guessed.
-8. **Pixel components live in `ui/office/world/PixelUi.kt`:** `Pal`, `PixelLabel`, `PixelBody`,
-   `PixelPanel`, `PixelButton(small=)`, `PixelIconButton`, `PixelTextField(singleLine=)`, `PixelSwitch`.
-   Shared cards/chips are in `ui/components/Common.kt` (`PixelCard`, `Pill`, `StatusPill`...).
-   Use these; do not add new Material `Card`, `Button`, `Switch`, `OutlinedTextField` or `AlertDialog`.
 
 ## 3. Architecture map
 
@@ -68,8 +65,7 @@ app/src/main/java/com/agoria/app/
     AgoriaNav.kt           navigation; office is the start and only top-level screen
     AgoriaViewModel.kt     all UI state (agents, diary, approvals, settings, runtimeState...)
     theme/AgoriaTheme.kt   Material theme (pixel colours, square shapes, monospace headings)
-    components/Common.kt   shared pixel components (AgentAvatar, Pill, StatusPill, PixelCard...)
-    components/PixelScaffold.kt  shared top bar (BACK TO OFFICE + title)
+    components/Common.kt   shared pixel components (AgentAvatar, Pill, StatusPill, cards...)
     office/OfficeScreen.kt office screen: HUD, cards, directory, quick chat, hints
     office/OfficeViewModel.kt  holds the OfficeSim + CameraState so they survive navigation
     office/world/
@@ -80,7 +76,7 @@ app/src/main/java/com/agoria/app/
       Signals.kt       live data -> what each agent is doing
       DeskPanel.kt     approvals + auto-approve panel
       Chatter*.kt      agent-to-agent talk (parse + panel)
-      PixelUi.kt       Pal palette, PixelPanel, PixelButton, PixelIconButton, PixelTextField, PixelSwitch, PixelLabel/Body
+      PixelUi.kt       Pal palette, PixelPanel, PixelButton, PixelIconButton, PixelLabel/Body
       OfficeSound.kt   sound effects (SoundPool)
 tools/office_gen/  Python (Pillow) generator for the map art, collision, spots, hotspots
 ```
@@ -99,52 +95,55 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | P1 | Pixel office world: map, sprites, camera, walking | DONE (CI + phone) |
 | P2 | Generated pixel map, live agent activity, desk panel, auto-approve | DONE (CI + phone) |
 | P3 | Agent-to-agent `say`, speech bubbles, chatter panel | DONE (CI); talk not yet seen on phone |
-| P4 | Office as start screen, quick chat, camera fly-to, day/night tint, hints, autonomy button | DONE (CI, via PR #7) |
+| P4 | Office as start screen, quick chat, camera fly-to, day/night tint, hints, autonomy button | CODE WRITTEN, not yet compiled |
 
 ### This round
 | ID | What | Status |
 | --- | --- | --- |
-| T-NAV | Remove the bottom bar; office is the only top-level view | VERIFIED (CI) |
-| T-DIR | Notice board = directory card; amber page labels when zoomed in (scale >= 1.6) | VERIFIED (CI) |
-| T-THEME | Global pixel theme (colours, square shapes, monospace headings, no tonal elevation) | VERIFIED (CI) |
-| T-COMMON | Pixel versions of shared components in `Common.kt` | VERIFIED (CI) |
-| T-SOUND | Sound effects with a mute switch in the directory | VERIFIED (CI) |
-| T-NIGHT | Night shift: warm lamp glow around every agent when dark | VERIFIED (CI) |
-| T-SEASON | Christmas decor, shown Sep 1 - Jan 6 | VERIFIED (CI) |
-| T-BACK | Shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI) |
-| T-BACK2 | Convert remaining pages to `PixelScaffold`, remove floating button | VERIFIED (CI) (PR #12) |
-| T-HOME | Restyle Home page to the pixel look (hero card, approvals banner, runtime card, diary rows, hire dialog); add `PixelSwitch` (public, in `PixelUi.kt`) and `PixelButton(small=)`; multi-line `PixelTextField` | CODE WRITTEN, pushed to main, NOT COMPILED. Next AI: check CI first (see 1b). |
-| T-AGENT | Restyle the Agent page: replace `RoundedCornerShape(16.dp)` bubble `Surface` with `PixelCard`/`PixelPanel`, Material buttons/fields with `PixelButton`/`PixelTextField`, `Switch` with `PixelSwitch`. **Do this next.** | CODE WRITTEN, not compiled. |
-| T-OFFICE-ROUND | `OfficeScreen.kt`: remove `RoundedCornerShape(22.dp)` panel -> `PixelPanel`; grep the file for any other `RoundedCornerShape`/`CircleShape` | CODE WRITTEN, not compiled. Bundled with T-AGENT. |
+| T-NAV | Remove the bottom bar; office is the only top-level view; floating "< Office" button on other pages (proper top bar is T-BACK) | VERIFIED (CI) |
+| T-DIR | Notice board = directory card listing every page; amber page labels on every tappable thing when zoomed in (scale >= 1.6) | VERIFIED (CI) |
+| T-THEME | Global pixel theme (colours, square shapes, monospace headings, no tonal elevation); ignores the system dark/light setting | VERIFIED (CI) |
+| T-COMMON | Pixel versions of shared components in `Common.kt` (crisp square avatar, chips, `PixelCard`, headers); same public API | VERIFIED (CI) |
+| T-SOUND | Sound effects (alert, talk, click; 3 generated WAVs in res/raw) with a mute switch in the directory | VERIFIED (CI) |
+| T-NIGHT | Night shift: warm lamp glow around every agent when the tint is dark | VERIFIED (CI) |
+| T-SEASON | Christmas decor (parol lanterns, tree, string lights), shown Sep 1 - Jan 6 | VERIFIED (CI) |
 
 ### Open (not started), in priority order
 | ID | What | Notes |
 | --- | --- | --- |
-| T-HIRE | Home has `AddAgentDialog` but nothing ever sets `showAdd = true`, so the dialog is dead code. Add a small "HIRE AGENT" `PixelButton(small = true)` next to "The agents" header (or confirm the owner does not want hiring and delete the dialog) | Found during T-HOME. Check `viewModel.addAgent` exists first (it is called, so it should). |
-| T-FIELDS | Adopt `PixelTextField` / `PixelSwitch` in place of every remaining `OutlinedTextField`/`TextField`/`Switch` on Connectors, Project, Approvals, Agent, Settings | `PixelSwitch` is now in `PixelUi.kt`; Home, Onboarding and DeskPanel already use the pixel versions. 2-3 screens per PR. |
-| T-HIRE | Home has `AddAgentDialog` but nothing ever sets `showAdd = true`, so the dialog is dead code. Add a small "HIRE AGENT" `PixelButton(small = true)` next to "The agents" header (or confirm the owner does not want hiring and delete the dialog) | Found during T-HOME. Check `viewModel.addAgent` exists first (it is called, so it should). |
-| T-FIELDS | Adopt `PixelTextField` / `PixelSwitch` in place of every remaining `OutlinedTextField`/`TextField`/`Switch` on Connectors, Project, Approvals, Agent, Settings | `PixelSwitch` is now in `PixelUi.kt`; Home, Onboarding and DeskPanel already use the pixel versions. 2-3 screens per PR. |
-| T-SETTINGS | Restyle Settings (51 KB) | One PR on its own. |
+| T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. |
+| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
+| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | PARTIAL: Home, Project, Connectors, Agent, Approvals done (PR #9, #10, #11). Remaining: Settings, Onboarding. Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) is big: do it one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
 | T-CARRY | Agent carries a finished build (crate icon) to a shelf in the workshop | Needs "build finished" signal. |
-| T-A11Y | Content descriptions for hotspots; keep List view as the accessible fallback; make `PixelSwitch` announce on/off (semantics `Role.Switch`) | |
+| T-A11Y | Content descriptions for hotspots; keep List view as the accessible fallback | |
 | T-TEST | Unit tests: `OfficeGrid.route`, `parseChatter`, `buildSignals`, `officeTint` | Pure Kotlin, no Android. |
 | T-PERF | Profile on the Spark 20C (GPU overdraw, jank), drop labels/glow if needed | |
 
 ## 5. Specs for open tasks
 
-### T-SCREENS: per-screen restyle (remaining: Agent, OfficeScreen, Connectors, Project, Approvals, Settings)
-Files under `ui/`: `agent/`, `approvals/`, `connectors/`, `settings/`, `project/`. Done: Onboarding,
-Diary, Browsers, Home. For each:
-- Replace Material `Card`/`Surface` with `PixelCard` (Common.kt) or `PixelPanel`.
-- Replace `FilledTonalButton`/`Button`/`TextButton` with `PixelButton` (use `small = true` in dense cards).
-- Replace `Switch`, `Checkbox`, `OutlinedTextField` with `PixelSwitch`, pixel checkbox (add one if needed), `PixelTextField`.
-- Dialogs: use `androidx.compose.ui.window.Dialog` + `PixelPanel` (see `AddAgentDialog` in `HomeScreen.kt`), not `AlertDialog`.
+### T-BACK: shared pixel scaffold
+Create `ui/components/PixelScaffold.kt`:
+`PixelScaffold(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {}, content: @Composable (PaddingValues) -> Unit)`.
+Top bar: ink background, 2 dp bottom border, a `PixelIconButton` (back arrow) labelled BACK TO
+OFFICE, title in `PixelLabel`. Replace each screen's `Scaffold`/`TopAppBar` with it. System back
+already pops to the office, so `onBack = { navController.popBackStack() }`.
+Acceptance: every page has the same top bar, tapping it returns to the office, no page has a
+Material `TopAppBar`.
+
+### T-SCREENS: per-screen restyle (do in this order)
+Files under `ui/`: `home/`, `agent/`, `approvals/`, `connectors/`, `settings/`, `project/`,
+`browser/`, `diary/`, `OnboardingScreen.kt`. For each:
+- Replace Material `Card`/`Surface` with `PixelCard` (add to `Common.kt`: flat fill, 2 dp ink border,
+  offset shadow, no rounding) or `PixelPanel`.
+- Replace `FilledTonalButton`/`Button`/`TextButton` with `PixelButton` (add a `small` variant).
+- Replace `Switch`, `Checkbox`, `OutlinedTextField` with pixel versions (see `QuickChat` in
+  `OfficeScreen.kt` for a text box; `PixelSwitch` is in `DeskPanel.kt`, move it to `PixelUi.kt`).
 - Headings use `MaterialTheme.typography.titleLarge/titleMedium` (already monospace after T-THEME).
-- No `RoundedCornerShape(...)` or `CircleShape` left (grep for them). Lists: separators are 2 dp ink lines.
-- Do not hard-code colours in screens; use `Pal`.
-Acceptance per screen: screenshot on the phone looks like the office HUD (cream/navy panels, ink borders).
+- No `RoundedCornerShape(...)` or `CircleShape` left (grep for them). Dialogs: square, bordered.
+- Lists: separators are 2 dp ink lines, not Material dividers.
+Acceptance per screen: screenshot on the phone looks like the office HUD (cream panels, ink borders).
 
 ### T-MSG: messages table
 `AgentMessageEntity(id, fromAgentId, toAgentId, text, createdAt, readAt?)`, DAO with
@@ -163,7 +162,7 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 - [ ] App opens straight on the office; there is no bottom bar anywhere.
 - [ ] Tap the title panel (or the notice board): the directory opens; each button opens its page.
-- [ ] Every page shows the ink top bar with BACK TO OFFICE; tapping it returns to the office; system Back too. **No floating "< Office" button anywhere, especially not over the Agent page.**
+- [ ] On every other page the "< Office" button (bottom left) returns to the office; system Back too.
 - [ ] Zoom in: amber labels appear over the library, web room, mail, server room, workshop, finance,
       war room, notice board and your desk, each naming the page it opens.
 - [ ] Sound: alert when a new approval arrives, blip when agents talk, click on buttons; the
@@ -171,28 +170,23 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 - [ ] Christmas decor visible (today is inside Sep 1 - Jan 6): parol lanterns in the hall, tree at the
       top of the hall, string lights on the walls.
 - [ ] After 19:00 the office darkens and every agent has a warm glow.
-- [ ] Other pages (Project, Approvals, Connect, Settings, agent page) have square corners, monospace headings and flat dark backgrounds. List which still look off (feeds T-SCREENS / T-FIELDS).
+- [ ] Other pages (Home, Diary, Project, Approvals, Connect, Settings, agent page) now have square
+      corners, monospace headings and flat dark backgrounds. List which still look off (feeds T-SCREENS).
 - [ ] Quick chat: send a message to an agent from its card; it thinks and replies on the card.
 - [ ] Agent talk: tell one agent "say hi to <other agent>"; a speech bubble plays out.
-- [ ] Diary and Browsers pages show the ink top bar with BACK TO OFFICE; tapping returns to the office; no floating "< Office" button on those pages.
-- [ ] First run (clear app data): Welcome page has a square office thumbnail, a cream square name box (type a name, keyboard works), and a square amber ENTER THE OFFICE button that opens the office.
-- [ ] **Home page (T-HOME):** hero card is a square navy panel with the office thumbnail on top (no rounded corners, no gradient); the autonomy switch is a square 56x32 teal/navy switch and toggles autonomy; with a pending approval an amber banner shows and opens Approvals; "RUN ONE CYCLE" and "NUDGE EVERYONE" are square buttons that fit on one row; diary rows are square bordered cards that open the agent; the keyboard works in any text box.
-- [ ] **Desk panel switches** (auto-approve in your desk panel) now use the square `PixelSwitch`: tapping each one toggles it and the safe-type rules from Rules #3 still hold.
+- [ ] Diary and Agent browsers pages show the ink top bar with BACK TO OFFICE; tapping returns to the office; no floating "< Office" button on those two pages.
 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
-- 2026-11-23 22:15  Claude  T-AGENT, T-OFFICE-ROUND  CODE WRITTEN (not compiled, not pushed). `AgentScreen.kt` fully restyled: all `RoundedCornerShape` bubbles replaced with `PixelPanel`/`PixelCard`; `Switch` -> `PixelSwitch`; `Button` -> `PixelButton`/`PixelIconButton`; `OutlinedTextField` -> `PixelTextField`; `AlertDialog` -> `Dialog` + `PixelPanel` (EditAgentDialog, AddMemoryDialog, DeleteAgentDialog); custom tab row with `PixelPill`; `LinearProgressIndicator` -> `PixelProgressBar`; `Surface`/`Card`/`MaterialTheme.shapes.medium` removed. `OfficeScreen.kt`: `AgentDesk` `RoundedCornerShape(22.dp)` -> `PixelPanel`; latest diary card -> `PixelCard`. `grep -rn "RoundedCornerShape\|CircleShape" app/src/main/java/com/agoria/app/ui/agent app/src/main/java/com/agoria/app/ui/office/OfficeScreen.kt` is now empty. `PixelScaffold` used on Agent page (AgentScreen.kt already converted to PixelScaffold in PR #10, this just restyles content). [untested]
-- 2026-11-23 (evening)  Claude  T-HOME, T-FIELDS(part)  CODE WRITTEN and pushed straight to main at the owner's request. **Not compiled, not run on a phone.** Files: `ui/home/HomeScreen.kt` rewritten (no `RoundedCornerShape`, no `Card`/`Surface`/`Button`/`Switch`/`OutlinedTextField`/`AlertDialog`, no gradient; hero is `PixelCard` + `OfficeThumbnail` + `PixelSwitch`; approvals banner is amber `PixelCard`; `RuntimeCard`/`DiaryRow` use `PixelCard`; hire dialog is `Dialog` + `PixelPanel` + `PixelTextField`); `PixelUi.kt` gained public `PixelSwitch(checked, modifier, onChange)` (onChange last so trailing-lambda calls work), `PixelButton(..., small = false)` (36 dp / 11 sp) and a multi-line mode for `PixelTextField` (`singleLine = false` -> min height 88 dp; no `minLines` used so it cannot break on older Compose); `DeskPanel.kt` lost its private Material-based `PixelSwitch` and now uses the shared one (same call sites). Compile suspects: `Dialog` import (`androidx.compose.ui.window.Dialog`), `Modifier.size(width =, height =)`, `PixelCard` content lambda is not a `BoxScope` (I only used plain `Row`/`Column` inside it), `Pill(color = Pal.amber)`, unused param `onOpenSettings` in `HomeScreen` (was already unused). Also: `showAdd` is never set to true, so the hire dialog is unreachable (logged as T-HIRE). [untested]
-- 2026-11-23 15:30  Claude  T-BACK2, T-SCREENS(Onboarding), T-FIELDS  PR #12 merged to main (commit 707e01d). Build APK run 45093107160 green, Backup guard run 45093107185 green. `AgoriaNav` lost `ScaffoldedRoutes`, floating "< Office" button, and `Box` wrapper (fixes Agent page overlap bug). `PixelTextField` added to `PixelUi.kt` (cream fill, 2 dp ink border, ink cursor). `OnboardingScreen` restyled: removed `RoundedCornerShape`/`clip`, Material `Button`/`OutlinedTextField`; uses `PixelButton` + `PixelTextField`. `grep -rn "RoundedCornerShape" app/src/main/java/com/agoria/app/ui/OnboardingScreen.kt` empty. [verified]
 - 2026-11-23 14:15  Claude  T-BACK2  PR #11 merged to main (commit d15decc). Build APK run 45078557925 green, Backup guard run 45078557904 green. ApprovalsScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'approvals'; auto-approve settings action in top bar; floating button hidden on Approvals page. [verified]
 - 2026-11-23 12:45  Claude  T-BACK2  PR #10 merged to main (commit ca2ef1e). Build APK run 45072215229 green, Backup guard run 45072215197 green. AgentScreen converted to PixelScaffold; AgoriaNav ScaffoldedRoutes includes 'agent'; pause/resume action in top bar; floating button hidden on Agent page. [verified]
 - 2026-11-23 11:30  Claude  T-BACK2  PR #9 merged to main (commit 2f638f2). Build APK run 45070684147 green, Backup guard run 45070684236 green. Home, Project, Connectors converted to PixelScaffold; AgoriaNav ScaffoldedRoutes updated; floating button hidden on these three pages. [verified]
 - 2026-11-23 10:25  Claude  T-BACK  PR #8 merged to main (commit b6b7efb). Build APK run 45068973188 green, Backup guard run 45068973197 green. `PixelScaffold` + `PixelTopBar` compiled and CI passes. Diary & Browsers converted; AgoriaNav hides floating button on scaffolded routes. [verified]
-- 2026-11-23 10:15  Claude  T-BACK  CODE WRITTEN (not compiled, not pushed: the chat's GitHub token was read-only, branch creation returned 403). Added `ui/components/PixelScaffold.kt` (`PixelScaffold`, `PixelTopBar`), converted `DiaryScreen` (new `onBack` param) and `BrowsersScreen`, `AgoriaNav` passes `popBackStack("office", false)` and hides the floating button on scaffolded routes. [untested]
+- 2026-11-23 10:15  Claude  T-BACK  CODE WRITTEN (not compiled, not pushed: the chat's GitHub token was read-only, branch creation returned 403). Added `ui/components/PixelScaffold.kt` (`PixelScaffold`, `PixelTopBar`), converted `DiaryScreen` (new `onBack` param) and `BrowsersScreen`, `AgoriaNav` passes `popBackStack("office", false)` and hides the floating button on scaffolded routes. Compile suspects: `Icons.AutoMirrored.Filled.ArrowBack` (already used in BrowsersScreen, so should be fine), `PixelLabel.copy(...)`, `Scaffold(content = ...)` named argument. [untested]
 - 2026-11-22 20:22  Claude  T-NAV, T-DIR, T-THEME, T-COMMON, T-SOUND, T-NIGHT, T-SEASON  PR #7 opened, Build APK run 45065987758 green, Backup guard run 45065987749 green. Fixed one compile error: `OfficeSound.setEnabled` platform declaration clash -> renamed to `setSoundEnabled`. All Phase 5 code compiles and CI passes. [verified]
-- 2026-11-22  Claude  T-THEME, T-COMMON  CODE WRITTEN (not compiled): `AgoriaTheme.kt` is one fixed pixel scheme (ink/navy/cream/amber/teal, square shapes, monospace headings, no surface tint); `Common.kt` rewritten with the same public API (crisp square avatar showing the standing frame, solid ink-bordered chips, `PixelCard`). Per-screen leftovers (explicit RoundedCornerShape, Material buttons/switches/text fields) are T-SCREENS. [untested]
+- 2026-11-22  Claude  T-THEME, T-COMMON  CODE WRITTEN (not compiled): `AgoriaTheme.kt` is one fixed pixel scheme (ink/navy/cream/amber/teal, square shapes, monospace headings, no surface tint); `Common.kt` rewritten with the same public API (crisp square avatar showing the standing frame, solid ink-bordered chips, `PixelCard`). Every page that uses the theme or these components changes look at once. Per-screen leftovers (explicit RoundedCornerShape, Material buttons/switches/text fields) are T-SCREENS. [untested]
 - 2026-11-22  Claude  T-NAV, T-DIR, T-SOUND, T-NIGHT, T-SEASON  CODE WRITTEN (not compiled): AgoriaNav has no bottom bar plus a floating "< Office" button; DirectoryPanel on the notice board and the title panel; amber page labels on every tappable area when zoomed in; OfficeSound (3 generated WAVs, mute in the directory); lamp glow at night; Christmas decor Sep 1 - Jan 6. [untested]
 - 2026-11-22  Claude  P4  Wrote office-as-home, quick chat, camera fly-to, tint, hints, autonomy button (zip dunder-phase4-pixel-office.zip). [untested: not compiled]
 - 2026-11-22  Kilo/owner  P3  PR #4 merged: renderer fixed, Phase 3 + runtime edits (`say`, prompt, `ask_user` fix). Build green, release v1.0.216. [verified; phone: map OK]

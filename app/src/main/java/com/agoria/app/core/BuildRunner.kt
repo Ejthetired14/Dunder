@@ -43,7 +43,11 @@ class BuildRunner(
         val plan = Json.string(details, "plan", approval.summary)
         val description = Json.string(details, "description", approval.summary)
 
-        val root = File(Files.agentWorkspace(context, agent.id), Files.safeName(approval.id))
+        // Everything the office builds lives in the shared project folder so tasks, builds and
+        // files can be inspected in one place instead of on each agent's own tab.
+        val project = repo.ensureProject()
+        val projectRoot = Files.projectWorkspace(context, project.folder)
+        val root = File(projectRoot, Files.safeName(approval.id))
         Files.clear(root)
         root.mkdirs()
 
@@ -101,6 +105,7 @@ class BuildRunner(
             description = finalDescription,
             zipPath = zipFile.absolutePath,
             fileCount = written,
+            projectId = project.id,
         )
 
         repo.addDiary(
@@ -112,7 +117,7 @@ class BuildRunner(
         repo.addMessage(
             agent.id,
             "system",
-            "Build complete: $finalName ($written files). Download the ZIP from the Builds tab.",
+            "Build complete: $finalName ($written files). Open Projects to inspect the files or save the ZIP.",
         )
         Notifier.notifyBuild(context, "Build ready: $finalName", "$written files packaged. Open Dunder to download the ZIP.")
 
