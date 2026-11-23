@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 06:05 UTC (CI fix entry).
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 14:45 UTC (T-HOME VERIFIED).
 
 ---
 
@@ -107,6 +107,8 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | T-SOUND | Sound effects (alert, talk, click; 3 generated WAVs in res/raw) with a mute switch in the directory | VERIFIED (CI) |
 | T-NIGHT | Night shift: warm lamp glow around every agent when the tint is dark | VERIFIED (CI) |
 | T-SEASON | Christmas decor (parol lanterns, tree, string lights), shown Sep 1 - Jan 6 | VERIFIED (CI) |
+| T-HOME | Pixel Home page: hero card (OfficeThumbnail + amber status pill), approvals banner (PixelCard amber), runtime card, diary rows, "Hire agent" PixelButton(small=) under The agents, hire dialog (Dialog + PixelPanel, PixelTextField, PixelButton, PixelSwitch); all Phase 6 files compile and CI green | VERIFIED (CI) |
+| T-HIRE | "Hire agent" button under The agents opens the pixel hire dialog | VERIFIED (CI) |
 
 ### Open (not started), in priority order
 | ID | What | Notes |
@@ -180,6 +182,7 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 14:45  Claude  T-HOME / T-HIRE  PR #16 merged to main (commit 6521874). Build APK runs 45140547641 and 45141420941 green; Backup guard runs 45140535659 and 45141420923 green. Phase 6 Home page implemented with PixelUi components: hero card, approvals banner, runtime card, diary rows, hire dialog. PixelSwitch, PixelButton(small=), PixelTextField added to PixelUi.kt. Auto-approve rule unchanged (SAFE_TYPES only). CI failures on kilo/phase6-home-pixel were caused by the branch being based on an old commit (74de3f8) with AGP 8.2.2 / Kotlin 1.9.20 / Gradle 8.2.1; fixed by rebasing onto main HEAD (36339f8) which has AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.11.1 + SSL truststore config. The earlier "network flakiness" theory was wrong — main passes consistently, AGP 8.2.2 plugin artifact is no longer reliably resolvable from Google Maven. [verified]
 - 2026-11-23 06:05  Claude  CI  **main could not compile at all; the last-green tree was restored.** PR #14 merged to main (merge commit 8962318). Green: Build APK run 45120165921 (#800) on commit 8633715 — Build Debug APK, Unit tests, Build Release APK and Upload APKs all success; Backup config guard run 45120166000 green. [verified]
 
   Two separate faults, one behind the other.
