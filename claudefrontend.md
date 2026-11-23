@@ -7,7 +7,7 @@ Keep this file honest: if something was not compiled or not tested on a phone, s
 This file lives at the **repo root** (`claudefrontend.md`). The `ForClaude/` folder only holds
 `CLAUDE_BACKEND_PLAN.md` (the backend tracker). If the owner says "ForClaude/claudefrontend.md", this is the file.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 15:15 (Approval Pipeline + Builds download FIXED on branch kilo/pearly-relay-7or: build 45188136257 green. Cloudflare worker content type is a separate deployment concern not in this repo).
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 (T-SETTINGS-NAV CODE WRITTEN, NOT COMPILED: needs a branch, PR and green build; T-CONNECTORS-FOCUS added).
 
 ---
 
@@ -128,7 +128,7 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | T-CARDCOLOR-AUDIT | Find cream/tan surfaces that bypass `PixelCard` (direct `PixelPanel(fill = cream/tan)`, `Box.background(Pal.cream)`) and any text on cream still using `onSurfaceVariant`, `primary`, `outline` or amber/tan | VERIFIED (CI, PR #22, commit c187269). Build APK 45177467724 green, Backup guard 45178419208 green. Replaced Material theme text colors with Pal palette across 10 files: ProjectScreen, BrowsersScreen, ApprovalsScreen, DiaryScreen, ConnectorsScreen, AgentScreen, OfficeScreen, HomeScreen, Common, AgoriaRoot. |
 | T-AGENT-PIXEL | Agent page body is still Material: TabRow, Switch, TextButton, DropdownMenu, chat bubbles (rounded), message field | After T-CARDCOLOR-AUDIT. Use PixelButton/PixelSwitch/PixelTextField, square bubbles. Phone screenshot 23 Nov showed a floating amber "< OFFICE" button over the message box: it is NOT in main (AgoriaNav has none), so that APK was stale; reinstall the newest CI APK before judging. |
 | T-PIXEL-WIDGETS | Shared pixel widgets: `PixelDialog` (Dialog + PixelCard, square, ink border), `PixelSlider` (square track and thumb, amber fill), `PixelProgressBar` (private version now in SettingsScreen.kt) | Replace the private `ResetDialog` and `PixelProgressBar` in SettingsScreen.kt, the Home hire dialog, and the Material `Slider`s in Autonomy and Revenue. Put them in `PixelUi.kt`. |
-| T-SETTINGS-NAV | "Configure" button on a payment connector in Settings does nothing | Add an `onOpenConnectors: () -> Unit` parameter to `SettingsScreen`, wire it in `AgoriaNav.kt` to the connectors route, call it from the button. |
+| T-CONNECTORS-FOCUS | Make Settings > Payment Connectors > Configure land on the tapped connector | After T-SETTINGS-NAV is verified. Route `connectors?focus={id}` (optional nav argument, `NavType.StringType`, nullable). `ConnectorsScreen` reads it, scrolls its list to that connector (`LazyListState.animateScrollToItem`) and draws the card with an amber 2 dp border for ~2 s. Settings then calls `onOpenConnectors(connector.id)`. No DB change. |
 | T-SCREENS | Restyle every page to the pixel look | Specs in section 5. Settings is done in code (PR #18 + T-SETTINGS-PIXEL-PR2). Remaining: audit Home/Agent/Approvals/Connectors/Project/Diary/Browsers for leftover `RoundedCornerShape`, Material buttons, switches, text fields, `AlertDialog`, `CircularProgressIndicator`. Onboarding DONE in code (untested). |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
@@ -143,6 +143,7 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
 | T-BACK2 | Convert the remaining pages to `PixelScaffold` | VERIFIED (CI, PR #17, commit 123b765). All routes scaffolded except Onboarding (no office behind it). |
 | T-SETTINGS-PIXEL | Restyle the BODY of `SettingsScreen.kt` | PR 1 VERIFIED (CI, PR #18, commit 1e69473): Autonomy and Revenue sections. PR 2 is T-SETTINGS-PIXEL-PR2 above. |
+| T-SETTINGS-NAV | "Configure" on a payment connector in Settings opens the Connectors page (new `onOpenConnectors` parameter on `SettingsScreen`, wired in `AgoriaNav`; empty state got an "Open Connectors" button and the stale "Connectors tab" copy was fixed) | CODE WRITTEN, NOT COMPILED. Needs branch + PR + green CI, then phone check. |
 
 ## 5. Specs for open tasks
 
@@ -185,6 +186,8 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 - [ ] T-CARDCOLOR: Home (amber approvals banner, navy hero card, runtime card, diary rows), Agent cards and every Settings card: text readable, spacing unchanged (no double padding), Reset dialog text dark on cream.
 
+- [ ] T-SETTINGS-NAV: Settings > Revenue > Payment Connectors: with no payment connector, "Open Connectors" opens the Connectors page; with one, "Configure" does the same; BACK TO OFFICE returns to the office.
+
 - [ ] App opens straight on the office; there is no bottom bar anywhere.
 - [ ] Tap the title panel (or the notice board): the directory opens; each button opens its page.
 - [ ] On every other page the "< Office" button (bottom left) returns to the office; system Back too.
@@ -210,6 +213,8 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
+
+- 2026-11-23 (time not recorded)  Claude (Anthropic chat)  T-SETTINGS-NAV  CODE WRITTEN, NOT COMPILED, NOT PUSHED (no Gradle in the chat sandbox, no network). Three edits, applied by `apply_t_settings_nav.py` with exact-anchor asserts: `AgoriaNav.kt` passes `onOpenConnectors = { navController.navigate("connectors") }` to `SettingsScreen`; `SettingsScreen.kt` gets a new `onOpenConnectors: () -> Unit` parameter (before `onBack`), the payment "Configure" button calls it (the no-op comment is gone), the empty state shows an "Open Connectors" `PixelButton` and its copy no longer mentions a "Connectors tab" (there are no tabs). Back from Connectors still goes to the office (`popBackStack("office", false)`), same as every page. Compile suspects: named-arg order at the `SettingsScreen(...)` call site (callers other than AgoriaNav? grep `SettingsScreen(` first), `PixelButton(text, onClick, small=, fill=)` positional use with a function reference `onOpenConnectors` (it is `() -> Unit`, matches). Added task T-CONNECTORS-FOCUS. [untested: not compiled, not on a phone]
 
 - 2026-11-23 15:15  Claude  Approval Pipeline + Builds download  Fixed on branch `kilo/pearly-relay-7or`: (1) Build downloads now use correct MIME type (`application/zip` instead of `application/json`) — `Share.kt:saveToDownloads` accepts `mimeType` param, `AgoriaViewModel.kt:saveBuildToDownloads` passes `application/zip`. (2) Approval pipeline fault: auto-approved items with `status = 'auto_pending'` now appear in pending lists — `Daos.kt:observePending()` and `pendingForAgent()` query `status IN ('pending', 'auto_pending')`. CI build 45188136257 green (AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1 after rebase onto main). Cloudflare worker content type issue (`application/javascript`) is a separate deployment config not in this repo. [verified: CI build green; untested on phone]
 - 2026-11-23 14:30  Claude  T-CARDCOLOR-AUDIT  PR #22 merged to main (commit c187269). Build APK 45177467724 green, Backup guard 45178419208 green. Fixed text colors on cream/tan surfaces across 10 files: ProjectScreen, BrowsersScreen, ApprovalsScreen, DiaryScreen, ConnectorsScreen, AgentScreen, OfficeScreen, HomeScreen, Common, AgoriaRoot. Replaced all `MaterialTheme.colorScheme.(onSurfaceVariant|primary|outline|secondary|tertiary|error)` with Pal palette (`Pal.ink`, `Pal.tan`, `Pal.wood`, `Pal.amber`, `Pal.teal`, `Pal.red`). PixelCard already provides LocalContentColor (T-CARDCOLOR). No phone test — CI verified only. [verified]
