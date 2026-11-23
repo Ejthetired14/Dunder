@@ -617,8 +617,38 @@ fun SettingsScreen(
                             )
                         }
                     }
+<<<<<<< HEAD
                 }) { Text("Back up now") }
-            }
+=======
+                    Button(onClick = { backupToGoogleDrive() }) { Text("Backup Now") }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Google Drive restore
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Restore from Google Drive", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    text = "Download and restore latest backup from Drive",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
 
             SectionCard(title = "App Updates") {
                 val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
