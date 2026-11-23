@@ -4,7 +4,10 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 13:00 UTC (T-SETTINGS-PIXEL PR 1 VERIFIED).
+This file lives at the **repo root** (`claudefrontend.md`). The `ForClaude/` folder only holds
+`CLAUDE_BACKEND_PLAN.md` (the backend tracker). If the owner says "ForClaude/claudefrontend.md", this is the file.
+
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 (T-SETTINGS-PIXEL-PR2 CODE WRITTEN, NOT COMPILED, needs a PR + green CI).
 
 ---
 
@@ -31,6 +34,7 @@ Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 13:00 UTC (T-SETTIN
    / `RuntimeState.ticking`, `settings?.autonomyEnabled`, `viewModel.messagesFor(id)`,
    `viewModel.sendMessage(agentId, text)`, `Icons.Default.Menu/Pause/PlayArrow/Forum`,
    `Brush.radialGradient`, `surfaceContainerHighest` in the theme, `Surface(border=...)`.
+   (Phase 5 has since compiled and merged; this list is kept for history.)
 2. Install on the phone and run the checklist in section 7.
 3. Then take T-BACK, then T-SCREENS.
 
@@ -54,6 +58,11 @@ Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 13:00 UTC (T-SETTIN
    on a branch + PR, and a green build is required before merging. Push with the owner's
    credentials (the default GITHUB_TOKEN does not trigger the build workflow).
 7. **Tell the truth in the log:** say what was compiled, what was run on a phone, what was guessed.
+8. **Text colour on cream:** the theme's text colours are cream/tan (made for dark backgrounds) and
+   `PixelPanel`/`PixelCard` do NOT set a content colour. On a cream or tan fill, wrap the content in
+   `CompositionLocalProvider(LocalContentColor provides Pal.ink)` (see `SettingsCard` in
+   `SettingsScreen.kt`) and use `Pal.navy` for secondary text. Never use amber or
+   `MaterialTheme.colorScheme.primary/onSurfaceVariant` as text on cream. Global fix: T-CARDCOLOR.
 
 ## 3. Architecture map
 
@@ -76,7 +85,7 @@ app/src/main/java/com/agoria/app/
       Signals.kt       live data -> what each agent is doing
       DeskPanel.kt     approvals + auto-approve panel
       Chatter*.kt      agent-to-agent talk (parse + panel)
-      PixelUi.kt       Pal palette, PixelPanel, PixelButton, PixelIconButton, PixelLabel/Body
+      PixelUi.kt       Pal palette, PixelPanel, PixelButton, PixelIconButton, PixelTextField, PixelSwitch, PixelLabel/Body
       OfficeSound.kt   sound effects (SoundPool)
 tools/office_gen/  Python (Pillow) generator for the map art, collision, spots, hotspots
 ```
@@ -109,21 +118,28 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | T-SEASON | Christmas decor (parol lanterns, tree, string lights), shown Sep 1 - Jan 6 | VERIFIED (CI) |
 | T-HOME | Pixel Home page: hero card (OfficeThumbnail + amber status pill), approvals banner (PixelCard amber), runtime card, diary rows, "Hire agent" PixelButton(small=) under The agents, hire dialog (Dialog + PixelPanel, PixelTextField, PixelButton, PixelSwitch); all Phase 6 files compile and CI green | VERIFIED (CI) |
 | T-HIRE | "Hire agent" button under The agents opens the pixel hire dialog | VERIFIED (CI) |
+| T-SETTINGS-PIXEL-PR2 | Restyle bottom half of SettingsScreen (Providers, Data, Backup, Updates, About) + Reset dialog | CODE WRITTEN, NOT COMPILED. Branch + PR needed, green CI required, then phone check. See log. |
 
 ### Open (not started), in priority order
 | ID | What | Notes |
 | --- | --- | --- |
-| T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. Onboarding DONE in code (untested). Remaining pages: Settings body (T-SETTINGS-PIXEL), then audit Home/Agent/Approvals/Connectors/Project/Diary/Browsers for leftover `RoundedCornerShape`, Material buttons, switches and text fields. |
-| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
-| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | VERIFIED (CI, PR #17, commit 123b765): Home, Project, Connectors, Agent, Approvals done earlier (PR #9, #10, #11); Settings -> PixelScaffold; Onboarding restyled pixel (not scaffolded, no office behind it); AgoriaNav: floating "< Office" button, ScaffoldedRoutes, currentRoute deleted; all routes now scaffolded. Build APK 45160531742 + Backup guard 45161209258 green. |
-| T-SETTINGS-PIXEL | Restyle the BODY of `SettingsScreen.kt` (the top bar is already pixel) | PR 1 VERIFIED (CI, PR #18, commit 1e69473): Autonomy & Revenue sections converted. SectionCard -> PixelCard; Switch -> PixelSwitch; Button/TextButton -> PixelButton(small=); SummaryCard -> PixelCard; Surface status chips -> PixelPill. Build APK 45163062656 green, Backup guard 45164034742 green. PR 2 pending: Providers, Data, Backup, Updates, About. |
-| T-SETTINGS-PIXEL-PR2 | Restyle bottom half of SettingsScreen (Providers, Data, Backup, Updates, About) | NEXT. Replace SectionCard->PixelCard, Switch->PixelSwitch, Button/TextButton->PixelButton(small=), OutlinedTextField->PixelTextField, Surface/Cards->PixelPanel/PixelCard. Grep for zero RoundedCornerShape, MaterialTheme.shapes.*, Card(, OutlinedTextField, Switch( after. |
+| T-CARDCOLOR | Make `PixelCard` safe by default: provide `LocalContentColor` (ink on light fills, cream on dark fills, e.g. luminance > 0.4 -> ink) and decide on inner padding | NEXT. PR #18 (Settings top half) and other `PixelCard` users render cream text on a cream fill and have no inner padding unless they add it. `SettingsCard` in SettingsScreen.kt works around this locally. Fix once in `Common.kt`, then delete the workaround, then check Home (amber banner, hero card), Agent, Approvals, Connectors, Project on the phone. Keep `AgentCard` (navy fill) looking the same. |
+| T-PIXEL-WIDGETS | Shared pixel widgets: `PixelDialog` (Dialog + PixelCard, square, ink border), `PixelSlider` (square track and thumb, amber fill), `PixelProgressBar` (private version now in SettingsScreen.kt) | Replace the private `ResetDialog` and `PixelProgressBar` in SettingsScreen.kt, the Home hire dialog, and the Material `Slider`s in Autonomy and Revenue. Put them in `PixelUi.kt`. |
+| T-SETTINGS-NAV | "Configure" button on a payment connector in Settings does nothing | Add an `onOpenConnectors: () -> Unit` parameter to `SettingsScreen`, wire it in `AgoriaNav.kt` to the connectors route, call it from the button. |
+| T-SCREENS | Restyle every page to the pixel look | Specs in section 5. Settings is done in code (PR #18 + T-SETTINGS-PIXEL-PR2). Remaining: audit Home/Agent/Approvals/Connectors/Project/Diary/Browsers for leftover `RoundedCornerShape`, Material buttons, switches, text fields, `AlertDialog`, `CircularProgressIndicator`. Onboarding DONE in code (untested). |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
 | T-CARRY | Agent carries a finished build (crate icon) to a shelf in the workshop | Needs "build finished" signal. |
 | T-A11Y | Content descriptions for hotspots; keep List view as the accessible fallback | |
 | T-TEST | Unit tests: `OfficeGrid.route`, `parseChatter`, `buildSignals`, `officeTint` | Pure Kotlin, no Android. |
 | T-PERF | Profile on the Spark 20C (GPU overdraw, jank), drop labels/glow if needed | |
+
+### Done recently (kept short; details in the log)
+| ID | What | Status |
+| --- | --- | --- |
+| T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
+| T-BACK2 | Convert the remaining pages to `PixelScaffold` | VERIFIED (CI, PR #17, commit 123b765). All routes scaffolded except Onboarding (no office behind it). |
+| T-SETTINGS-PIXEL | Restyle the BODY of `SettingsScreen.kt` | PR 1 VERIFIED (CI, PR #18, commit 1e69473): Autonomy and Revenue sections. PR 2 is T-SETTINGS-PIXEL-PR2 above. |
 
 ## 5. Specs for open tasks
 
@@ -143,7 +159,7 @@ Files under `ui/`: `home/`, `agent/`, `approvals/`, `connectors/`, `settings/`, 
   offset shadow, no rounding) or `PixelPanel`.
 - Replace `FilledTonalButton`/`Button`/`TextButton` with `PixelButton` (add a `small` variant).
 - Replace `Switch`, `Checkbox`, `OutlinedTextField` with pixel versions (see `QuickChat` in
-  `OfficeScreen.kt` for a text box; `PixelSwitch` is in `DeskPanel.kt`, move it to `PixelUi.kt`).
+  `OfficeScreen.kt` for a text box; `PixelSwitch` and `PixelTextField` are in `PixelUi.kt`).
 - Headings use `MaterialTheme.typography.titleLarge/titleMedium` (already monospace after T-THEME).
 - No `RoundedCornerShape(...)` or `CircleShape` left (grep for them). Dialogs: square, bordered.
 - Lists: separators are 2 dp ink lines, not Material dividers.
@@ -181,11 +197,16 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 - [ ] Settings shows the ink top bar with BACK TO OFFICE and returns to the office; no "< Office" floating button on ANY page.
 - [ ] First launch (clear app data): onboarding is navy with square panels, typing a name works, ENTER THE OFFICE opens the office.
 - [ ] Diary and Agent browsers pages show the ink top bar with BACK TO OFFICE; tapping returns to the office; no floating "< Office" button on those two pages.
+- [ ] Settings, every card (Autonomy ... About): text is dark and readable on the cream cards, there is padding inside each card, no round Material controls (except the sliders, T-PIXEL-WIDGETS).
+- [ ] Settings > Model providers: provider rows are tan with a square switch; Configure opens square text boxes; the API key box shows dots, not the key; Save key / Clear key / Save model work.
+- [ ] Settings > Data & privacy: Reset app (red) opens a square dialog; Cancel closes it; do not confirm unless you want to wipe the app.
+- [ ] Settings > Backup & Restore and App Updates: Export / Import / Back up now / Restore / Check work as before; during an update download an amber square progress bar shows.
 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 (time not recorded)  Claude (Anthropic chat)  T-SETTINGS-PIXEL-PR2  CODE WRITTEN, NOT COMPILED (the chat sandbox has no network, so no Gradle). Files: `ui/settings/SettingsScreen.kt` (full rewrite of the bottom half) and `ui/office/world/PixelUi.kt` (`PixelTextField` gained optional `password`, `hint`, `labelColor`, `hintColor`; existing calls unchanged). SettingsScreen: Model providers, Data & privacy, Backup & Restore, App Updates, About all use a private `SettingsCard` (PixelCard + 14 dp padding + ink content colour). `ProviderRow` is a tan `PixelCard`, Switch -> `PixelSwitch`, `OutlinedTextField` -> `PixelTextField` (key box masked), `Button`/`TextButton` -> `PixelButton(small=)`, `AlertDialog` -> private square `ResetDialog` (Dialog + PixelCard), `CircularProgressIndicator`/`LinearProgressIndicator` -> text "Checking for updates..." / private `PixelProgressBar`. Removed dead `SectionCard` and `SummaryCard`. Grep of the file for `RoundedCornerShape|CircleShape|MaterialTheme.shapes|Card(|OutlinedTextField|Switch(|TextButton|AlertDialog|CircularProgress|LinearProgress|Surface(` is clean (only `PixelCard(`/`PixelButton(`/`PixelSwitch(` match). Also fixed from PR #18 (found while reading the code, not on a phone): its `PixelCard`s had no inner padding and inherited the theme's cream text colour on a cream fill, so Autonomy/Revenue text was almost certainly unreadable; secondary text now `Pal.navy` (alpha .75), amber/tan text on cream replaced with wood/teal/navy. Behaviour unchanged: export/import/auto-backup/update callbacks and ViewModel calls are the same as before. Known gaps: payment "Configure" button is still a no-op (T-SETTINGS-NAV); sliders are still Material (T-PIXEL-WIDGETS). Compile suspects: `PixelTextField(... password, hint, labelColor, hintColor)` named args, `LocalContentColor`/`CompositionLocalProvider` imports, smart cast of `spec.extraLabel`/`spec.extraHint` inside `if (spec?.needsExtra == true)` (same pattern as before), `viewModel.downloadAndInstallUpdate(info, { pct -> ... }, { _ -> ... })` lambda shapes, `Dialog` import (`androidx.compose.ui.window.Dialog`). Added tasks T-CARDCOLOR, T-PIXEL-WIDGETS, T-SETTINGS-NAV and rule 8. [untested: not compiled, not on a phone]
 - 2026-11-23 13:00  Claude  T-SETTINGS-PIXEL PR 1  PR #18 merged to main (commit 1e69473). Build APK 45163062656 green, Backup guard 45164034742 green. SettingsScreen top half (Autonomy, Revenue): SectionCard->PixelCard, Switch->PixelSwitch, Button/TextButton->PixelButton(small=), SummaryCard->PixelCard, Surface status chips->PixelPill (teal=ready, amber=needs_setup, red=error), Slider track/thumb=Pal.amber. PixelCard title param added to Common.kt. PR 2 pending (Providers, Data, Backup, Updates, About). [verified]
 - 2026-11-23 12:30  Claude  T-BACK2 / T-SCREENS  PR #17 merged to main (commit 123b765). Build APK 45160531742 green, Backup guard 45161209258 green. SettingsScreen -> PixelScaffold(title="Settings", onBack, snackbarHost); AgoriaNav: removed ScaffoldedRoutes, floating "< Office" button, currentRoute tracking; settings onBack = popBackStack("office", false); OnboardingScreen restyled pixel (navy ground, ink-bordered thumbnail, PixelPanel rows, PixelTextField, PixelButton); tools/ scripts and README_APPLY.md deleted. All routes now have PixelScaffold top bar. [verified]
 - 2026-11-23 14:45  Claude  T-HOME / T-HIRE  PR #16 merged to main (commit 6521874). Build APK runs 45140547641 and 45141420941 green; Backup guard runs 45140535659 and 45141420923 green. Phase 6 Home page implemented with PixelUi components: hero card, approvals banner, runtime card, diary rows, hire dialog. PixelSwitch, PixelButton(small=), PixelTextField added to PixelUi.kt. Auto-approve rule unchanged (SAFE_TYPES only). CI failures on kilo/phase6-home-pixel were caused by the branch being based on an old commit (74de3f8) with AGP 8.2.2 / Kotlin 1.9.20 / Gradle 8.2.1; fixed by rebasing onto main HEAD (36339f8) which has AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.11.1 + SSL truststore config. The earlier "network flakiness" theory was wrong — main passes consistently, AGP 8.2.2 plugin artifact is no longer reliably resolvable from Google Maven. [verified]
