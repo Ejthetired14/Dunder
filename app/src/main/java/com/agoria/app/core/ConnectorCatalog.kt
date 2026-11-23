@@ -167,7 +167,7 @@ object ConnectorCatalog {
             id = "accounts",
             name = "Office Browser",
             category = "Personal",
-            description = "Work inside a browser window that belongs to the office. Sign in there once with the account the office should use, then it can draft Gmail, add Google Calendar events and open any page in that same session. Your phone's own accounts are never touched.",
+            description = "Work inside a browser window that belongs to the office. Sign in there once with the account the office should use, then it can draft Gmail, add Google Calendar events, click buttons, fill forms, submit, take screenshots, extract structured data, manage tabs, download files, and wait for JS-heavy pages. Your phone's own accounts are never touched.",
             auth = ConnectorAuth.ACCOUNT,
             fields = emptyList(),
             actions = listOf(
@@ -178,8 +178,22 @@ object ConnectorCatalog {
                 ConnectorActionDef("open_url", "Open a link", "Open a web link in this agent's own browser. It loads in the background.", true, "{\"url\": \"https://mail.google.com\"}"),
                 ConnectorActionDef("read", "Read the page", "Return the visible text of the page in this agent's browser.", false, "{}"),
                 ConnectorActionDef("view", "Show on screen", "Put this agent's browser on screen when the user wants to watch.", false, "{}"),
+                // New interaction actions
+                ConnectorActionDef("click", "Click element", "Click a button, link, or element by CSS selector or text. Requires approval.", true, "{\"selector\": \"button[type=submit]\", \"text\": \"Send\", \"waitForNavigation\": true}"),
+                ConnectorActionDef("fill", "Fill form field", "Fill an input, textarea, or select by CSS selector. Requires approval.", true, "{\"selector\": \"input[name=q]\", \"value\": \"search query\"}"),
+                ConnectorActionDef("submit", "Submit form", "Submit a form by CSS selector. Requires approval.", true, "{\"selector\": \"form#search-form\"}"),
+                // Visual verification
+                ConnectorActionDef("screenshot", "Take screenshot", "Capture a PNG screenshot of the current page. Returns base64. Requires approval.", true, "{\"fullPage\": false}"),
+                // Structured extraction
+                ConnectorActionDef("extract", "Extract structured data", "Extract tables, links, or specific elements by CSS selector. Returns JSON.", false, "{\"selector\": \"table\", \"type\": \"table\"}"),
+                // Tab/session management
+                ConnectorActionDef("tab", "Tab management", "Create, switch, or close tabs in the office browser.", true, "{\"action\": \"new\", \"url\": \"https://mail.google.com\"}"),
+                // Download support
+                ConnectorActionDef("download", "Download file", "Download a file or PDF from the current page. Requires approval.", true, "{\"url\": \"https://example.com/file.pdf\", \"filename\": \"file.pdf\"}"),
+                // JS-heavy page handling
+                ConnectorActionDef("wait", "Wait for condition", "Wait for element, text, or network idle before reading. Use for SPA pages.", false, "{\"selector\": \".results\", \"timeoutMs\": 10000}"),
             ),
-            setupHelp = "Sign in once inside the office browser with the account the office should use. Every agent then browses in its own background window: it can open pages and read them without covering your screen, and Browsers shows any agent's page when you want to look.",
+            setupHelp = "Sign in once inside the office browser with the account the office should use. Every agent then browses in its own background window: it can open pages, click, fill forms, submit, take screenshots, extract data, manage tabs, download files, and wait for JS rendering — all without covering your screen. Browsers shows any agent's page when you want to look.",
             docsUrl = "",
             risk = "medium",
             iconKey = "accounts",

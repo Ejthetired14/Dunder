@@ -115,6 +115,29 @@ object BrowserHub {
         }
     }
 
+    /** Executes arbitrary JavaScript in the agent's WebView and returns the result via [onResult]. */
+    fun executeScript(agentId: String, script: String, onResult: (String?) -> Unit) {
+        val view = views[agentId]
+        if (view == null) {
+            onResult(null)
+            return
+        }
+        main.post {
+            try {
+                view.evaluateJavascript(script) { value ->
+                    val result = value
+                        ?.removeSurrounding("\"")
+                        ?.replace("\\n", "\n")
+                        ?.replace("\\\"", "\"")
+                        ?.replace("\\u003C", "<")
+                    onResult(result)
+                }
+            } catch (e: Throwable) {
+                onResult("Error: ${e.message}")
+            }
+        }
+    }
+
     fun close(agentId: String) {
         val view = views.remove(agentId) ?: return
         if (_viewing.value == agentId) _viewing.value = null
