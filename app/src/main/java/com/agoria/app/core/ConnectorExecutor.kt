@@ -1232,7 +1232,7 @@ class ConnectorExecutor(
                 (function() {
                     try {
                         return new Promise((resolve) => {
-                            var timeout = setTimeout(() => resolve('Network idle timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var timeout = setTimeout(() => resolve('Network idle timeout after \${timeoutMs}ms'), ${timeoutMs});
                             var pending = 0;
                             var origXHR = window.XMLHttpRequest;
                             window.XMLHttpRequest = function() {
@@ -1269,7 +1269,7 @@ class ConnectorExecutor(
                 (function() {
                     try {
                         return new Promise((resolve) => {
-                            var timeout = setTimeout(() => resolve('Text wait timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var timeout = setTimeout(() => resolve('Text wait timeout after \${timeoutMs}ms'), ${timeoutMs});
                             var check = function() {
                                 if (document.body.textContent.includes('$textMatch')) {
                                     clearTimeout(timeout);
@@ -1293,7 +1293,7 @@ class ConnectorExecutor(
                 (function() {
                     try {
                         return new Promise((resolve) => {
-                            var timeout = setTimeout(() => resolve('Element wait timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var timeout = setTimeout(() => resolve('Element wait timeout after \${timeoutMs}ms'), ${timeoutMs});
                             var check = function() {
                                 var el = document.querySelector('$selector');
                                 if (el) {
