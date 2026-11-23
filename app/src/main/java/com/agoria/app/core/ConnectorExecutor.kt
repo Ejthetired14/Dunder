@@ -1699,11 +1699,15 @@ class ConnectorExecutor(
         // inboxId is required for all actions except list_inboxes and create_inbox.
         // The old fallback to config.domain was incorrect because a domain is not an inbox ID.
         val inboxId = args.optString("inboxId").ifBlank { null }
-        val inboxIdOrError: String
-            get() = inboxId ?: return ConnectorResult(
-                false,
-                "Missing inboxId. Pass inboxId (the full inbox address, e.g. agent@yourdomain.com), or run list_inboxes to find one."
-            )
+
+        fun requireInboxId(): ConnectorResult? =
+            if (inboxId == null)
+                ConnectorResult(
+                    false,
+                    "Missing inboxId. Pass inboxId (the full inbox address, e.g. agent@yourdomain.com), or run list_inboxes to find one."
+                )
+            else
+                null
 
         fun handleError(response: HttpResult, context: String): ConnectorResult {
             val message = when (response.code) {
@@ -1728,7 +1732,8 @@ class ConnectorExecutor(
                 ConnectorResult(true, "Created inbox " + root.optString("inbox_id", root.optString("email")) + ".")
             }
             "send_email" -> {
-                val inbox = inboxIdOrError
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val to = args.optString("to").ifBlank { return ConnectorResult(false, "Missing to") }
                 val subject = args.optString("subject").ifBlank { "(no subject)" }
                 val text = args.optString("text")
@@ -1748,20 +1753,23 @@ class ConnectorExecutor(
                 ConnectorResult(true, "Sent '$subject' to $to from $inbox (message " + root.optString("message_id", root.optString("id")) + ").")
             }
             "list_emails" -> {
-                val inbox = inboxIdOrError
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 agentMailList("$base/inboxes/" + enc(inbox) + "/messages?limit=$limit", headers, "messages") {
                     it.optString("subject").ifBlank { "(no subject)" } + " from " + it.optString("from_") + " (" + it.optString("message_id", it.optString("id")) + ")"
                 }
             }
             "get_email" -> {
-                val inbox = inboxIdOrError
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val emailId = args.optString("emailId").ifBlank { return ConnectorResult(false, "Missing emailId") }
                 val response = http("GET", "$base/inboxes/" + enc(inbox) + "/messages/" + enc(emailId), headers)
                 if (!response.ok) return handleError(response, "get_email")
                 ConnectorResult(true, text(response.body, 4000))
             }
             "delete_inbox" -> {
-                val inbox = inboxIdOrError
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val response = http("DELETE", "$base/inboxes/" + enc(inbox), headers)
                 if (!response.ok) return handleError(response, "delete_inbox")
                 ConnectorResult(true, "Deleted inbox $inbox.")
