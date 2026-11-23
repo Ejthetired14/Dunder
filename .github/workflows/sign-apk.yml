@@ -20,7 +20,7 @@ on:
 
 permissions:
   contents: read
-  actions: write
+  actions: read
 
 jobs:
   sign:
@@ -42,11 +42,23 @@ jobs:
           echo "/usr/local/lib/android/sdk/build-tools/35.0.0" >> $GITHUB_PATH
           echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
 
-      - name: Download unsigned APK
+      - name: Find latest successful Build APK run
+        id: find-build
+        run: |
+          # Get the latest successful Build APK workflow run
+          RUN_ID=$(gh api repos/${{ github.repository }}/actions/workflows/build-apk.yml/runs \
+            --jq '.workflow_runs[] | select(.conclusion=="success" and .event=="push") | .id' | head -1)
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download unsigned APK from Build APK run
         uses: actions/download-artifact@v4
         with:
           name: apks
           path: artifacts
+          run-id: ${{ steps.find-build.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Generate keystore & sign APK
         env:
