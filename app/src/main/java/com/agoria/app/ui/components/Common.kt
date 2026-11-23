@@ -44,11 +44,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontStyle
@@ -211,7 +214,18 @@ fun Pill(
     PixelPill(text = text, modifier = modifier, fill = color.copy(alpha = 0.14f), textColor = color)
 }
 
-/** Square-cornered card: cream fill, 2 dp ink border, offset shadow. Content is a Column. */
+/**
+ * Square-cornered card: flat fill, 2 dp ink border, offset shadow. Content is a Column.
+ *
+ * Text colour is chosen from the fill so content is readable by default: ink on light fills (cream,
+ * tan, amber), cream on dark fills (navy, teal, the theme's surfaceVariant). Text that sets its own
+ * colour is unaffected. Secondary text on light fills should use `Pal.navy`, never
+ * `colorScheme.onSurfaceVariant` or `primary` (those are tan/amber, made for dark backgrounds).
+ *
+ * Inner padding is deliberately NOT added here: every caller already pads its own content (some
+ * put an image flush against the border), so a default would double-pad. Add `Modifier.padding(14.dp)`
+ * inside, as `SettingsCard` and `AgentCard` do.
+ */
 @Composable
 fun PixelCard(
     modifier: Modifier = Modifier,
@@ -219,13 +233,16 @@ fun PixelCard(
     title: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val contentColor = if (fill.luminance() > 0.4f) Pal.ink else Pal.cream
     PixelPanel(modifier = modifier, fill = fill) {
-        Column(Modifier.fillMaxWidth()) {
-            title?.let {
-                Text(it, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            Column(Modifier.fillMaxWidth()) {
+                title?.let {
+                    Text(it, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                }
+                content()
             }
-            content()
         }
     }
 }
