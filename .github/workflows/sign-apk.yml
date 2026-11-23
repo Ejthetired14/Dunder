@@ -35,8 +35,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK (with build-tools)
+        run: |
+          # Use the pre-installed Android SDK
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/build-tools/35.0.0" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
 
       - name: Download unsigned APK
         uses: actions/download-artifact@v4
