@@ -209,7 +209,7 @@ fun PixelPill(
 fun Pill(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.secondary,
+    color: Color = Pal.teal,
 ) {
     PixelPill(text = text, modifier = modifier, fill = color.copy(alpha = 0.14f), textColor = color)
 }
@@ -270,7 +270,7 @@ fun AgentCard(
                     Text(
                         agent.role,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
                 StatusPill(agent.status)
@@ -279,7 +279,7 @@ fun AgentCard(
             Text(
                 text = "GOAL",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = Pal.amber,
             )
             Text(
                 text = agent.goal,
@@ -293,7 +293,7 @@ fun AgentCard(
                     text = "“${latestDiary.take(120)}”",
                     style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -340,7 +340,7 @@ fun EmptyState(
         Icon(
             imageVector = Icons.Default.AutoAwesome,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = Pal.amber,
             modifier = Modifier.size(28.dp),
         )
         Spacer(Modifier.height(10.dp))
@@ -349,7 +349,7 @@ fun EmptyState(
         Text(
             text = body,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Pal.tan,
         )
     }
 }
@@ -378,16 +378,15 @@ fun connectorIcon(iconKey: String): ImageVector {
 
 @Composable
 fun OfficeThumbnail(modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
     Box(
         modifier = modifier
-            .background(colors.primaryContainer)
+            .background(Pal.amber.copy(alpha = 0.14f))
             .border(2.dp, Pal.ink),
     ) {
         Icon(
             imageVector = Icons.Default.Hub,
             contentDescription = null,
-            tint = colors.onPrimaryContainer.copy(alpha = 0.3f),
+            tint = Pal.amber.copy(alpha = 0.3f),
             modifier = Modifier
                 .fillMaxSize()
                 .size(120.dp)

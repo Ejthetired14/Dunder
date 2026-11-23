@@ -708,7 +708,7 @@ private fun OfficeListScreen(
                         Text(
                             text = "${agents.size} agents · tap a desk to talk",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.tan,
                         )
                     }
                 },
@@ -742,7 +742,7 @@ private fun OfficeListScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        containerColor = Pal.amber.copy(alpha = 0.14f),
                     ),
                 ) {
                     Row(
@@ -752,19 +752,19 @@ private fun OfficeListScreen(
                         Icon(
                             Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = Pal.amber,
                         )
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = "${agent?.name ?: "Office"} is thinking",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = Pal.ink,
                             )
                             Text(
                                 text = latest.content,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = Pal.ink,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -773,7 +773,7 @@ private fun OfficeListScreen(
                         Text(
                             text = Time.relativeTime(latest.createdAt),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = Pal.tan,
                         )
                     }
                 }
@@ -821,7 +821,7 @@ private fun AgentDesk(
                     Text(
                         agent.role,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
             }
@@ -831,7 +831,7 @@ private fun AgentDesk(
             Text(
                 text = latestDiary ?: agent.goal,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.tan,
                 fontStyle = FontStyle.Italic,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
@@ -841,7 +841,7 @@ private fun AgentDesk(
                 Pill(text = "Talk")
                 if (agent.status == "waiting_approval") {
                     Spacer(Modifier.width(6.dp))
-                    Pill(text = "Approval", color = MaterialTheme.colorScheme.tertiary)
+                    Pill(text = "Approval", color = Pal.amber)
                 }
             }
         }

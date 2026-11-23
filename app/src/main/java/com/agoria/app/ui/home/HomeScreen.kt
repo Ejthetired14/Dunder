@@ -226,7 +226,7 @@ fun HomeScreen(
                     Text(
                         text = "No thoughts yet. The agents will start writing when autonomy is on.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
@@ -242,7 +242,7 @@ fun HomeScreen(
                 Text(
                     text = "Free models are listed in Settings. The app ships with keyless providers enabled; add keys for reliability.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.wood,
                 )
             }
         }

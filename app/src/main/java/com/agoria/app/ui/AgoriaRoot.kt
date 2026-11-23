@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.agoria.app.ui.office.world.Pal
 
 @Composable
 fun AgoriaRoot() {
@@ -28,7 +29,7 @@ fun AgoriaRoot() {
         when {
             settings == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    CircularProgressIndicator(color = Pal.amber)
                 }
             }
             !settings.setupComplete -> {

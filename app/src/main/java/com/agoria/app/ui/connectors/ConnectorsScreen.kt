@@ -46,6 +46,7 @@ import com.agoria.app.data.ConnectorLogEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.connectorIcon
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Time
 import org.json.JSONObject
 
@@ -235,7 +236,7 @@ private fun ConnectorGroup(
         Text(
             text = "$on/${connectors.size} on",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.outline,
+            color = Pal.wood,
         )
     }
     if (expanded) {
@@ -266,7 +267,7 @@ private fun ConnectorRow(
         Icon(
             imageVector = connectorIcon(def?.iconKey ?: "http"),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = Pal.tan,
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(12.dp))
@@ -289,10 +290,10 @@ private fun ConnectorRow(
 @Composable
 private fun StatusDot(status: String) {
     val color = when (status) {
-        "ready", "configured" -> MaterialTheme.colorScheme.secondary
-        "needs_setup" -> MaterialTheme.colorScheme.tertiary
-        "error" -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.outline
+        "ready", "configured" -> Pal.teal
+        "needs_setup" -> Pal.amber
+        "error" -> Pal.red
+        else -> Pal.wood
     }
     Surface(color = color, shape = MaterialTheme.shapes.small, modifier = Modifier.size(8.dp)) {}
 }
@@ -308,7 +309,7 @@ private fun ConnectorLogRow(log: ConnectorLogEntity) {
         Text(
             text = if (log.status == "ok") "ok" else "err",
             style = MaterialTheme.typography.labelSmall,
-            color = if (log.status == "ok") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+            color = if (log.status == "ok") Pal.teal else Pal.red,
         )
         Spacer(Modifier.width(8.dp))
         Text(
@@ -321,7 +322,7 @@ private fun ConnectorLogRow(log: ConnectorLogEntity) {
         Text(
             text = Time.relativeTime(log.createdAt),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.outline,
+            color = Pal.wood,
         )
     }
 }
@@ -373,7 +374,7 @@ private fun ConnectorSetupDialog(
                 Text(
                     text = def.setupHelp,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
                 if (usesDeviceAccounts) {
                     BrowserSessionBlock(
@@ -394,7 +395,7 @@ private fun ConnectorSetupDialog(
                     Text(
                         text = def.actions.joinToString(", ") { it.id },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        color = Pal.wood,
                     )
                 }
                 def.fields.forEach { field ->
@@ -415,7 +416,7 @@ private fun ConnectorSetupDialog(
                     )
                 }
                 if (error.isNotBlank()) {
-                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = Pal.red)
                 }
                 if (connector?.configEnc != null && !usesDeviceAccounts) {
                     TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp)) { Text("Clear") }
@@ -432,7 +433,7 @@ private fun ConnectorSetupDialog(
 
 @Composable
 private fun BrowserSessionBlock(signedIn: Boolean, onOpen: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+    Surface(shape = MaterialTheme.shapes.medium, color = Pal.teal.copy(alpha = 0.14f)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = if (signedIn) "Office browser is signed in" else "Office browser is signed out",

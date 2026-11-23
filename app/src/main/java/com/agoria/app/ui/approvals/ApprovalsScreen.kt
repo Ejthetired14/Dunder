@@ -54,6 +54,7 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
+import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Json
 import com.agoria.app.util.Time
 import kotlinx.coroutines.launch
@@ -274,7 +275,7 @@ private fun ApprovalCard(
                 Text(
                     text = agentName,
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.amber,
                 )
                 Spacer(Modifier.width(8.dp))
                 Pill(text = typeLabel(approval.type))
@@ -287,7 +288,7 @@ private fun ApprovalCard(
             Text(
                 text = approval.summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.tan,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -295,7 +296,7 @@ private fun ApprovalCard(
             Text(
                 text = Time.relativeTime(approval.createdAt),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.tan,
             )
         }
     }
@@ -312,7 +313,7 @@ private fun ConnectorRequestCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            containerColor = Pal.amber.copy(alpha = 0.14f),
         ),
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -320,12 +321,12 @@ private fun ConnectorRequestCard(
                 Text(
                     text = agentName,
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = Pal.ink,
                 )
                 Spacer(Modifier.width(8.dp))
                 Pill(
                     text = "Connector",
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = Pal.amber,
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -337,14 +338,14 @@ private fun ConnectorRequestCard(
             Text(
                 text = request.reason,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                color = Pal.ink,
             )
             if (request.scopes.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Scopes: ${request.scopes}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = Pal.ink,
                 )
             }
             Spacer(Modifier.height(10.dp))
@@ -392,7 +393,7 @@ private fun ApprovalHistoryList(
                         Text(
                             text = Time.relativeTime(approval.createdAt),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.tan,
                         )
                     }
                     Spacer(Modifier.height(4.dp))
@@ -402,7 +403,7 @@ private fun ApprovalHistoryList(
                         Text(
                             text = approval.result,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Pal.tan,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -446,14 +447,14 @@ private fun ApprovalDialog(
                     Text(
                         text = "This generates a downloadable project ZIP inside the app. Nothing is published or sent to an external service.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
                 if (approval.type == "connector_action") {
                     Text(
                         text = "This runs the connector action exactly as shown below. Review the arguments carefully.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
                 if (approval.details.isNotBlank()) {
@@ -483,7 +484,7 @@ private fun ApprovalDialog(
                     Text(
                         text = "Result: ${approval.result}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.tan,
                     )
                 }
             }
@@ -518,10 +519,10 @@ private fun typeLabel(type: String): String = when (type) {
 
 @Composable
 private fun statusTint(status: String): Color = when (status) {
-    "executed" -> MaterialTheme.colorScheme.secondary
-    "failed" -> MaterialTheme.colorScheme.error
-    "denied" -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.tertiary
+    "executed" -> Pal.teal
+    "failed" -> Pal.red
+    "denied" -> Pal.red
+    else -> Pal.amber
 }
 
 @Composable
@@ -564,7 +565,7 @@ private fun AutoApproveDialog(
                 Text(
                     text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution. Connector actions must be checked for GitHub/Notion auto-approve.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.tan,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Auto-approve these types:", style = MaterialTheme.typography.labelLarge)
