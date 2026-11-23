@@ -88,7 +88,7 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                 composable(
                     route = "connectors"
                 ) { entry ->
-                    val focusId = entry.getString("focus")
+                    val focusId = entry.arguments?.getString("focus")
                     ConnectorsScreen(
                         viewModel = viewModel,
                         onBack = { navController.popBackStack("office", false) },

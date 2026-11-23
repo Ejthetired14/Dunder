@@ -1,5 +1,6 @@
 package com.agoria.app.ui.connectors
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -106,8 +107,8 @@ fun ConnectorsScreen(
                     expanded.value = expanded.value + category
                 }
                 
-                // Build flat list to find index
-                val items = buildFlatList(connectors, requests, logs, expanded.value)
+                // Build flat list to find index (non-composable version)
+                val items = buildFlatListItems(connectors, requests, logs, expanded.value)
                 val index = items.indexOfFirst { it.connectorId == focusId }
                 if (index >= 0) {
                     // Small delay to let layout happen, then scroll and highlight
@@ -293,9 +294,19 @@ sealed interface FlatItem {
     val connectorId: String?
 }
 
-// Build flat list of items for LazyColumn
+// Build flat list of items for LazyColumn (composable version with placeholder callbacks)
 @Composable
 private fun buildFlatList(
+    connectors: List<ConnectorEntity>,
+    requests: List<ConnectorRequestEntity>,
+    logs: List<ConnectorLogEntity>,
+    expanded: Set<String>,
+): List<FlatItem> {
+    return buildFlatListItems(connectors, requests, logs, expanded)
+}
+
+// Non-composable version for use in LaunchedEffect (just for index calculation)
+private fun buildFlatListItems(
     connectors: List<ConnectorEntity>,
     requests: List<ConnectorRequestEntity>,
     logs: List<ConnectorLogEntity>,
