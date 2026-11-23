@@ -437,7 +437,7 @@ private fun ConnectorRow(
         animationSpec = tween(500)
     )
     val highlightColor by animateColorAsState(
-        targetValue = if (isHighlighted) Pal.amber.copy(alpha = 0.3f) : Color.Transparent,
+        targetValue = if (isHighlighted) Pal.amber.copy(alpha = 0.3f) else Color.Transparent,
         animationSpec = tween(500)
     )
     val borderWidth by animateFloatAsState(
