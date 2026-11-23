@@ -1,0 +1,93 @@
+name: Generate Keystore & Sign APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      alias:
+        description: Key alias
+        required: true
+        default: dunder
+      storepass:
+        description: Keystore password
+        required: true
+      keypass:
+        description: Key password
+        required: true
+      dname:
+        description: Distinguished name (CN=..., O=..., C=US)
+        required: true
+        default: "CN=Dunder, O=Dunder, C=US"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Download unsigned APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apks
+          path: artifacts
+
+      - name: Generate keystore & sign APK
+        env:
+          ALIAS: ${{ github.event.inputs.alias }}
+          STOREPASS: ${{ github.event.inputs.storepass }}
+          KEYPASS: ${{ github.event.inputs.keypass }}
+          DNAME: ${{ github.event.inputs.dname }}
+        run: |
+          # Generate keystore in memory (not persisted)
+          keytool -genkeypair -v \
+            -keystore /tmp/keystore.jks \
+            -alias "$ALIAS" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "$STOREPASS" \
+            -keypass "$KEYPASS" \
+            -dname "$DNAME" \
+            -noprompt
+
+          # Sign the APK
+          apksigner sign \
+            --ks /tmp/keystore.jks \
+            --ks-key-alias "$ALIAS" \
+            --ks-pass pass:"$STOREPASS" \
+            --key-pass pass:"$KEYPASS" \
+            artifacts/release/app-release-unsigned.apk \
+            --out /tmp/dunder-signed-release.apk
+
+          # Verify
+          apksigner verify /tmp/dunder-signed-release.apk
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-release-apk
+          path: /tmp/dunder-signed-release.apk
+          retention-days: 7
+
+      - name: Show download info
+        run: |
+          echo "✅ Signed APK uploaded as artifact: signed-release-apk"
+          echo "📥 Download from Actions → this run → Artifacts"
+          echo "⚠️  Save the keystore details if you need to update later:"
+          echo "   Alias: $ALIAS"
+          echo "   Store password: $STOREPASS"
+          echo "   Key password: $KEYPASS"
+          echo "   DN: $DNAME"

@@ -1630,7 +1630,10 @@ class ConnectorExecutor(
             "create_product" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing name") }
                 val amount = args.optInt("priceAmount", 0)
-                val currency = args.optString("priceCurrency", "USD").uppercase()
+                val currency = args.optString("priceCurrency", "usd").trim().lowercase()
+                if (!currency.matches(Regex("^[a-z]{3}$"))) {
+                    return ConnectorResult(false, "priceCurrency must be a 3-letter ISO code, e.g. usd")
+                }
                 val payload = JSONObject().put("name", name)
                 args.optString("description").ifBlank { null }?.let { payload.put("description", it) }
                 payload.put(
@@ -1691,8 +1694,30 @@ class ConnectorExecutor(
         val apiKey = cfg(config, "apiKey") ?: return ConnectorResult(false, "Missing AgentMail API key")
         val headers = mapOf("Authorization" to "Bearer $apiKey", "Content-Type" to "application/json")
         val base = "https://api.agentmail.to/v0"
-        val inbox = args.optString("inboxId").ifBlank { cfg(config, "domain").orEmpty() }
         val limit = args.optInt("limit", 10).coerceIn(1, 100)
+
+        // inboxId is required for all actions except list_inboxes and create_inbox.
+        // The old fallback to config.domain was incorrect because a domain is not an inbox ID.
+        val inboxId = args.optString("inboxId").ifBlank { null }
+
+        fun requireInboxId(): ConnectorResult? =
+            if (inboxId == null)
+                ConnectorResult(
+                    false,
+                    "Missing inboxId. Pass inboxId (the full inbox address, e.g. agent@yourdomain.com), or run list_inboxes to find one."
+                )
+            else
+                null
+
+        fun handleError(response: HttpResult, context: String): ConnectorResult {
+            val message = when (response.code) {
+                401 -> "AgentMail returned 401. The API key is invalid or expired. Regenerate it in the AgentMail dashboard."
+                403 -> "AgentMail returned 403. The API key likely lacks send/receive permissions. Regenerate it in the AgentMail dashboard with those scopes."
+                else -> "AgentMail $context error: ${text(response.body, 400)}"
+            }
+            return ConnectorResult(false, message)
+        }
+
         return when (action) {
             "list_inboxes" -> agentMailList("$base/inboxes?limit=$limit", headers, "inboxes") {
                 it.optString("inbox_id").ifBlank { it.optString("email") }
@@ -1702,12 +1727,13 @@ class ConnectorExecutor(
                 val payload = JSONObject().put("username", username)
                 args.optString("domain").ifBlank { null }?.let { payload.put("domain", it) }
                 val response = http("POST", "$base/inboxes", headers, payload.toString())
-                if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
+                if (!response.ok) return handleError(response, "create_inbox")
                 val root = json(response.body) ?: return ConnectorResult(false, "AgentMail sent a non-JSON response (${response.code}): ${text(response.body, 200)}")
                 ConnectorResult(true, "Created inbox " + root.optString("inbox_id", root.optString("email")) + ".")
             }
             "send_email" -> {
-                if (inbox.isBlank()) return ConnectorResult(false, "Missing inboxId")
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val to = args.optString("to").ifBlank { return ConnectorResult(false, "Missing to") }
                 val subject = args.optString("subject").ifBlank { "(no subject)" }
                 val text = args.optString("text")
@@ -1722,27 +1748,30 @@ class ConnectorExecutor(
                     headers,
                     payload.toString(),
                 )
-                if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
+                if (!response.ok) return handleError(response, "send_email")
                 val root = json(response.body) ?: JSONObject()
                 ConnectorResult(true, "Sent '$subject' to $to from $inbox (message " + root.optString("message_id", root.optString("id")) + ").")
             }
             "list_emails" -> {
-                if (inbox.isBlank()) return ConnectorResult(false, "Missing inboxId")
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 agentMailList("$base/inboxes/" + enc(inbox) + "/messages?limit=$limit", headers, "messages") {
                     it.optString("subject").ifBlank { "(no subject)" } + " from " + it.optString("from_") + " (" + it.optString("message_id", it.optString("id")) + ")"
                 }
             }
             "get_email" -> {
-                if (inbox.isBlank()) return ConnectorResult(false, "Missing inboxId")
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val emailId = args.optString("emailId").ifBlank { return ConnectorResult(false, "Missing emailId") }
                 val response = http("GET", "$base/inboxes/" + enc(inbox) + "/messages/" + enc(emailId), headers)
-                if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
+                if (!response.ok) return handleError(response, "get_email")
                 ConnectorResult(true, text(response.body, 4000))
             }
             "delete_inbox" -> {
-                if (inbox.isBlank()) return ConnectorResult(false, "Missing inboxId")
+                requireInboxId()?.let { return it }
+                val inbox = inboxId!!
                 val response = http("DELETE", "$base/inboxes/" + enc(inbox), headers)
-                if (!response.ok) return ConnectorResult(false, "AgentMail error: ${text(response.body, 400)}")
+                if (!response.ok) return handleError(response, "delete_inbox")
                 ConnectorResult(true, "Deleted inbox $inbox.")
             }
             else -> ConnectorResult(false, "Unknown AgentMail action '$action'. Use create_inbox, list_inboxes, send_email, list_emails, get_email or delete_inbox.")
