@@ -410,6 +410,12 @@ class Repository(
     suspend fun pendingConnectorRequestsFor(agentId: String): List<ConnectorRequestEntity> =
         db.connectorRequestDao().pendingForAgent(agentId)
 
+    suspend fun getAllPendingApprovals(): List<ApprovalEntity> =
+        db.approvalDao().getAllPending()
+
+    suspend fun getAllPendingConnectorRequests(): List<ConnectorRequestEntity> =
+        db.connectorRequestDao().getAllPending()
+
     suspend fun connectorRequestForConnector(connectorId: String): ConnectorRequestEntity? =
         db.connectorRequestDao().pendingForConnector(connectorId)
 
