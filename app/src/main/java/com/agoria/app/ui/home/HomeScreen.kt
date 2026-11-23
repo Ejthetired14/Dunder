@@ -398,7 +398,11 @@ private fun DiaryRow(
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Spacer(Modifier.width(6.dp))
-                    Pill(text = entry.kind)
+                    PixelPill(
+                        text = entry.kind,
+                        fill = Pal.amber.copy(alpha = 0.14f),
+                        textColor = Pal.amber,
+                    )
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = Time.relativeTime(entry.createdAt),
