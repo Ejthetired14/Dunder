@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navArgument
@@ -88,8 +87,8 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                     )
                 }
                 composable(
-                    route = "connectors",
-                    arguments = listOf(navArgument("focus") { type = NavType.StringType; nullable = true })
+                    route = "connectors?focus={focus}",
+                    arguments = listOf(navArgument("focus") { nullable = true })
                 ) { entry ->
                     val focusId = entry.arguments?.getString("focus")
                     ConnectorsScreen(
