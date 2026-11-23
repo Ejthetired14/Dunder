@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -15,13 +17,22 @@ import com.agoria.app.AgoriaApplication
 import com.agoria.app.MainActivity
 import com.agoria.app.R
 import com.agoria.app.util.Notifier
+import kotlinx.coroutines.launch
 
 class AutonomyService : Service() {
+
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         Notifier.ensureChannels(this)
         startForegroundCompat()
+        acquireWakeLock()
+        // RUN-5: the service is running, so any earlier "restart after reboot failed" note is stale.
+        BootStatus.clear(this)
+        // Start ticking from the service itself, so the office keeps working even when the
+        // activity that asked for autonomy is long gone.
+        (application as AgoriaApplication).runtime.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -35,15 +46,54 @@ class AutonomyService : Service() {
     }
 
     override fun onDestroy() {
+        releaseWakeLock()
         (application as AgoriaApplication).runtime.stop()
         super.onDestroy()
     }
 
+    private fun acquireWakeLock() {
+        if (wakeLock != null) return
+        wakeLock = try {
+            val power = getSystemService(POWER_SERVICE) as? PowerManager
+            power?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "agoria:autonomy")?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not hold the autonomy wake lock: ${e.message}")
+            null
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.takeIf { it.isHeld }?.release()
+        } catch (_: Exception) {
+            // The lock was already released by the system.
+        }
+        wakeLock = null
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * RUN-3: every explicit stop (notification action, [stop]) also persists
+     * `autonomyEnabled = false`, otherwise [BootReceiver] would bring the loop back after the next
+     * reboot. The service stays alive until the write finishes, so the process is not reclaimed
+     * mid-write. System kills go through [onDestroy] only and deliberately leave the flag alone.
+     */
     private fun stopAutonomy() {
-        (application as AgoriaApplication).runtime.stop()
-        stopSelf()
+        val app = application as AgoriaApplication
+        app.runtime.stop()
+        app.appScope.launch {
+            try {
+                app.repository.updateSettings { it.copy(autonomyEnabled = false) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not persist autonomyEnabled=false: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                stopSelf()
+            }
+        }
     }
 
     private fun startForegroundCompat() {
@@ -88,14 +138,27 @@ class AutonomyService : Service() {
     companion object {
         const val ACTION_STOP = "com.agoria.app.action.STOP_AUTONOMY"
         private const val NOTIFICATION_ID = 7100
+        private const val TAG = "AutonomyService"
 
-        fun start(context: Context) {
+        /**
+         * Starts the autonomy service. Returns false only when Android refused both a foreground
+         * and a plain service start, which happens when the app is in the background and the
+         * system will not lift the restriction; the caller then keeps the in-process loop going.
+         */
+        fun start(context: Context): Boolean {
             val intent = Intent(context, AutonomyService::class.java)
             try {
                 ContextCompat.startForegroundService(context, intent)
-            } catch (_: Exception) {
-                // The app is not allowed to start a foreground service in this state.
-                // The next foreground launch will start it again.
+                return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Foreground start refused: ${e.message ?: e.javaClass.simpleName}")
+            }
+            return try {
+                context.startService(intent)
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Service start refused: ${e.message ?: e.javaClass.simpleName}")
+                false
             }
         }
 

@@ -16,6 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,12 +31,6 @@ import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.data.SettingsEntity
-import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.ui.office.world.PixelButton
-import com.agoria.app.ui.office.world.PixelLabel
-import com.agoria.app.ui.office.world.PixelPanel
-import com.agoria.app.ui.office.world.PixelPill
-import com.agoria.app.ui.office.world.PixelSwitch
 
 /** Request types that are fine to auto-approve: they stay inside the app. */
 private val SAFE_TYPES = linkedMapOf(
@@ -63,7 +59,14 @@ private fun RiskChip(risk: String) {
         "medium" -> Pal.amber to "MED"
         else -> Pal.tan to "LOW"
     }
-    PixelPill(text = label, fill = fill, textColor = if (risk.lowercase() == "high") Color.White else Pal.ink)
+    Box(
+        modifier = Modifier
+            .background(fill)
+            .border(2.dp, Pal.ink)
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    ) {
+        Text(label, style = PixelLabel.copy(fontSize = 10.sp, color = if (risk.lowercase() == "high") Color.White else Pal.ink))
+    }
 }
 
 @Composable
@@ -100,7 +103,7 @@ fun DeskPanel(
                     Text("YOUR DESK", style = PixelLabel)
                     Text(
                         text = if (approvals.isEmpty() && requests.isEmpty()) "Nothing waiting for you." else "Waiting for you:",
-                        style = PixelLabel.copy(fontSize = 12.sp),
+                        style = PixelBody.copy(fontSize = 12.sp),
                     )
                 }
                 PixelIconButton(Icons.Default.Close, "Close", onClose)
@@ -120,7 +123,7 @@ fun DeskPanel(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = ap.title,
-                            style = PixelLabel.copy(fontWeight = FontWeight.Bold),
+                            style = PixelBody.copy(fontWeight = FontWeight.Bold),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
@@ -128,12 +131,12 @@ fun DeskPanel(
                     }
                     Text(
                         text = "${agentName(ap.agentId)} asks:",
-                        style = PixelLabel.copy(fontSize = 11.sp, lineHeight = 14.sp),
+                        style = PixelBody.copy(fontSize = 11.sp, lineHeight = 14.sp),
                         modifier = Modifier.padding(top = 2.dp),
                     )
                     Text(
                         text = ap.summary,
-                        style = PixelLabel.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                        style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -161,11 +164,11 @@ fun DeskPanel(
                 ) {
                     Text(
                         text = "${agentName(rq.agentId)} wants the ${rq.connectorId.replace('_', ' ')} connector",
-                        style = PixelLabel.copy(fontWeight = FontWeight.Bold),
+                        style = PixelBody.copy(fontWeight = FontWeight.Bold),
                     )
                     Text(
                         text = "Connecting it needs your keys, so it is set up on the Approvals screen.",
-                        style = PixelLabel.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                        style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
                     )
                     Spacer(Modifier.height(8.dp))
                     PixelButton("Review", onOpenApprovals)
@@ -183,7 +186,7 @@ fun DeskPanel(
                     Text("AUTO-APPROVE", style = PixelLabel)
                     Text(
                         text = if (enabled) "On: matching requests go through without asking." else "Off: every request waits for you.",
-                        style = PixelLabel.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                        style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
                     )
                 }
                 PixelSwitch(enabled) { onSetAuto(it, types) }
@@ -192,7 +195,7 @@ fun DeskPanel(
             SAFE_TYPES.forEach { (type, label) ->
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, style = PixelLabel, modifier = Modifier.weight(1f))
+                    Text(label, style = PixelBody, modifier = Modifier.weight(1f))
                     PixelSwitch(type in types) { on ->
                         onSetAuto(enabled, if (on) types + type else types - type)
                     }
@@ -207,7 +210,7 @@ fun DeskPanel(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             LOCKED_TYPES[type] ?: type,
-                            style = PixelLabel,
+                            style = PixelBody,
                             modifier = Modifier.weight(1f),
                         )
                         PixelButton("Turn off", { onSetAuto(enabled, types - type) }, fill = Pal.cream)
@@ -219,8 +222,22 @@ fun DeskPanel(
             Text("ALWAYS ASKS YOU", style = PixelLabel)
             Text(
                 text = LOCKED_TYPES.values.joinToString(", ") + ". These can touch money, messages or accounts, so they stay manual here.",
-                style = PixelLabel.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                style = PixelBody.copy(fontSize = 12.sp, lineHeight = 16.sp),
             )
         }
     }
+}
+
+@Composable
+private fun PixelSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = Pal.cream,
+            checkedTrackColor = Pal.teal,
+            uncheckedThumbColor = Pal.cream,
+            uncheckedTrackColor = Pal.navy,
+        ),
+    )
 }

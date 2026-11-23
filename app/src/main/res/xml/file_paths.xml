@@ -10,9 +10,6 @@
         name="downloads"
         path="Download/" />
     <cache-path
-        name="apks"
-        path="apks/" />
-    <cache-path
         name="share_cache"
         path="share/" />
 </paths>

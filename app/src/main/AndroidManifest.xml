@@ -10,9 +10,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- SEC-1: backup is off. The database holds Keystore-encrypted secrets that cannot be
+     restored on another device, and files/backups/*.json may hold sensitive data. The
+     rules files below exclude everything as defense in depth if this is ever flipped. -->
     <application
         android:name=".AgoriaApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
@@ -20,6 +24,22 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Dunder.Starting">
+
+        <!-- The office's own browser window. It keeps its own cookies, so the agents work as the
+             provided account and never as the accounts signed in to this phone. -->
+        <activity
+            android:name=".browser.AgentBrowserActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:label="Office browser"
+            android:theme="@style/Theme.Dunder.Starting" />
+
+        <!-- Reads a finished build ZIP inside the app instead of handing the file to another app. -->
+        <activity
+            android:name=".viewer.BuildViewerActivity"
+            android:exported="false"
+            android:label="Build"
+            android:theme="@style/Theme.Dunder.Starting" />
 
         <activity
             android:name=".MainActivity"
@@ -42,13 +62,17 @@
                 android:value="Runs the on-device autonomous agent loop, local build runner, and connector actions. No background data is sent without the user's configured providers." />
         </service>
 
+        <!-- SEC-13: not exported. The system still delivers BOOT_COMPLETED to non-exported
+             receivers; exporting only let other apps send this receiver crafted intents.
+             LOCKED_BOOT_COMPLETED is deliberately not listed: the receiver reads Room, which is
+             credential-encrypted and unavailable before first unlock, and the receiver is not
+             directBootAware. tools/check_manifest_exports.py guards this in CI. -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

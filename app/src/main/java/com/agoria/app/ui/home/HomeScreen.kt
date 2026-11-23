@@ -6,8 +6,6 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,12 +21,27 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,34 +49,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.ui.AgoriaViewModel
+import com.agoria.app.ui.HomeScreenState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.AgentCard
 import com.agoria.app.ui.components.OfficeThumbnail
-import com.agoria.app.ui.components.PixelCard
-import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.SectionHeader
-import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.ui.office.world.PixelButton
-import com.agoria.app.ui.office.world.PixelLabel
-import com.agoria.app.ui.office.world.PixelPanel
-import com.agoria.app.ui.office.world.PixelSwitch
-import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Time
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: AgoriaViewModel,
     onOpenAgent: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenApprovals: () -> Unit,
     onOpenDiary: () -> Unit,
     onOpenOffice: () -> Unit,
@@ -123,39 +135,44 @@ fun HomeScreen(
 
             if (pending.isNotEmpty()) {
                 item {
-                    PixelCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onOpenApprovals),
-                        fill = Pal.amber,
+                    Card(
+                        onClick = onOpenApprovals,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                        ),
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 Icons.Default.FactCheck,
                                 contentDescription = null,
-                                tint = Pal.ink,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
                             )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     "${pending.size} approval${if (pending.size == 1) "" else "s"} waiting",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Pal.ink,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
                                 )
                                 Text(
                                     text = pending.first().title,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pal.ink,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Text("REVIEW", style = PixelLabel)
+                            Text(
+                                "Review",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
                         }
                     }
                 }
@@ -182,7 +199,11 @@ fun HomeScreen(
             }
             item {
                 if (agents.isEmpty()) {
-                    PixelCard(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
                         Column(Modifier.padding(16.dp)) {
                             Text("The office is still being prepared.", style = MaterialTheme.typography.titleMedium)
                             Text(
@@ -263,40 +284,59 @@ private fun OfficeHeroCard(
     currentAgent: String?,
     onToggle: (Boolean) -> Unit,
 ) {
-    PixelCard(modifier = Modifier.fillMaxWidth(), fill = Pal.navy) {
-        Column(Modifier.fillMaxWidth()) {
-            OfficeThumbnail(modifier = Modifier.fillMaxWidth().height(120.dp))
-            Column(Modifier.padding(14.dp)) {
-                PixelPill(
-                    text = if (running) "Autonomy live" else "Autonomy resting",
-                    fill = if (running) Pal.amber else Pal.tan,
-                    textColor = Pal.ink,
-                )
-                Spacer(Modifier.height(8.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .clip(RoundedCornerShape(28.dp)),
+    ) {
+        OfficeThumbnail(modifier = Modifier.fillMaxSize())
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color(0xCC0F1115),
+                            Color(0xF20F1115),
+                        ),
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(18.dp),
+        ) {
+            Pill(
+                text = if (running) "Autonomy live" else "Autonomy resting",
+                color = if (running) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Welcome back, $userName.",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+            )
+            Text(
+                text = if (running && currentAgent != null) {
+                    "$currentAgent is thinking right now."
+                } else {
+                    "$officeName is waiting for its next idea."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFD7DCE7),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = autonomyEnabled, onCheckedChange = onToggle)
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Welcome back, $userName.",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Pal.cream,
+                    text = if (autonomyEnabled) "Agents are free to act" else "Agents are paused",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFE9ECF2),
                 )
-                Text(
-                    text = if (running && currentAgent != null) {
-                        "$currentAgent is thinking right now."
-                    } else {
-                        "$officeName is waiting for its next idea."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Pal.tan,
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PixelSwitch(checked = autonomyEnabled, onChange = onToggle)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = if (autonomyEnabled) "Agents are free to act" else "Agents are paused",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Pal.cream,
-                    )
-                }
             }
         }
     }
@@ -312,7 +352,13 @@ private fun RuntimeCard(
     onRunNow: () -> Unit,
     onNudge: () -> Unit,
 ) {
-    PixelCard(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -327,7 +373,7 @@ private fun RuntimeCard(
                     modifier = Modifier.weight(1f),
                 )
                 if (running) {
-                    PixelPill(text = "Live", fill = Pal.amber, textColor = Pal.ink)
+                    Pill(text = "Live", color = MaterialTheme.colorScheme.secondary)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -354,23 +400,33 @@ private fun RuntimeCard(
             }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelButton("Run one cycle", onRunNow, small = true)
-                PixelButton("Nudge everyone", onNudge, fill = Pal.cream, small = true)
+                Button(onClick = onRunNow) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Run one cycle")
+                }
+                TextButton(onClick = onNudge) {
+                    Icon(Icons.Default.Bolt, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Nudge everyone")
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiaryRow(
     entry: DiaryEntryEntity,
     agent: AgentEntity?,
     onClick: () -> Unit,
 ) {
-    PixelCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -382,8 +438,8 @@ private fun DiaryRow(
                 Box(
                     Modifier
                         .size(34.dp)
-                        .background(Pal.navy)
-                        .border(2.dp, Pal.ink),
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 )
             }
             Spacer(Modifier.width(10.dp))
@@ -425,44 +481,46 @@ private fun AddAgentDialog(
     var persona by remember { mutableStateOf("") }
     var goal by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        PixelPanel(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("HIRE AN AGENT", style = PixelLabel)
-                PixelTextField(
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hire an agent") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Name",
+                    label = { Text("Name") },
+                    singleLine = true,
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = role,
                     onValueChange = { role = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Role",
+                    label = { Text("Role") },
+                    singleLine = true,
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = persona,
                     onValueChange = { persona = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Persona (optional)",
-                    singleLine = false,
+                    label = { Text("Persona (optional)") },
+                    minLines = 2,
                 )
-                PixelTextField(
+                OutlinedTextField(
                     value = goal,
                     onValueChange = { goal = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Goal (optional)",
-                    singleLine = false,
+                    label = { Text("Goal (optional)") },
+                    minLines = 2,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton("Create", { if (name.isNotBlank()) onCreate(name, role, persona, goal) })
-                    PixelButton("Cancel", onDismiss, fill = Pal.cream)
-                }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (name.isNotBlank()) onCreate(name, role, persona, goal)
+                },
+            ) { Text("Create") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }

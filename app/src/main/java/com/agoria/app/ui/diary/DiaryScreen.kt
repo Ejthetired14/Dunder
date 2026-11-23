@@ -20,10 +20,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +36,7 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.util.Time
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +44,7 @@ import com.agoria.app.util.Time
 fun DiaryScreen(
     viewModel: AgoriaViewModel,
     onOpenAgent: (String) -> Unit,
+    onBack: () -> Unit,
 ) {
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val diary by viewModel.diary.collectAsStateWithLifecycle()
@@ -56,21 +56,10 @@ fun DiaryScreen(
             (query.isBlank() || entry.content.contains(query, ignoreCase = true) || entry.kind.contains(query, ignoreCase = true))
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Diary", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${diary.size} entries · private thoughts, plans, and lessons",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-            )
-        },
+    PixelScaffold(
+        title = "Diary",
+        subtitle = "${diary.size} entries · private thoughts, plans, and lessons",
+        onBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
@@ -84,7 +73,7 @@ fun DiaryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Search thoughts, plans, decisions...") },
-                leadingIcon = { Icon(Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
             )
 

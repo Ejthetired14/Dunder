@@ -34,6 +34,14 @@ data class PeerInfo(
     val goal: String,
 )
 
+/** One message an agent said to a coworker (the `say` action). */
+data class ChatterLine(
+    val fromName: String,
+    val toName: String,
+    val text: String,
+    val at: Long,
+)
+
 data class AgentContext(
     val agent: AgentEntity,
     val officeName: String,
@@ -53,6 +61,8 @@ data class AgentContext(
     val infrastructureFundCents: Long = 0,
     val agentProfitSharePercent: Int = 50,
     val userProfitSharePercent: Int = 50,
+    // Agent-to-agent talk
+    val chatter: List<ChatterLine> = emptyList(),
 )
 
 data class AgentDecision(

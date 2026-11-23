@@ -37,6 +37,7 @@ class AgoriaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifier.ensureChannels(this)
+        com.agoria.app.browser.BrowserHub.init(this)
         database = AppDatabase.create(this)
         repository = Repository(database, this)
         appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -56,6 +57,8 @@ class AgoriaApplication : Application() {
 
         appScope.launch {
             repository.seedIfNeeded()
+            // One full snapshot a day, so no upgrade can ever leave the office with nothing.
+            repository.writeAutoBackup()
         }
 
         updateManager = UpdateManager(this, appScope)

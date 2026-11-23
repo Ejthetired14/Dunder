@@ -10,26 +10,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,25 +32,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agoria.app.core.ConnectorAuth
 import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ConnectorLogEntity
 import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.components.EmptyState
-import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.connectorIcon
 import com.agoria.app.util.Time
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectorsScreen(viewModel: AgoriaViewModel) {
+fun ConnectorsScreen(
+    viewModel: AgoriaViewModel,
+    onBack: () -> Unit,
+) {
     val connectors by viewModel.connectors.collectAsStateWithLifecycle()
     val requests by viewModel.pendingConnectorRequests.collectAsStateWithLifecycle()
     val logs by viewModel.connectorLogs.collectAsStateWithLifecycle()
@@ -66,6 +64,9 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
     var savedConfig by remember { mutableStateOf<JSONObject?>(null) }
     var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var error by remember { mutableStateOf("") }
+    var showLogs by remember { mutableStateOf(false) }
+    // One short list per category instead of every connector on one endless page.
+    var expanded by remember { mutableStateOf(setOf("Needs attention")) }
 
     LaunchedEffect(setupConnectorId) {
         val id = setupConnectorId
@@ -81,61 +82,80 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
             savedConfig = viewModel.getConnectorConfig(id)
             val def = ConnectorCatalog.get(id)
             values = def?.fields?.associate { field ->
-                field.key to if (field.secret) "" else (savedConfig?.optString(field.key) ?: "")
+                field.key to (savedConfig?.optString(field.key) ?: "")
             } ?: emptyMap()
             error = ""
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Text("Connect", style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
-                },
-            )
-        },
+    PixelScaffold(
+        title = "Connectors",
+        subtitle = "Office integrations and agent tools",
+        onBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            if (requests.isNotEmpty()) {
-                Text("Pending connector requests", style = MaterialTheme.typography.titleMedium)
-                requests.forEach { request ->
-                    ConnectorRequestRow(
-                        request = request,
-                        onApprove = { viewModel.approveConnectorRequest(request.id) },
-                        onDeny = { viewModel.denyConnectorRequest(request.id) },
+            requests.forEach { request ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Agent asks for ${request.connectorId}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    TextButton(onClick = { viewModel.approveConnectorRequest(request.id) }) { Text("Approve") }
+                    TextButton(onClick = { viewModel.denyConnectorRequest(request.id) }) { Text("Deny") }
                 }
             }
 
-            Text("Catalog", style = MaterialTheme.typography.titleMedium)
-            connectors.forEach { connector ->
-                ConnectorRow(
-                    connector = connector,
-                    onClick = { selectedId = connector.id },
+            val attention = connectors.filter { it.status == "error" || it.status == "needs_setup" }
+            val rest = connectors.filterNot { it in attention }
+            if (attention.isNotEmpty()) {
+                ConnectorGroup(
+                    title = "Needs attention",
+                    connectors = attention,
+                    expanded = "Needs attention" in expanded,
+                    onToggleGroup = {
+                        expanded = if ("Needs attention" in expanded) expanded - "Needs attention" else expanded + "Needs attention"
+                    },
+                    onOpen = { id -> selectedId = id },
+                    onToggle = { id, on -> viewModel.toggleConnector(id, on) },
                 )
             }
+            rest.groupBy { it.category.ifBlank { "Other" } }
+                .toSortedMap()
+                .forEach { (category, rows) ->
+                    ConnectorGroup(
+                        title = category,
+                        connectors = rows,
+                        expanded = category in expanded,
+                        onToggleGroup = {
+                            expanded = if (category in expanded) expanded - category else expanded + category
+                        },
+                        onOpen = { id -> selectedId = id },
+                        onToggle = { id, on -> viewModel.toggleConnector(id, on) },
+                    )
+                }
 
             if (logs.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("Recent calls", style = MaterialTheme.typography.titleMedium)
-                logs.take(12).forEach { log ->
-                    ConnectorLogRow(log = log)
+                TextButton(onClick = { showLogs = !showLogs }, contentPadding = PaddingValues(0.dp)) {
+                    Text(if (showLogs) "Hide recent calls" else "Recent calls (${logs.size})")
                 }
-            }
-
-            if (connectors.isEmpty()) {
-                EmptyState(
-                    title = "No connectors",
-                    body = "The built-in catalog will appear here after the database is seeded.",
-                )
+                if (showLogs) {
+                    logs.take(6).forEach { log -> ConnectorLogRow(log) }
+                }
             }
         }
     }
@@ -148,7 +168,12 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
             def = def,
             values = values,
             error = error,
-            onValue = { key, value -> values = values + (key to value) },
+            onValue = { key, value ->
+                val sanitized = value
+                    .replace(Regex("[\\u200e\\u200f\\u202a-\\u202e\\u0000-\\u001f\\u007f]"), "")
+                    .trim()
+                values = values + (key to sanitized)
+            },
             onDismiss = { selectedId = null },
             onSave = {
                 val id = selectedId
@@ -156,14 +181,10 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
                     val config = JSONObject()
                     var missing = ""
                     def?.fields?.forEach { field ->
-                        var value = values[field.key] ?: ""
+                        val value = values[field.key] ?: ""
                         val existing = savedConfig?.optString(field.key) ?: ""
                         when {
-                            value.isNotBlank() -> {
-                                // Sanitize ALL config values: remove invisible/control characters
-                                value = sanitizeConfigValue(value)
-                                config.put(field.key, value)
-                            }
+                            value.isNotBlank() -> config.put(field.key, value)
                             field.secret && existing.isNotBlank() -> config.put(field.key, existing)
                             field.required && existing.isBlank() -> missing = field.label
                             existing.isNotBlank() -> config.put(field.key, existing)
@@ -189,164 +210,123 @@ fun ConnectorsScreen(viewModel: AgoriaViewModel) {
 }
 
 @Composable
-private fun ConnectorRequestRow(
-    request: com.agoria.app.data.ConnectorRequestEntity,
-    onApprove: () -> Unit,
-    onDeny: () -> Unit,
+private fun ConnectorGroup(
+    title: String,
+    connectors: List<ConnectorEntity>,
+    expanded: Boolean,
+    onToggleGroup: () -> Unit,
+    onOpen: (String) -> Unit,
+    onToggle: (String, Boolean) -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-        ),
+    val on = connectors.count { it.status != "disabled" }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = request.connectorId.replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
-                Pill(text = "Requested", color = MaterialTheme.colorScheme.tertiary)
-            }
-            Spacer(Modifier.height(4.dp))
+        TextButton(onClick = onToggleGroup, contentPadding = PaddingValues(horizontal = 4.dp)) {
             Text(
-                text = request.reason,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                text = (if (expanded) "▾ " else "▸ ") + title,
+                style = MaterialTheme.typography.titleSmall,
             )
-            if (request.scopes.isNotBlank()) {
-                Text(
-                    text = "Scopes: ${request.scopes}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onApprove) { Text("Approve & set up") }
-                TextButton(onClick = onDeny) { Text("Deny") }
-            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "$on/${connectors.size} on",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+    }
+    if (expanded) {
+        connectors.forEach { connector ->
+            ConnectorRow(
+                connector = connector,
+                onOpen = { onOpen(connector.id) },
+                onToggle = { enabled -> onToggle(connector.id, enabled) },
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectorRow(
     connector: ConnectorEntity,
-    onClick: () -> Unit,
+    onOpen: () -> Unit,
+    onToggle: (Boolean) -> Unit,
 ) {
     val def = ConnectorCatalog.get(connector.id)
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+    val enabled = connector.status != "disabled"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = connectorIcon(def?.iconKey ?: "http"),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(28.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(connector.name, style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.width(8.dp))
-                    StatusPillForConnector(connector.status)
-                }
-                Text(
-                    text = def?.description ?: "Custom connector.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "${def?.actions?.size ?: 0} actions \u2022 ${def?.category ?: "Custom"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = if (connector.status == "needs_setup") "Set up" else "Edit",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Icon(
+            imageVector = connectorIcon(def?.iconKey ?: "http"),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = connector.name,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        StatusDot(status = connector.status)
+        Spacer(Modifier.width(10.dp))
+        Switch(checked = enabled, onCheckedChange = onToggle)
+        TextButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text(if (def?.auth == ConnectorAuth.ACCOUNT || connector.configEnc != null) "Edit" else "Set up")
         }
     }
 }
 
 @Composable
-private fun StatusPillForConnector(status: String) {
+private fun StatusDot(status: String) {
     val color = when (status) {
         "ready", "configured" -> MaterialTheme.colorScheme.secondary
         "needs_setup" -> MaterialTheme.colorScheme.tertiary
         "error" -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.outline
     }
-    Surface(
-        color = color.copy(alpha = 0.14f),
-        shape = MaterialTheme.shapes.small,
-    ) {
-        Text(
-            text = status.replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-        )
-    }
+    Surface(color = color, shape = MaterialTheme.shapes.small, modifier = Modifier.size(8.dp)) {}
 }
 
 @Composable
 private fun ConnectorLogRow(log: ConnectorLogEntity) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.padding(12.dp)) {
-            Icon(
-                imageVector = if (log.status == "ok") CheckCircle else ErrorOutline,
-                contentDescription = null,
-                tint = if (log.status == "ok") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "${log.connectorId}.${log.action}",
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Text(
-                    text = log.summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = Time.relativeTime(log.createdAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
-        }
+        Text(
+            text = if (log.status == "ok") "ok" else "err",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (log.status == "ok") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = log.connectorId + "." + log.action,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = Time.relativeTime(log.createdAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectorSetupDialog(
     connector: ConnectorEntity?,
@@ -358,37 +338,65 @@ private fun ConnectorSetupDialog(
     onSave: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val context = LocalContext.current
+    // The office works in its own browser window with its own cookies. Nothing here reads the
+    // accounts that are signed in to the phone.
+    val browserSignedIn = remember {
+        runCatching {
+            val cookies = android.webkit.CookieManager.getInstance()
+            cookies.getCookie("https://accounts.google.com").orEmpty().isNotBlank()
+        }.getOrDefault(false)
+    }
+
     if (def == null) {
         AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(connector?.name ?: "Connector") },
-            text = {
-                Text("This connector is not in the built-in catalog. Ask the agent to use the HTTP connector, or add a new connector definition to the app.")
-            },
+            text = { Text("Not in the built-in catalog.") },
             confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         )
         return
     }
 
+    val usesDeviceAccounts = def.auth == ConnectorAuth.ACCOUNT
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set up ${def.name}") },
+        title = { Text(def.name) },
         text = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = 500.dp)
+                    .heightIn(max = 480.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = def.description,
+                    text = def.setupHelp,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    text = def.setupHelp,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (usesDeviceAccounts) {
+                    BrowserSessionBlock(
+                        signedIn = browserSignedIn,
+                        onOpen = {
+                            runCatching {
+                                context.startActivity(
+                                    com.agoria.app.browser.AgentBrowserActivity.intent(
+                                        context,
+                                        "https://accounts.google.com/ServiceLogin",
+                                    ),
+                                )
+                            }
+                        },
+                    )
+                }
+                if (def.actions.isNotEmpty()) {
+                    Text(
+                        text = def.actions.joinToString(", ") { it.id },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
                 def.fields.forEach { field ->
                     val saved = connector?.configEnc != null
                     OutlinedTextField(
@@ -396,11 +404,8 @@ private fun ConnectorSetupDialog(
                         onValueChange = { onValue(field.key, it) },
                         label = { Text(field.label) },
                         placeholder = {
-                            Text(
-                                if (field.secret && saved) "Saved — leave blank to keep" else field.placeholder,
-                            )
+                            Text(if (field.secret && saved) "Saved — leave blank to keep" else field.placeholder)
                         },
-                        supportingText = { Text(field.hint) },
                         singleLine = true,
                         visualTransformation = if (field.secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
                         keyboardOptions = KeyboardOptions(
@@ -410,47 +415,36 @@ private fun ConnectorSetupDialog(
                     )
                 }
                 if (error.isNotBlank()) {
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
-                if (connector?.configEnc != null) {
-                    TextButton(onClick = onClear) { Text("Clear saved configuration") }
+                if (connector?.configEnc != null && !usesDeviceAccounts) {
+                    TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp)) { Text("Clear") }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            if (usesDeviceAccounts) TextButton(onClick = onDismiss) { Text("Done") }
+            else TextButton(onClick = onSave) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }
 
-/**
- * Removes invisible/control characters that can cause API errors.
- * Targets: U+0000-U+001F, U+007F-U+009F (control), U+00A0 (NBSP), U+1680, U+2000-U+200A, U+200B-U+200D (zero-width),
- * U+2028-U+202F (line/para separators), U+205F, U+2060, U+3000 (ideographic space), U+FEFF (BOM).
- * Keeps ASCII printable (U+0020-U+007E) and other visible Unicode.
- */
-private fun sanitizeConfigValue(input: String): String {
-    return input.trim().filter { ch ->
-        val cp = ch.codePointAt(0)
-        // Allow ASCII printable range
-        if (cp in 0x20..0x7E) return@filter true
-        // Block known problematic invisible/control characters
-        when (cp) {
-            0x00..0x1F -> false // C0 controls
-            0x7F..0x9F -> false // DEL + C1 controls
-            0x00A0 -> false     // Non-breaking space
-            0x1680 -> false     // Ogham space mark
-            in 0x2000..0x200A -> false // En quad, em quad, en space, em space, etc.
-            in 0x200B..0x200D -> false // Zero-width space, ZWNJ, ZWJ
-            in 0x2028..0x202F -> false // Line/para separators, narrow no-break space
-            0x205F -> false     // Medium mathematical space
-            0x2060 -> false     // Word joiner
-            0x3000 -> false     // Ideographic space
-            0xFEFF -> false     // BOM / zero-width no-break space
-            else -> true
+@Composable
+private fun BrowserSessionBlock(signedIn: Boolean, onOpen: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = if (signedIn) "Office browser is signed in" else "Office browser is signed out",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "Sign in once inside the office browser. Your phone's accounts are never read.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            TextButton(onClick = onOpen, contentPadding = PaddingValues(0.dp)) {
+                Text(if (signedIn) "Open office browser" else "Sign in")
+            }
         }
     }
 }
