@@ -30,14 +30,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -835,23 +833,17 @@ fun SettingsScreen(
     }
 }
 
-/**
- * Pixel section card for this page: cream PixelCard with 14 dp inner padding, a monospace title and ink
- * as the default text colour. PixelCard itself does not set a content colour, and the theme's default is
- * cream, so without this the text would be cream on cream. (A global fix is task T-CARDCOLOR.)
- */
+/** Pixel section card for this page: cream PixelCard (ink text by default) with 14 dp padding and a monospace title. */
 @Composable
 private fun SettingsCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     PixelCard(modifier = Modifier.fillMaxWidth()) {
-        CompositionLocalProvider(LocalContentColor provides Pal.ink) {
-            Column(Modifier.padding(14.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                content()
-            }
+        Column(Modifier.padding(14.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            content()
         }
     }
 }
@@ -864,29 +856,27 @@ private fun ResetDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         PixelCard(modifier = Modifier.fillMaxWidth()) {
-            CompositionLocalProvider(LocalContentColor provides Pal.ink) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Reset Dunder?", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.",
-                        style = MaterialTheme.typography.bodyMedium,
+            Column(Modifier.padding(16.dp)) {
+                Text("Reset Dunder?", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelButton(
+                        text = "Reset everything",
+                        onClick = onConfirm,
+                        small = true,
+                        fill = Pal.red,
                     )
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PixelButton(
-                            text = "Reset everything",
-                            onClick = onConfirm,
-                            small = true,
-                            fill = Pal.red,
-                        )
-                        PixelButton(
-                            text = "Cancel",
-                            onClick = onDismiss,
-                            small = true,
-                            fill = Pal.tan,
-                        )
-                    }
+                    PixelButton(
+                        text = "Cancel",
+                        onClick = onDismiss,
+                        small = true,
+                        fill = Pal.tan,
+                    )
                 }
             }
         }

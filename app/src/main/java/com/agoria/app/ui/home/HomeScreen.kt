@@ -193,7 +193,7 @@ fun HomeScreen(
                             Text(
                                 "The first agents will appear as soon as the local database is seeded.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = Pal.navy,
                             )
                         }
                     }
@@ -323,7 +323,7 @@ private fun RuntimeCard(
                 Icon(
                     Icons.Default.AutoAwesome,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = Pal.teal,
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -343,7 +343,7 @@ private fun RuntimeCard(
                     else -> "Start autonomy to let the agents write, plan, and propose builds."
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Pal.navy,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -352,7 +352,7 @@ private fun RuntimeCard(
                 Text(
                     text = lastLog,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
+                    color = Pal.wood,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -408,14 +408,14 @@ private fun DiaryRow(
                     Text(
                         text = Time.relativeTime(entry.createdAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.navy,
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = entry.content,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.navy,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
