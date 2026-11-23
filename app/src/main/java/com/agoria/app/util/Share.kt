@@ -52,7 +52,12 @@ object Share {
      * Works on Android 10+ (API 29+) without requiring storage permissions.
      * Returns the URI of the saved file on success, null on failure.
      */
-    fun saveToDownloads(context: Context, file: File, fileName: String = file.name): Uri? {
+    fun saveToDownloads(
+        context: Context,
+        file: File,
+        fileName: String = file.name,
+        mimeType: String = "application/octet-stream",
+    ): Uri? {
         return if (!file.exists()) {
             null
         } else {
@@ -60,7 +65,7 @@ object Share {
                 val resolver = context.contentResolver
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     }
