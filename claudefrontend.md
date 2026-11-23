@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 14:45 UTC (T-HOME VERIFIED).
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 10:12 UTC (T-BACK2 Settings + Onboarding pixel: CODE WRITTEN, untested).
 
 ---
 
@@ -113,9 +113,10 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 ### Open (not started), in priority order
 | ID | What | Notes |
 | --- | --- | --- |
-| T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. |
+| T-SCREENS | Restyle every page to the pixel look | Specs in section 5. One PR per 2-3 screens. Onboarding DONE in code (untested). Remaining pages: Settings body (T-SETTINGS-PIXEL), then audit Home/Agent/Approvals/Connectors/Project/Diary/Browsers for leftover `RoundedCornerShape`, Material buttons, switches and text fields. |
 | T-BACK | One shared `PixelScaffold` (top bar with BACK TO OFFICE + title) | VERIFIED (CI): `PixelScaffold`, `PixelTopBar`, Diary & Browsers converted, AgoriaNav hides floating button on scaffolded routes. |
-| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | PARTIAL: Home, Project, Connectors, Agent, Approvals done (PR #9, #10, #11). Remaining: Settings, Onboarding. Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) is big: do it one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
+| T-BACK2 | Convert the remaining pages to `PixelScaffold`: Home, Project, Approvals, Connectors, Settings, Agent, Onboarding | CODE WRITTEN, NOT COMPILED (zip `dunder-phase7-settings-onboarding.zip`, PR pending): Home, Project, Connectors, Agent, Approvals done earlier (PR #9, #10, #11); Settings now on PixelScaffold and the floating "< Office" button + `ScaffoldedRoutes` are deleted from `AgoriaNav.kt`. Onboarding is NOT a scaffolded page (first run, no office behind it): it was restyled in pixel instead (see T-SCREENS). Per screen: replace `Scaffold`/`TopAppBar` with `PixelScaffold(title, subtitle, onBack = { navController.popBackStack("office", false) })`, add an `onBack` param, update the call in `AgoriaNav.kt`, add the route to `ScaffoldedRoutes`. Settings (51 KB) is big: do it one per PR. When all routes are listed, delete the floating "< Office" button and `ScaffoldedRoutes`. |
+| T-SETTINGS-PIXEL | Restyle the BODY of `SettingsScreen.kt` (the top bar is already pixel) | NEW. Replace `SectionCard` (Material `Card`, `MaterialTheme.shapes.large`) with `PixelCard`/`PixelPanel`; `Button`/`TextButton` -> `PixelButton(small=true)`; `Switch` -> `PixelSwitch`; `OutlinedTextField` in `ProviderRow` -> `PixelTextField` (it has no `supportingText`, render the hint as a `PixelBody` line under it); `SummaryCard` and `ProviderRow` `Surface`/`Card` -> flat bordered; progress indicators keep Material but tint `Pal.amber`. The file is ~50 KB: do it in 2 PRs (top half: Autonomy, Revenue; bottom half: Providers, Data, Backup, Updates, About). Grep must find no `RoundedCornerShape`, `MaterialTheme.shapes.*`, `Card(`, `OutlinedTextField`, `Switch(` left. |
 | T-MSG | Real `agent_messages` table instead of diary `say` entries | Needs Room version bump + migration. Spec in section 5. |
 | T-ROUTINES | Per-agent routines (e.g. "checks the server room every morning") | Spec in section 5. |
 | T-CARRY | Agent carries a finished build (crate icon) to a shelf in the workshop | Needs "build finished" signal. |
@@ -176,12 +177,15 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
       corners, monospace headings and flat dark backgrounds. List which still look off (feeds T-SCREENS).
 - [ ] Quick chat: send a message to an agent from its card; it thinks and replies on the card.
 - [ ] Agent talk: tell one agent "say hi to <other agent>"; a speech bubble plays out.
+- [ ] Settings shows the ink top bar with BACK TO OFFICE and returns to the office; no "< Office" floating button on ANY page.
+- [ ] First launch (clear app data): onboarding is navy with square panels, typing a name works, ENTER THE OFFICE opens the office.
 - [ ] Diary and Agent browsers pages show the ink top bar with BACK TO OFFICE; tapping returns to the office; no floating "< Office" button on those two pages.
 
 ## 6. Log (newest first; append, never rewrite)
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 10:12  Claude  T-BACK2 / T-SCREENS  CODE WRITTEN, NOT COMPILED, NOT PUSHED (the chat's GitHub token is read-only: `create_branch` returned 403, same as the 10:15 T-BACK entry). Delivered as `dunder-phase7-settings-onboarding.zip`: (1) `SettingsScreen.kt` -> `PixelScaffold(title = "Settings", onBack, snackbarHost)` via `tools/apply_t_back2_settings.py` (anchor-checked string patch, tested on a stub only, because the 50 KB file was patched rather than retyped); removed the now-unused `Scaffold`, `TopAppBar`, `IconButton` and `ArrowBack` imports, added the `PixelScaffold` import. (2) `AgoriaNav.kt`: settings `onBack` is now `popBackStack("office", false)` (was plain `popBackStack()`); every route is scaffolded so the floating "< Office" button, `ScaffoldedRoutes`, `currentRoute` and their imports are deleted. (3) `OnboardingScreen.kt` restyled: navy ground, ink-bordered thumbnail (no `RoundedCornerShape`), `PixelPanel` feature rows, `PixelTextField`, `PixelButton`. Onboarding deliberately does not use `PixelScaffold` (no office to go back to). Compile suspects: `OfficeThumbnail` accepting a `Modifier.border`, `PixelLabel.copy(...)` in `Text`, unused-import warnings if the build treats warnings as errors. Phone checklist items for the floating button and Settings top bar are untested. [untested]
 - 2026-11-23 14:45  Claude  T-HOME / T-HIRE  PR #16 merged to main (commit 6521874). Build APK runs 45140547641 and 45141420941 green; Backup guard runs 45140535659 and 45141420923 green. Phase 6 Home page implemented with PixelUi components: hero card, approvals banner, runtime card, diary rows, hire dialog. PixelSwitch, PixelButton(small=), PixelTextField added to PixelUi.kt. Auto-approve rule unchanged (SAFE_TYPES only). CI failures on kilo/phase6-home-pixel were caused by the branch being based on an old commit (74de3f8) with AGP 8.2.2 / Kotlin 1.9.20 / Gradle 8.2.1; fixed by rebasing onto main HEAD (36339f8) which has AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.11.1 + SSL truststore config. The earlier "network flakiness" theory was wrong — main passes consistently, AGP 8.2.2 plugin artifact is no longer reliably resolvable from Google Maven. [verified]
 - 2026-11-23 06:05  Claude  CI  **main could not compile at all; the last-green tree was restored.** PR #14 merged to main (merge commit 8962318). Green: Build APK run 45120165921 (#800) on commit 8633715 — Build Debug APK, Unit tests, Build Release APK and Upload APKs all success; Backup config guard run 45120166000 green. [verified]
 
