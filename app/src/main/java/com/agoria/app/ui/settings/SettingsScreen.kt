@@ -63,6 +63,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.ConnectorCatalog
@@ -76,6 +77,14 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.ProviderTest
 import com.agoria.app.ui.SettingsScreenState
 import com.agoria.app.ui.components.PixelScaffold
+import com.agoria.app.ui.components.PixelCard
+import com.agoria.app.ui.components.PixelPill
+import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelBody
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelSwitch
 import com.agoria.app.util.Share
 import com.agoria.app.util.UpdateManager
 import kotlinx.coroutines.launch
@@ -173,7 +182,10 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionCard(title = "Autonomy") {
+            PixelCard(
+                title = "Autonomy",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Run the office", style = MaterialTheme.typography.titleMedium)
@@ -183,9 +195,9 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(
+                    PixelSwitch(
                         checked = settings?.autonomyEnabled ?: false,
-                        onCheckedChange = { viewModel.setAutonomy(it) },
+                        onChange = { viewModel.setAutonomy(it) },
                     )
                 }
                 Spacer(Modifier.height(12.dp))
@@ -198,6 +210,7 @@ fun SettingsScreen(
                     onValueChange = { tick = it.roundToInt() },
                     valueRange = 30f..600f,
                     steps = 18,
+                    colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                 )
                 Text(
                     text = "Per-agent cooldown: ${formatSeconds(cooldown)}",
@@ -208,28 +221,19 @@ fun SettingsScreen(
                     onValueChange = { cooldown = it.roundToInt() },
                     valueRange = 30f..600f,
                     steps = 18,
+                    colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            viewModel.updateSettings {
-                                it.copy(
-                                    tickIntervalSeconds = tick,
-                                    agentCooldownSeconds = cooldown,
-                                )
-                            }
-                        },
-                    ) { Text("Save timing") }
-                    TextButton(onClick = { viewModel.runNow() }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Run one cycle")
-                    }
-                    TextButton(onClick = { viewModel.nudgeAll() }) {
-                        Icon(Icons.Default.Bolt, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Nudge all")
-                    }
+                    PixelButton("Save timing", {
+                        viewModel.updateSettings {
+                            it.copy(
+                                tickIntervalSeconds = tick,
+                                agentCooldownSeconds = cooldown,
+                            )
+                        }
+                    }, small = true)
+                    PixelButton("Run one cycle", { viewModel.runNow() }, small = true)
+                    PixelButton("Nudge all", { viewModel.nudgeAll() }, small = true, fill = Pal.cream)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -238,24 +242,23 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                            context.startActivity(intent)
-                        },
-                    ) { Text("Battery settings") }
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            }
-                            context.startActivity(intent)
-                        },
-                    ) { Text("Notification settings") }
+                    PixelButton("Battery settings", {
+                        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        context.startActivity(intent)
+                    }, small = true, fill = Pal.cream)
+                    PixelButton("Notification settings", {
+                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        }
+                        context.startActivity(intent)
+                    }, small = true, fill = Pal.cream)
                 }
             }
 
-            SectionCard(title = "Revenue & Monetization") {
+            PixelCard(
+                title = "Revenue & Monetization",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 val totalRevenue = revenue.sumOf { it.amountCents }
                 val totalByAgent = revenue.groupBy { it.agentId }.mapValues { (_, v) -> v.sumOf { it.amountCents } }
                 val infraFund = settings?.infrastructureFundCents ?: 0L
@@ -267,29 +270,59 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // Summary cards
+                // Summary cards - use PixelCard
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    SummaryCard(
-                        title = "Total Revenue",
-                        value = formatCents(totalRevenue),
-                        color = MaterialTheme.colorScheme.primary,
+                    PixelCard(
                         modifier = Modifier.weight(1f, fill = true),
-                    )
-                    SummaryCard(
-                        title = "Infrastructure Fund",
-                        value = formatCents(infraFund),
-                        color = MaterialTheme.colorScheme.secondary,
+                        fill = Pal.cream,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text("Total Revenue", style = PixelLabel.copy(color = Pal.amber, fontSize = 11.sp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(formatCents(totalRevenue), style = MaterialTheme.typography.titleLarge.copy(color = Pal.amber))
+                        }
+                    }
+                    PixelCard(
                         modifier = Modifier.weight(1f, fill = true),
-                    )
-                    SummaryCard(
-                        title = "Your Share",
-                        value = formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)),
-                        color = MaterialTheme.colorScheme.tertiary,
+                        fill = Pal.cream,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text("Infrastructure Fund", style = PixelLabel.copy(color = Pal.teal, fontSize = 11.sp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(formatCents(infraFund), style = MaterialTheme.typography.titleLarge.copy(color = Pal.teal))
+                        }
+                    }
+                    PixelCard(
                         modifier = Modifier.weight(1f, fill = true),
-                    )
+                        fill = Pal.cream,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text("Your Share", style = PixelLabel.copy(color = Pal.wood, fontSize = 11.sp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)), style = MaterialTheme.typography.titleLarge.copy(color = Pal.wood))
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -308,6 +341,7 @@ fun SettingsScreen(
                             onValueChange = { agentSplit = it.roundToInt().coerceIn(0, 100); userSplit = 100 - agentSplit },
                             valueRange = 0f..100f,
                             steps = 20,
+                            colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                         )
                     }
                     Column(Modifier.weight(1f)) {
@@ -317,15 +351,12 @@ fun SettingsScreen(
                             onValueChange = { userSplit = it.roundToInt().coerceIn(0, 100); agentSplit = 100 - userSplit },
                             valueRange = 0f..100f,
                             steps = 20,
+                            colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                         )
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            viewModel.setProfitSplit(agentSplit, userSplit)
-                        },
-                    ) { Text("Save Split") }
+                    PixelButton("Save Split", { viewModel.setProfitSplit(agentSplit, userSplit) }, small = true)
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -359,22 +390,16 @@ fun SettingsScreen(
                                     Text(def?.name ?: connector.name, style = MaterialTheme.typography.titleSmall)
                                     Spacer(Modifier.width(8.dp))
                                     val color = when (connector.status) {
-                                        "ready", "configured" -> MaterialTheme.colorScheme.secondary
-                                        "needs_setup" -> MaterialTheme.colorScheme.tertiary
-                                        "error" -> MaterialTheme.colorScheme.error
-                                        else -> MaterialTheme.colorScheme.outline
+                                        "ready", "configured" -> Pal.teal
+                                        "needs_setup" -> Pal.amber
+                                        "error" -> Pal.red
+                                        else -> Pal.ink
                                     }
-                                    Surface(
-                                        color = color.copy(alpha = 0.14f),
-                                        shape = MaterialTheme.shapes.small,
-                                    ) {
-                                        Text(
-                                            text = connector.status.replaceFirstChar { it.uppercase() },
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = color,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                        )
-                                    }
+                                    PixelPill(
+                                        text = connector.status.replaceFirstChar { it.uppercase() },
+                                        fill = color.copy(alpha = 0.14f),
+                                        textColor = color,
+                                    )
                                 }
                                 Text(
                                     text = def?.description ?: "Payment connector",
@@ -382,9 +407,9 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            TextButton(onClick = { 
+                            PixelButton("Configure", { 
                                 // Navigate to connectors screen would need navigation
-                            }) { Text("Configure") }
+                            }, small = true, fill = Pal.cream)
                         }
                         Spacer(Modifier.height(8.dp))
                     }

@@ -216,10 +216,17 @@ fun Pill(
 fun PixelCard(
     modifier: Modifier = Modifier,
     fill: Color = Pal.cream,
+    title: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     PixelPanel(modifier = modifier, fill = fill) {
-        Column(Modifier.fillMaxWidth(), content = content)
+        Column(Modifier.fillMaxWidth()) {
+            title?.let {
+                Text(it, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+            }
+            content()
+        }
     }
 }
 
