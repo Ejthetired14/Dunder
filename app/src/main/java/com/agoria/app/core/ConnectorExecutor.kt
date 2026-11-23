@@ -641,9 +641,10 @@ class ConnectorExecutor(
             val contents = Files.listFiles(root).take(12).joinToString(", ") {
                 if (it.isDirectory) it.name + "/" else it.name
             }
+            val workspaceContent = contents.ifBlank { "nothing yet" }
             return ConnectorResult(
                 false,
-                "That path points outside the agent workspace. Give a path relative to it, like \"notes.txt\". The workspace currently holds: ${contents.ifBlank { "nothing yet" }}.",
+                "That path points outside the agent workspace. Give a path relative to it, like \"notes.txt\". The workspace currently holds: $workspaceContent.",
             )
         }
         return when (action) {
@@ -821,7 +822,9 @@ class ConnectorExecutor(
         val script = buildClickScript(selector, textMatch, waitForNav)
         val result = executeBrowserScript(agentId, script)
         return if (result.ok) {
-            ConnectorResult(true, "Clicked element${textMatch.ifBlank { \" ($selector)\" }}. ${if (waitForNav) \"Waited for navigation.\" else \"\"}")
+            val extra = textMatch.ifBlank { " ($selector)" } ?: ""
+            val navMsg = if (waitForNav) " Waited for navigation." else ""
+            ConnectorResult(true, "Clicked element$extra.$navMsg")
         } else {
             ConnectorResult(false, "Click failed: ${result.error}")
         }
@@ -840,7 +843,8 @@ class ConnectorExecutor(
         val script = buildFillScript(selector, value, isSelect)
         val result = executeBrowserScript(agentId, script)
         return if (result.ok) {
-            ConnectorResult(true, "Filled $selector with: ${value.take(100)}")
+            val preview = value.take(100)
+            ConnectorResult(true, "Filled $selector with: $preview")
         } else {
             ConnectorResult(false, "Fill failed: ${result.error}")
         }
@@ -858,7 +862,8 @@ class ConnectorExecutor(
         val script = buildSubmitScript(selector, waitForNav)
         val result = executeBrowserScript(agentId, script)
         return if (result.ok) {
-            ConnectorResult(true, "Submitted form $selector. ${if (waitForNav) \"Waited for navigation.\" else \"\"}")
+            val navMsg = if (waitForNav) " Waited for navigation." else ""
+            ConnectorResult(true, "Submitted form $selector.$navMsg")
         } else {
             ConnectorResult(false, "Submit failed: ${result.error}")
         }
@@ -966,7 +971,8 @@ class ConnectorExecutor(
         val script = buildWaitScript(selector, textMatch, condition, timeoutMs)
         val result = executeBrowserScript(agentId, script)
         return if (result.ok) {
-            ConnectorResult(true, "Wait condition met: $condition${selector.ifBlank { \" (text: $textMatch)\" }}")
+            val extra = selector.ifBlank { " (text: $textMatch)" } ?: ""
+            ConnectorResult(true, "Wait condition met: $condition$extra")
         } else {
             ConnectorResult(false, "Wait failed: ${result.error}")
         }
@@ -1379,11 +1385,12 @@ class ConnectorExecutor(
         }
         val url = "https://mail.google.com/mail/?view=cm&fs=1" +
             "&to=" + enc(to) + "&su=" + enc(subject) + "&body=" + enc(body)
+        val recipient = to.ifBlank { "a recipient of your choice" }
         return openInOfficeBrowser(
             agentId,
             connector,
             url,
-            "Drafted a Gmail message for ${to.ifBlank { "a recipient of your choice" }} in this agent's " +
+            "Drafted a Gmail message for $recipient in this agent's " +
                 "background browser. Nothing is sent until the user opens Browsers, reviews it and presses send.",
         )
     }
@@ -1961,12 +1968,14 @@ class ConnectorExecutor(
             "list_events" -> {
                 val eventType = args.optString("type", "")
                 val limit = args.optInt("limit", 10).coerceIn(1, 50)
-                val url = "https://api.stripe.com/v1/events?limit=$limit${if (eventType.isNotBlank()) "&type=$eventType" else ""}"
+                val typeParam = if (eventType.isNotBlank()) "&type=$eventType" else ""
+                val url = "https://api.stripe.com/v1/events?limit=$limit$typeParam"
                 val response = http("GET", url, auth)
                 if (!response.ok) return ConnectorResult(false, "Stripe error: ${text(response.body, 400)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "Stripe returned invalid JSON")
                 val data = root.optJSONArray("data") ?: return ConnectorResult(true, "No events found.")
-                val sb = StringBuilder("Stripe events (type: ${eventType.ifBlank { "all" }}):\n")
+                val typeLabel = eventType.ifBlank { "all" }
+                val sb = StringBuilder("Stripe events (type: $typeLabel):\n")
                 for (i in 0 until data.length()) {
                     val e = data.getJSONObject(i)
                     sb.append("- ${e.optString("id")}: ${e.optString("type")} at ${e.optLong("created")}\n")
