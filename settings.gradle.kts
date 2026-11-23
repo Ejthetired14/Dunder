@@ -18,10 +18,6 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-    resolutionStrategy {
-        cacheChangingModulesFor(0, "seconds")
-        cacheDynamicVersionsFor(0, "seconds")
-    }
 }
 
 dependencyResolutionManagement {
