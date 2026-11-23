@@ -16,8 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -226,18 +224,4 @@ fun DeskPanel(
             )
         }
     }
-}
-
-@Composable
-private fun PixelSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
-    Switch(
-        checked = checked,
-        onCheckedChange = onChange,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = Pal.cream,
-            checkedTrackColor = Pal.teal,
-            uncheckedThumbColor = Pal.cream,
-            uncheckedTrackColor = Pal.navy,
-        ),
-    )
 }
