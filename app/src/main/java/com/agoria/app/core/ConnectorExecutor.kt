@@ -992,6 +992,21 @@ class ConnectorExecutor(
     }
 
     private fun buildClickScript(selector: String, textMatch: String, waitForNav: Boolean): String {
+        val waitScript = if (waitForNav) """
+                    return new Promise(resolve => {
+                        var resolved = false;
+                        var timeout = setTimeout(() => { resolved = true; resolve('Clicked (no navigation detected)'); }, 5000);
+                        window.addEventListener('beforeunload', function() { clearTimeout(timeout); resolved = true; resolve('Clicked and navigation started'); }, {once: true});
+                        // Also check for SPA navigation
+                        var lastUrl = window.location.href;
+                        var checkInterval = setInterval(() => {
+                            if (window.location.href !== lastUrl) {
+                                clearTimeout(timeout);
+                                clearInterval(checkInterval);
+                                if (!resolved) { resolved = true; resolve('Clicked and SPA navigation detected'); }
+                            }
+                        }, 100);
+                    });""" else "return 'Clicked (no wait for navigation)';"
         return """
             (function() {
                 try {
@@ -1013,21 +1028,7 @@ class ConnectorExecutor(
                         return 'Element not found: ' + ('$textMatch'.length > 0 ? 'text=\"$textMatch\"' : 'selector=\"$selector\"');
                     }
                     element.click();
-                    ${if (waitForNav) """
-                    return new Promise(resolve => {
-                        var resolved = false;
-                        var timeout = setTimeout(() => { resolved = true; resolve('Clicked (no navigation detected)'); }, 5000);
-                        window.addEventListener('beforeunload', function() { clearTimeout(timeout); resolved = true; resolve('Clicked and navigation started'); }, {once: true});
-                        // Also check for SPA navigation
-                        var lastUrl = window.location.href;
-                        var checkInterval = setInterval(() => {
-                            if (window.location.href !== lastUrl) {
-                                clearTimeout(timeout);
-                                clearInterval(checkInterval);
-                                if (!resolved) { resolved = true; resolve('Clicked and SPA navigation detected'); }
-                            }
-                        }, 100);
-                    });""" : "return 'Clicked (no wait for navigation)';"}
+                    $waitScript
                 } catch (e) {
                     return 'Error: ' + e.message;
                 }
@@ -1087,14 +1088,7 @@ class ConnectorExecutor(
     }
 
     private fun buildSubmitScript(selector: String, waitForNav: Boolean): String {
-        return """
-            (function() {
-                try {
-                    var form = document.querySelector('$selector');
-                    if (!form) return 'Form not found: $selector';
-                    if (form.tagName !== 'FORM') return 'Element is not a FORM: $selector';
-                    form.submit();
-                    ${if (waitForNav) """
+        val waitScript = if (waitForNav) """
                     return new Promise(resolve => {
                         var resolved = false;
                         var timeout = setTimeout(() => { resolved = true; resolve('Submitted (no navigation detected)'); }, 5000);
@@ -1107,7 +1101,15 @@ class ConnectorExecutor(
                                 if (!resolved) { resolved = true; resolve('Submitted and SPA navigation detected'); }
                             }
                         }, 100);
-                    });""" : "return 'Submitted (no wait for navigation)';"}
+                    });""" else "return 'Submitted (no wait for navigation)';"
+        return """
+            (function() {
+                try {
+                    var form = document.querySelector('$selector');
+                    if (!form) return 'Form not found: $selector';
+                    if (form.tagName !== 'FORM') return 'Element is not a FORM: $selector';
+                    form.submit();
+                    $waitScript
                 } catch (e) {
                     return 'Error: ' + e.message;
                 }
