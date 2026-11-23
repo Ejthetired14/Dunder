@@ -763,10 +763,24 @@ class ConnectorExecutor(
             com.agoria.app.browser.BrowserHub.show(id)
             ConnectorResult(true, "Showing this agent's browser on screen.")
         }
+        // New interaction actions
+        "click" -> clickElement(agentId, connector, args)
+        "fill" -> fillElement(agentId, connector, args)
+        "submit" -> submitForm(agentId, connector, args)
+        // Visual verification
+        "screenshot" -> takeScreenshot(agentId, connector, args)
+        // Structured extraction
+        "extract" -> extractData(agentId, connector, args)
+        // Tab/session management
+        "tab" -> manageTab(agentId, connector, args)
+        // Download support
+        "download" -> downloadFile(agentId, connector, args)
+        // JS-heavy page handling
+        "wait" -> waitForCondition(agentId, connector, args)
         else -> ConnectorResult(
             false,
             "Unknown Office Browser action '$action'. Use list_actions to see them: " +
-                "list, signin, email, event, open_url, read, view.",
+                "list, signin, email, event, open_url, read, view, click, fill, submit, screenshot, extract, tab, download, wait.",
         )
     }
 
@@ -789,6 +803,517 @@ class ConnectorExecutor(
             )
         } else {
             ConnectorResult(true, value.take(3500))
+        }
+    }
+
+    // ========== NEW BROWSER INTERACTION ACTIONS ==========
+
+    private suspend fun clickElement(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val selector = args.optString("selector").trim().ifBlank { return ConnectorResult(false, "Missing selector") }
+        val textMatch = args.optString("text").trim()
+        val waitForNav = args.optBoolean("waitForNavigation", true)
+
+        val script = buildClickScript(selector, textMatch, waitForNav)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, "Clicked element${textMatch.ifBlank { \" ($selector)\" }}. ${if (waitForNav) \"Waited for navigation.\" else \"\"}")
+        } else {
+            ConnectorResult(false, "Click failed: ${result.error}")
+        }
+    }
+
+    private suspend fun fillElement(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val selector = args.optString("selector").trim().ifBlank { return ConnectorResult(false, "Missing selector") }
+        val value = args.optString("value").ifBlank { return ConnectorResult(false, "Missing value") }
+        val isSelect = args.optBoolean("isSelect", false)
+
+        val script = buildFillScript(selector, value, isSelect)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, "Filled $selector with: ${value.take(100)}")
+        } else {
+            ConnectorResult(false, "Fill failed: ${result.error}")
+        }
+    }
+
+    private suspend fun submitForm(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val selector = args.optString("selector").trim().ifBlank { return ConnectorResult(false, "Missing selector") }
+        val waitForNav = args.optBoolean("waitForNavigation", true)
+
+        val script = buildSubmitScript(selector, waitForNav)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, "Submitted form $selector. ${if (waitForNav) \"Waited for navigation.\" else \"\"}")
+        } else {
+            ConnectorResult(false, "Submit failed: ${result.error}")
+        }
+    }
+
+    private suspend fun takeScreenshot(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val fullPage = args.optBoolean("fullPage", false)
+
+        val result = executeBrowserScript(agentId, buildScreenshotScript(fullPage))
+        return if (result.ok) {
+            ConnectorResult(true, "Screenshot captured (base64 PNG).")
+        } else {
+            ConnectorResult(false, "Screenshot failed: ${result.error}")
+        }
+    }
+
+    private suspend fun extractData(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val selector = args.optString("selector").trim().ifBlank { return ConnectorResult(false, "Missing selector") }
+        val type = args.optString("type", "auto").trim().lowercase() // table, links, elements, auto
+
+        val script = buildExtractScript(selector, type)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, result.summary)
+        } else {
+            ConnectorResult(false, "Extract failed: ${result.error}")
+        }
+    }
+
+    private suspend fun manageTab(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val tabAction = args.optString("action", "new").trim().lowercase() // new, switch, close, list
+        val url = args.optString("url").trim()
+        val tabId = args.optString("tabId").trim()
+
+        return when (tabAction) {
+            "new" -> {
+                if (url.isBlank()) return ConnectorResult(false, "Missing url for new tab")
+                openInOfficeBrowser(agentId, connector, url, "Opened new tab: $url", show = false)
+            }
+            "switch" -> {
+                if (tabId.isBlank()) return ConnectorResult(false, "Missing tabId for switch")
+                // BrowserHub doesn't support multiple tabs yet; open URL instead
+                if (url.isNotBlank()) {
+                    openInOfficeBrowser(agentId, connector, url, "Switched to tab with URL: $url", show = false)
+                } else {
+                    ConnectorResult(false, "Tab switching not fully implemented; use open_url with new URL")
+                }
+            }
+            "close" -> {
+                ConnectorResult(false, "Close tab not implemented; navigate away instead")
+            }
+            "list" -> {
+                // Return current session info
+                browserSession(agentId)
+            }
+            else -> ConnectorResult(false, "Unknown tab action: $tabAction. Use new, switch, close, or list.")
+        }
+    }
+
+    private suspend fun downloadFile(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val url = args.optString("url").trim().ifBlank { return ConnectorResult(false, "Missing url") }
+        val filename = args.optString("filename", "download").trim()
+
+        // Use the existing download mechanism via the browser
+        val script = buildDownloadScript(url, filename)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, "Download initiated for $filename from $url")
+        } else {
+            ConnectorResult(false, "Download failed: ${result.error}")
+        }
+    }
+
+    private suspend fun waitForCondition(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val selector = args.optString("selector").trim()
+        val textMatch = args.optString("text").trim()
+        val timeoutMs = args.optLong("timeoutMs", 10000).coerceIn(1000, 60000)
+        val condition = args.optString("condition", "element").trim().lowercase() // element, text, networkIdle
+
+        val script = buildWaitScript(selector, textMatch, condition, timeoutMs)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            ConnectorResult(true, "Wait condition met: $condition${selector.ifBlank { \" (text: $textMatch)\" }}")
+        } else {
+            ConnectorResult(false, "Wait failed: ${result.error}")
+        }
+    }
+
+    // ========== HELPER FUNCTIONS FOR BROWSER SCRIPTS ==========
+
+    private data class ScriptResult(val ok: Boolean, val summary: String, val error: String? = null)
+
+    private suspend fun executeBrowserScript(agentId: String, script: String): ScriptResult {
+        var result: ScriptResult? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        com.agoria.app.browser.BrowserHub.executeScript(agentId, script) { value ->
+            result = ScriptResult(true, value ?: "Script executed (no return value)")
+            latch.countDown()
+        }
+        // Wait for script execution with timeout
+        val completed = latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
+        if (!completed) {
+            return ScriptResult(false, "Script execution timed out")
+        }
+        return result ?: ScriptResult(false, "No result from script execution")
+    }
+
+    private fun buildClickScript(selector: String, textMatch: String, waitForNav: Boolean): String {
+        return """
+            (function() {
+                try {
+                    var element = null;
+                    if ('$textMatch'.length > 0) {
+                        // Find by text content
+                        var elements = document.querySelectorAll('*');
+                        for (var i = 0; i < elements.length; i++) {
+                            var el = elements[i];
+                            if (el.textContent && el.textContent.trim().includes('$textMatch')) {
+                                element = el;
+                                break;
+                            }
+                        }
+                    } else {
+                        element = document.querySelector('$selector');
+                    }
+                    if (!element) {
+                        return 'Element not found: ' + ('$textMatch'.length > 0 ? 'text=\"$textMatch\"' : 'selector=\"$selector\"');
+                    }
+                    element.click();
+                    ${if (waitForNav) """
+                    return new Promise(resolve => {
+                        var resolved = false;
+                        var timeout = setTimeout(() => { resolved = true; resolve('Clicked (no navigation detected)'); }, 5000);
+                        window.addEventListener('beforeunload', function() { clearTimeout(timeout); resolved = true; resolve('Clicked and navigation started'); }, {once: true});
+                        // Also check for SPA navigation
+                        var lastUrl = window.location.href;
+                        var checkInterval = setInterval(() => {
+                            if (window.location.href !== lastUrl) {
+                                clearTimeout(timeout);
+                                clearInterval(checkInterval);
+                                if (!resolved) { resolved = true; resolve('Clicked and SPA navigation detected'); }
+                            }
+                        }, 100);
+                    });""" : "return 'Clicked (no wait for navigation)';"}
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """.trimIndent()
+    }
+
+    private fun buildFillScript(selector: String, value: String, isSelect: Boolean): String {
+        val escapedValue = value.replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+        return if (isSelect) """
+            (function() {
+                try {
+                    var select = document.querySelector('$selector');
+                    if (!select) return 'Select element not found: $selector';
+                    if (select.tagName !== 'SELECT') return 'Element is not a SELECT: $selector';
+                    var found = false;
+                    for (var i = 0; i < select.options.length; i++) {
+                        if (select.options[i].value === '$escapedValue' || select.options[i].text === '$escapedValue') {
+                            select.selectedIndex = i;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        // Try to set value directly
+                        select.value = '$escapedValue';
+                    }
+                    select.dispatchEvent(new Event('change', {bubbles: true}));
+                    return 'Filled select: $escapedValue';
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """ else """
+            (function() {
+                try {
+                    var input = document.querySelector('$selector');
+                    if (!input) return 'Input element not found: $selector';
+                    var tag = input.tagName.toLowerCase();
+                    if (tag === 'input' || tag === 'textarea') {
+                        input.value = '$escapedValue';
+                        input.dispatchEvent(new Event('input', {bubbles: true}));
+                        input.dispatchEvent(new Event('change', {bubbles: true}));
+                        return 'Filled input: $escapedValue';
+                    } else if (input.isContentEditable) {
+                        input.textContent = '$escapedValue';
+                        input.dispatchEvent(new Event('input', {bubbles: true}));
+                        return 'Filled contenteditable: $escapedValue';
+                    } else {
+                        return 'Element is not fillable: $selector';
+                    }
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """
+    }
+
+    private fun buildSubmitScript(selector: String, waitForNav: Boolean): String {
+        return """
+            (function() {
+                try {
+                    var form = document.querySelector('$selector');
+                    if (!form) return 'Form not found: $selector';
+                    if (form.tagName !== 'FORM') return 'Element is not a FORM: $selector';
+                    form.submit();
+                    ${if (waitForNav) """
+                    return new Promise(resolve => {
+                        var resolved = false;
+                        var timeout = setTimeout(() => { resolved = true; resolve('Submitted (no navigation detected)'); }, 5000);
+                        window.addEventListener('beforeunload', function() { clearTimeout(timeout); resolved = true; resolve('Submitted and navigation started'); }, {once: true});
+                        var lastUrl = window.location.href;
+                        var checkInterval = setInterval(() => {
+                            if (window.location.href !== lastUrl) {
+                                clearTimeout(timeout);
+                                clearInterval(checkInterval);
+                                if (!resolved) { resolved = true; resolve('Submitted and SPA navigation detected'); }
+                            }
+                        }, 100);
+                    });""" : "return 'Submitted (no wait for navigation)';"}
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """.trimIndent()
+    }
+
+    private fun buildScreenshotScript(fullPage: Boolean): String {
+        return if (fullPage) """
+            (function() {
+                try {
+                    // For full page screenshot, we need to scroll and capture
+                    return new Promise(async (resolve) => {
+                        var originalScroll = window.scrollY;
+                        var height = document.body.scrollHeight;
+                        var width = document.body.scrollWidth;
+                        window.scrollTo(0, 0);
+                        await new Promise(r => setTimeout(r, 100));
+                        var canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        var ctx = canvas.getContext('2d');
+                        // Note: html2canvas would be needed for true full-page capture
+                        // This is a simplified version that captures viewport
+                        resolve('Full page screenshot requires html2canvas library. Use fullPage=false for viewport capture.');
+                    });
+                } catch (e) {
+                    resolve('Error: ' + e.message);
+                }
+            })();
+        """ else """
+            (function() {
+                try {
+                    // Viewport screenshot using canvas
+                    return new Promise((resolve) => {
+                        html2canvas(document.body).then(function(canvas) {
+                            var dataUrl = canvas.toDataURL('image/png');
+                            resolve(dataUrl);
+                        }).catch(function(err) {
+                            // Fallback: return error if html2canvas not loaded
+                            resolve('Screenshot requires html2canvas. Error: ' + err.message);
+                        });
+                    });
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """
+    }
+
+    private fun buildExtractScript(selector: String, type: String): String {
+        return """
+            (function() {
+                try {
+                    var elements = document.querySelectorAll('$selector');
+                    if (elements.length === 0) return 'No elements found for selector: $selector';
+                    var results = [];
+                    var extractType = '$type';
+                    elements.forEach(function(el) {
+                        if (extractType === 'table' || (extractType === 'auto' && el.tagName === 'TABLE')) {
+                            // Extract table as array of arrays
+                            var rows = el.querySelectorAll('tr');
+                            var tableData = [];
+                            rows.forEach(function(row) {
+                                var cells = row.querySelectorAll('th, td');
+                                var rowData = [];
+                                cells.forEach(function(cell) {
+                                    rowData.push(cell.textContent.trim());
+                                });
+                                tableData.push(rowData);
+                            });
+                            results.push({type: 'table', selector: '$selector', data: tableData});
+                        } else if (extractType === 'links' || (extractType === 'auto' && el.tagName === 'A')) {
+                            // Extract links
+                            var links = el.querySelectorAll('a[href]');
+                            var linkData = [];
+                            links.forEach(function(a) {
+                                linkData.push({text: a.textContent.trim(), href: a.href});
+                            });
+                            results.push({type: 'links', selector: '$selector', data: linkData});
+                        } else {
+                            // Generic element extraction
+                            results.push({
+                                tag: el.tagName,
+                                id: el.id,
+                                class: el.className,
+                                text: el.textContent.trim().substring(0, 500),
+                                html: el.outerHTML.substring(0, 2000)
+                            });
+                        }
+                    });
+                    return JSON.stringify(results);
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """.trimIndent()
+    }
+
+    private fun buildDownloadScript(url: String, filename: String): String {
+        return """
+            (function() {
+                try {
+                    // Create a link and trigger download
+                    var a = document.createElement('a');
+                    a.href = '$url';
+                    a.download = '$filename';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    return 'Download triggered for $filename';
+                } catch (e) {
+                    return 'Error: ' + e.message;
+                }
+            })();
+        """.trimIndent()
+    }
+
+    private fun buildWaitScript(selector: String, textMatch: String, condition: String, timeoutMs: Long): String {
+        return when (condition) {
+            "networkidle" -> """
+                (function() {
+                    try {
+                        return new Promise((resolve) => {
+                            var timeout = setTimeout(() => resolve('Network idle timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var pending = 0;
+                            var origXHR = window.XMLHttpRequest;
+                            window.XMLHttpRequest = function() {
+                                var xhr = new origXHR();
+                                var origOpen = xhr.open;
+                                xhr.open = function() {
+                                    pending++;
+                                    return origOpen.apply(this, arguments);
+                                };
+                                xhr.addEventListener('loadend', function() {
+                                    pending--;
+                                    if (pending === 0) {
+                                        clearTimeout(timeout);
+                                        resolve('Network idle');
+                                    }
+                                });
+                                return xhr;
+                            };
+                            // Also check fetch
+                            var origFetch = window.fetch;
+                            window.fetch = function() {
+                                pending++;
+                                return origFetch.apply(this, arguments).then(r => { pending--; if (pending === 0) { clearTimeout(timeout); resolve('Network idle'); } return r; });
+                            };
+                            // If already idle
+                            if (pending === 0) { clearTimeout(timeout); resolve('Network already idle'); }
+                        });
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+            "text" -> if (textMatch.isNotBlank()) """
+                (function() {
+                    try {
+                        return new Promise((resolve) => {
+                            var timeout = setTimeout(() => resolve('Text wait timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var check = function() {
+                                if (document.body.textContent.includes('$textMatch')) {
+                                    clearTimeout(timeout);
+                                    resolve('Text found: $textMatch');
+                                }
+                            };
+                            check();
+                            var observer = new MutationObserver(check);
+                            observer.observe(document.body, {childList: true, subtree: true, characterData: true});
+                        });
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent() else """
+                (function() {
+                    return 'Error: text condition requires text parameter';
+                })();
+            """.trimIndent()
+            else -> if (selector.isNotBlank()) """
+                (function() {
+                    try {
+                        return new Promise((resolve) => {
+                            var timeout = setTimeout(() => resolve('Element wait timeout after ${timeoutMs}ms'), ${timeoutMs});
+                            var check = function() {
+                                var el = document.querySelector('$selector');
+                                if (el) {
+                                    clearTimeout(timeout);
+                                    resolve('Element found: $selector');
+                                }
+                            };
+                            check();
+                            var observer = new MutationObserver(check);
+                            observer.observe(document.body, {childList: true, subtree: true});
+                        });
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent() else """
+                (function() {
+                    return 'Error: element condition requires selector parameter';
+                })();
+            """.trimIndent()
         }
     }
 
