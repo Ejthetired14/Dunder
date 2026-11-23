@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -140,6 +141,7 @@ fun AgentScreen(
                 viewModel = viewModel,
                 agent = agent,
                 onBack = onBack,
+                padding = padding,
             )
         }
     }
@@ -150,6 +152,7 @@ private fun AgentContent(
     viewModel: AgoriaViewModel,
     agent: AgentEntity,
     onBack: () -> Unit,
+    padding: PaddingValues,
 ) {
     val state = viewModel.agentScreenState(agent.id).collectAsStateWithLifecycle(
         AgentScreenState(null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
@@ -171,6 +174,7 @@ private fun AgentContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(padding)
             .imePadding(),
     ) {
         AgentHeader(
@@ -264,21 +268,13 @@ private fun AgentHeader(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AgentAvatar(agent, 54.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(agent.name, style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.width(8.dp))
-                        StatusPill(agent.status)
-                    }
-                    Text(
-                        text = agent.role,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                AgentAvatar(agent, 40.dp)
+                Spacer(Modifier.width(10.dp))
+                // Name and role are already in the top bar, so only the status goes here.
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    StatusPill(agent.status)
                 }
                 var menu by remember { mutableStateOf(false) }
                 TextButton(onClick = onEdit) {
@@ -308,13 +304,21 @@ private fun AgentHeader(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            var goalOpen by remember(agent.id) { mutableStateOf(false) }
+            Spacer(Modifier.height(4.dp))
+            // Long goals take two lines; tap to read all of it, tap again to fold it back.
             Text(
                 text = "Goal: ${agent.goal}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (goalOpen) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize()
+                    .clickable { goalOpen = !goalOpen },
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = agent.autonomy, onCheckedChange = { onToggle() })
                 Spacer(Modifier.width(8.dp))
