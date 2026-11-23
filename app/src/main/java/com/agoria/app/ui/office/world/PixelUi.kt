@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +27,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -135,6 +139,12 @@ fun PixelIconButton(
 /**
  * Square flat text box: cream fill, 2 dp ink border, ink cursor, 14 sp body text.
  * Replaces OutlinedTextField (task T-FIELDS). `singleLine = false` makes a taller (88 dp min) multi-line box.
+ *
+ * All parameters after `singleLine` are optional and additive, so existing calls keep compiling:
+ * - `password = true` masks the text and asks the keyboard for a password field (API keys).
+ * - `hint` is small helper text under the box (replaces OutlinedTextField `supportingText`).
+ * - `labelColor` / `hintColor` default to amber / tan for dark backgrounds (office HUD);
+ *   pass darker colours when the field sits on a cream card.
  */
 @Composable
 fun PixelTextField(
@@ -143,12 +153,16 @@ fun PixelTextField(
     modifier: Modifier = Modifier,
     label: String? = null,
     singleLine: Boolean = true,
+    password: Boolean = false,
+    hint: String? = null,
+    labelColor: Color = Pal.amber,
+    hintColor: Color = Pal.tan,
 ) {
     Column(modifier = modifier) {
         if (label != null) {
             Text(
                 text = label.uppercase(),
-                style = PixelLabel.copy(color = Pal.amber, fontSize = 11.sp),
+                style = PixelLabel.copy(color = labelColor, fontSize = 11.sp),
                 modifier = Modifier.padding(bottom = 4.dp),
             )
         }
@@ -158,6 +172,8 @@ fun PixelTextField(
             singleLine = singleLine,
             textStyle = PixelBody.copy(fontSize = 14.sp),
             cursorBrush = SolidColor(Pal.ink),
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = if (password) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (singleLine) 44.dp else 88.dp)
@@ -165,6 +181,13 @@ fun PixelTextField(
                 .border(2.dp, Pal.ink)
                 .padding(horizontal = 12.dp, vertical = 12.dp),
         )
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = PixelBody.copy(fontSize = 11.sp, lineHeight = 15.sp, color = hintColor),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
 }
 

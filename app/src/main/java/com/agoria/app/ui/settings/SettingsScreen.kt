@@ -7,11 +7,14 @@ import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,34 +24,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,36 +48,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.ConnectorCatalog
-import com.agoria.app.core.ConnectorDef
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
-import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.ProviderEntity
-import com.agoria.app.data.RevenueEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.ProviderTest
-import com.agoria.app.ui.SettingsScreenState
-import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.components.PixelPill
+import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.ui.office.world.PixelBody
 import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelLabel
-import com.agoria.app.ui.office.world.PixelPanel
 import com.agoria.app.ui.office.world.PixelSwitch
-import com.agoria.app.util.Share
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.UpdateManager
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+// Secondary text on cream cards. The theme's onSurfaceVariant is tan, which is unreadable on cream.
+private val Dim = Pal.navy.copy(alpha = 0.75f)
 
 // Update state enum
 enum class UpdateState {
@@ -127,7 +111,6 @@ fun SettingsScreen(
     var userSplit by remember { mutableStateOf(50) }
 
     val (currentVersionName, currentVersionCode) = rememberCurrentVersion(context)
-    val uiScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -182,17 +165,14 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            PixelCard(
-                title = "Autonomy",
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            SettingsCard(title = "Autonomy") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Run the office", style = MaterialTheme.typography.titleMedium)
                         Text(
                             text = "Agents think, write diary entries, and propose builds while this is on.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Dim,
                         )
                     }
                     PixelSwitch(
@@ -233,32 +213,30 @@ fun SettingsScreen(
                         }
                     }, small = true)
                     PixelButton("Run one cycle", { viewModel.runNow() }, small = true)
-                    PixelButton("Nudge all", { viewModel.nudgeAll() }, small = true, fill = Pal.cream)
+                    PixelButton("Nudge all", { viewModel.nudgeAll() }, small = true, fill = Pal.tan)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "For reliable background execution, allow notifications and disable battery optimization for Dunder.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PixelButton("Battery settings", {
                         val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                         context.startActivity(intent)
-                    }, small = true, fill = Pal.cream)
+                    }, small = true, fill = Pal.tan)
                     PixelButton("Notification settings", {
                         val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                             putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                         }
                         context.startActivity(intent)
-                    }, small = true, fill = Pal.cream)
+                    }, small = true, fill = Pal.tan)
                 }
             }
 
-            PixelCard(
-                title = "Revenue & Monetization",
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            SettingsCard(title = "Revenue & Monetization") {
                 val totalRevenue = revenue.sumOf { it.amountCents }
                 val totalByAgent = revenue.groupBy { it.agentId }.mapValues { (_, v) -> v.sumOf { it.amountCents } }
                 val infraFund = settings?.infrastructureFundCents ?: 0L
@@ -266,11 +244,11 @@ fun SettingsScreen(
                 Text(
                     text = "Agents build and deploy micro-APIs. Revenue is split between you and the infrastructure fund (used to upgrade models).",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // Summary cards - use PixelCard
+                // Summary cards
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -282,13 +260,13 @@ fun SettingsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(16.dp),
+                                .padding(12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Text("Total Revenue", style = PixelLabel.copy(color = Pal.amber, fontSize = 11.sp))
+                            Text("Total Revenue", style = PixelLabel.copy(color = Pal.wood, fontSize = 11.sp))
                             Spacer(Modifier.height(4.dp))
-                            Text(formatCents(totalRevenue), style = MaterialTheme.typography.titleLarge.copy(color = Pal.amber))
+                            Text(formatCents(totalRevenue), style = MaterialTheme.typography.titleLarge.copy(color = Pal.wood))
                         }
                     }
                     PixelCard(
@@ -298,7 +276,7 @@ fun SettingsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(16.dp),
+                                .padding(12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
@@ -314,13 +292,13 @@ fun SettingsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(16.dp),
+                                .padding(12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Text("Your Share", style = PixelLabel.copy(color = Pal.wood, fontSize = 11.sp))
+                            Text("Your Share", style = PixelLabel.copy(color = Pal.navy, fontSize = 11.sp))
                             Spacer(Modifier.height(4.dp))
-                            Text(formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)), style = MaterialTheme.typography.titleLarge.copy(color = Pal.wood))
+                            Text(formatCents((totalRevenue * (userSplit.toLong()) / 100).coerceAtLeast(0L)), style = MaterialTheme.typography.titleLarge.copy(color = Pal.navy))
                         }
                     }
                 }
@@ -367,16 +345,16 @@ fun SettingsScreen(
                 Text(
                     text = "Configure payment providers for monetizing agent APIs. Set up connectors in the Connectors screen.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(8.dp))
-                
+
                 val paymentConnectors = state.connectors?.filter { it.category == "Payments" } ?: emptyList()
                 if (paymentConnectors.isEmpty()) {
                     Text(
                         text = "No payment connector configured. Go to the Connectors tab to add PayPal or Polar.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Dim,
                     )
                 } else {
                     paymentConnectors.forEach { connector ->
@@ -391,7 +369,7 @@ fun SettingsScreen(
                                     Spacer(Modifier.width(8.dp))
                                     val color = when (connector.status) {
                                         "ready", "configured" -> Pal.teal
-                                        "needs_setup" -> Pal.amber
+                                        "needs_setup" -> Pal.wood
                                         "error" -> Pal.red
                                         else -> Pal.ink
                                     }
@@ -404,12 +382,12 @@ fun SettingsScreen(
                                 Text(
                                     text = def?.description ?: "Payment connector",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Dim,
                                 )
                             }
-                            PixelButton("Configure", { 
-                                // Navigate to connectors screen would need navigation
-                            }, small = true, fill = Pal.cream)
+                            PixelButton("Configure", {
+                                // Navigate to connectors screen would need navigation (see T-SETTINGS-NAV)
+                            }, small = true, fill = Pal.tan)
                         }
                         Spacer(Modifier.height(8.dp))
                     }
@@ -429,7 +407,7 @@ fun SettingsScreen(
                     Text(
                         text = "No revenue yet. Enable autonomy and let the API Builder agent start building.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Dim,
                     )
                 }
 
@@ -451,17 +429,17 @@ fun SettingsScreen(
                 }
             }
 
-            SectionCard(title = "Model providers") {
+            SettingsCard(title = "Model providers") {
                 Text(
                     text = "The app tries providers in priority order and falls back when one fails. Keyless providers are enabled by default.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(8.dp))
                 var showAllProviders by remember { mutableStateOf(false) }
                 val keylessProviders = providers.filter { ProviderCatalog.byId[it.id]?.keyRequired != true }
                 val keyedProviders = providers.filter { ProviderCatalog.byId[it.id]?.keyRequired == true }
-                
+
                 // Show keyless providers first (always visible, compact)
                 keylessProviders.forEach { provider ->
                     ProviderRow(
@@ -476,12 +454,16 @@ fun SettingsScreen(
                         compact = true,
                     )
                 }
-                
+
                 // Keyed providers - show "Show more" if there are any
                 if (keyedProviders.isNotEmpty()) {
-                    TextButton(onClick = { showAllProviders = !showAllProviders }) {
-                        Text(if (showAllProviders) "Show less" else "Show ${keyedProviders.size} providers needing API key")
-                    }
+                    Spacer(Modifier.height(6.dp))
+                    PixelButton(
+                        text = if (showAllProviders) "Show less" else "Show ${keyedProviders.size} providers needing API key",
+                        onClick = { showAllProviders = !showAllProviders },
+                        small = true,
+                        fill = Pal.tan,
+                    )
                     if (showAllProviders) {
                         Spacer(Modifier.height(4.dp))
                         keyedProviders.forEach { provider ->
@@ -501,28 +483,35 @@ fun SettingsScreen(
                 }
             }
 
-            SectionCard(title = "Data & privacy") {
+            SettingsCard(title = "Data & privacy") {
                 Text(
                     text = "API keys and connector credentials are encrypted with a key in the Android Keystore. The database stays on this device.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+                    PixelButton(
+                        text = "Export to Device",
                         onClick = {
                             createExportFileLauncher.launch("agoria-export-${System.currentTimeMillis()}.json")
                         },
-                    ) { Text("Export to Device") }
-                    TextButton(onClick = { showReset = true }) { Text("Reset app") }
+                        small = true,
+                    )
+                    PixelButton(
+                        text = "Reset app",
+                        onClick = { showReset = true },
+                        small = true,
+                        fill = Pal.red,
+                    )
                 }
             }
 
-            SectionCard(title = "Backup & Restore") {
+            SettingsCard(title = "Backup & Restore") {
                 Text(
                     text = "Backup your agents, settings, and data to a file you keep, and restore it on any phone.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(10.dp))
 
@@ -530,13 +519,14 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.FileDownload,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = Pal.teal,
                                 modifier = Modifier.size(24.dp),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -545,16 +535,18 @@ fun SettingsScreen(
                                 Text(
                                     text = "Save encrypted JSON to Downloads folder",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Dim,
                                 )
                             }
                         }
                     }
-                    Button(
+                    PixelButton(
+                        text = "Export",
                         onClick = {
                             createExportFileLauncher.launch("agoria-export-${System.currentTimeMillis()}.json")
                         },
-                    ) { Text("Export") }
+                        small = true,
+                    )
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -563,13 +555,14 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.FileUpload,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
+                                tint = Pal.wood,
                                 modifier = Modifier.size(24.dp),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -578,14 +571,16 @@ fun SettingsScreen(
                                 Text(
                                     text = "Pick a backup JSON file to restore",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Dim,
                                 )
                             }
                         }
                     }
-                    Button(
+                    PixelButton(
+                        text = "Import",
                         onClick = { pickImportFileLauncher.launch("application/json") },
-                    ) { Text("Import") }
+                        small = true,
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -594,12 +589,15 @@ fun SettingsScreen(
                     text = "A full snapshot is written once a day inside the app, so an update or an " +
                         "accidental reset never leaves you with nothing.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
+                Spacer(Modifier.height(6.dp))
                 val backups = remember { mutableStateOf(viewModel.autoBackups()) }
                 backups.value.take(3).forEach { file ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -607,34 +605,45 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = {
-                            viewModel.restoreAutoBackup(file) { _, message ->
-                                backups.value = viewModel.autoBackups()
-                                scope.launch { snackbarHostState.showSnackbar(message) }
-                            }
-                        }) { Text("Restore") }
+                        PixelButton(
+                            text = "Restore",
+                            onClick = {
+                                viewModel.restoreAutoBackup(file) { _, message ->
+                                    backups.value = viewModel.autoBackups()
+                                    scope.launch { snackbarHostState.showSnackbar(message) }
+                                }
+                            },
+                            small = true,
+                            fill = Pal.tan,
+                        )
                     }
                 }
                 if (backups.value.isEmpty()) {
                     Text(
                         text = "No automatic backup yet.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        color = Dim,
                     )
                 }
-                TextButton(onClick = {
-                    viewModel.writeAutoBackupNow { file ->
-                        backups.value = viewModel.autoBackups()
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                if (file != null) "Backed up" else "Backup failed",
-                            )
+                Spacer(Modifier.height(6.dp))
+                PixelButton(
+                    text = "Back up now",
+                    onClick = {
+                        viewModel.writeAutoBackupNow { file ->
+                            backups.value = viewModel.autoBackups()
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (file != null) "Backed up" else "Backup failed",
+                                )
+                            }
                         }
-                    }
-                }) { Text("Back up now") }
+                    },
+                    small = true,
+                    fill = Pal.tan,
+                )
             }
 
-            SectionCard(title = "App Updates") {
+            SettingsCard(title = "App Updates") {
                 val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
                 val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null) }
 
@@ -643,13 +652,14 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.SystemUpdate,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = Pal.teal,
                                         modifier = Modifier.size(24.dp),
                                     )
                                     Spacer(Modifier.width(8.dp))
@@ -658,12 +668,13 @@ fun SettingsScreen(
                                         Text(
                                             text = "Current version: $currentVersionName ($currentVersionCode)",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = Dim,
                                         )
                                     }
                                 }
                             }
-                            Button(
+                            PixelButton(
+                                text = "Check",
                                 onClick = {
                                     updateState.value = UpdateState.Checking
                                     viewModel.checkForUpdates { info ->
@@ -671,31 +682,27 @@ fun SettingsScreen(
                                         updateState.value = if (info != null && viewModel.isNewerRelease(info)) UpdateState.UpdateAvailable else UpdateState.UpToDate
                                     }
                                 },
-                            ) { Text("Check") }
+                                small = true,
+                            )
                         }
                     }
                     UpdateState.Checking -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Text("Checking for updates...", style = MaterialTheme.typography.bodyMedium)
-                        }
+                        // No spinner: Material's round progress indicator breaks the pixel look.
+                        Text("Checking for updates...", style = MaterialTheme.typography.labelLarge)
                     }
                     UpdateState.UpToDate -> {
                         val remoteVersion = releaseInfo.value?.versionName ?: "unknown"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
+                                        tint = Pal.teal,
                                         modifier = Modifier.size(24.dp),
                                     )
                                     Spacer(Modifier.width(8.dp))
@@ -704,115 +711,112 @@ fun SettingsScreen(
                                         Text(
                                             text = "Installed: $currentVersionName | Latest: $remoteVersion",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = Dim,
                                         )
                                     }
                                 }
                             }
-                            TextButton(onClick = { updateState.value = UpdateState.Idle }) { Text("Check Again") }
+                            PixelButton(
+                                text = "Check Again",
+                                onClick = { updateState.value = UpdateState.Idle },
+                                small = true,
+                                fill = Pal.tan,
+                            )
                         }
                     }
                     UpdateState.UpdateAvailable -> {
                         val info = releaseInfo.value!!
                         Column(Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.SystemUpdate,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.tertiary,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Column {
-                                            Text("Update Available: ${info.versionName}", style = MaterialTheme.typography.titleSmall)
-                                            Text(
-                                                text = "Released: ${info.publishedAt.take(10)}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = Pal.wood,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text("Update Available: ${info.versionName}", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        text = "Released: ${info.publishedAt.take(10)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Dim,
+                                    )
                                 }
                             }
                             if (info.releaseNotes.isNotBlank()) {
                                 Text(
                                     text = "What's new:\n${info.releaseNotes}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Dim,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 8.dp).fillMaxWidth(),
                                 )
                             }
                             val downloadProgress = remember { mutableStateOf<Int?>(null) }
-                            if (downloadProgress.value != null) {
-                                LinearProgressIndicator(
-                                    progress = downloadProgress.value!! / 100f,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.tertiary,
+                            val progress = downloadProgress.value
+                            if (progress != null) {
+                                PixelProgressBar(
+                                    fraction = progress / 100f,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp),
                                 )
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Button(
+                                PixelButton(
+                                    text = if (progress != null) "Downloading $progress%" else "Download & Install",
                                     onClick = {
-                                        downloadProgress.value = 0
-                                        viewModel.downloadAndInstallUpdate(info, { p -> downloadProgress.value = p }, { success ->
-                                            downloadProgress.value = null
-                                            if (!success) {
-                                                // Could show error snackbar
-                                            }
-                                        })
-                                    },
-                                    enabled = downloadProgress.value == null,
-                                ) {
-                                    if (downloadProgress.value != null) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Downloading ${downloadProgress.value}%")
+                                        // Ignore taps while a download is already running (replaces enabled = false).
+                                        if (downloadProgress.value == null) {
+                                            downloadProgress.value = 0
+                                            viewModel.downloadAndInstallUpdate(info, { pct -> downloadProgress.value = pct }, { _ ->
+                                                downloadProgress.value = null
+                                            })
                                         }
-                                    } else {
-                                        Text("Download & Install")
-                                    }
-                                }
-                                TextButton(onClick = { updateState.value = UpdateState.Idle }) { Text("Later") }
+                                    },
+                                    small = true,
+                                    fill = if (progress != null) Pal.tan else Pal.amber,
+                                )
+                                PixelButton(
+                                    text = "Later",
+                                    onClick = { updateState.value = UpdateState.Idle },
+                                    small = true,
+                                    fill = Pal.tan,
+                                )
                             }
                         }
                     }
                 }
             }
 
-            SectionCard(title = "About") {
+            SettingsCard(title = "About") {
                 Text("Dunder 1.0.0", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "A local autonomous office for Android 13+. Agents run on free model APIs and keep their thoughts in a local diary. Builds and outward-facing actions require approval.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Free model list", style = MaterialTheme.typography.labelLarge)
                 Text(
                     text = "github.com/mnfst/awesome-free-llm-apis",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.teal,
                 )
                 Text("Office assets", style = MaterialTheme.typography.labelLarge)
                 Text(
                     text = "github.com/Parcha-ai/ai-office",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Pal.teal,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "Free tiers change. Check each provider's docs for current limits and terms. Some free providers log prompts; avoid putting secrets in prompts.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Dim,
                 )
             }
 
@@ -821,40 +825,92 @@ fun SettingsScreen(
     }
 
     if (showReset) {
-        AlertDialog(
-            onDismissRequest = { showReset = false },
-            title = { Text("Reset Dunder?") },
-            text = { Text("This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.resetData()
-                    showReset = false
-                }) { Text("Reset everything") }
+        ResetDialog(
+            onConfirm = {
+                viewModel.resetData()
+                showReset = false
             },
-            dismissButton = {
-                TextButton(onClick = { showReset = false }) { Text("Cancel") }
-            },
+            onDismiss = { showReset = false },
         )
     }
 }
 
+/**
+ * Pixel section card for this page: cream PixelCard with 14 dp inner padding, a monospace title and ink
+ * as the default text colour. PixelCard itself does not set a content colour, and the theme's default is
+ * cream, so without this the text would be cream on cream. (A global fix is task T-CARDCOLOR.)
+ */
 @Composable
-private fun SectionCard(
+private fun SettingsCard(
     title: String,
-    content: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            content()
+    PixelCard(modifier = Modifier.fillMaxWidth()) {
+        CompositionLocalProvider(LocalContentColor provides Pal.ink) {
+            Column(Modifier.padding(14.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                content()
+            }
         }
+    }
+}
+
+/** Square, bordered confirmation dialog (replaces the Material AlertDialog). */
+@Composable
+private fun ResetDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        PixelCard(modifier = Modifier.fillMaxWidth()) {
+            CompositionLocalProvider(LocalContentColor provides Pal.ink) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Reset Dunder?", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PixelButton(
+                            text = "Reset everything",
+                            onClick = onConfirm,
+                            small = true,
+                            fill = Pal.red,
+                        )
+                        PixelButton(
+                            text = "Cancel",
+                            onClick = onDismiss,
+                            small = true,
+                            fill = Pal.tan,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Flat square progress bar: navy track, amber fill, 2 dp ink border. */
+@Composable
+private fun PixelProgressBar(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .height(16.dp)
+            .background(Pal.navy)
+            .border(2.dp, Pal.ink),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .background(Pal.amber),
+        )
     }
 }
 
@@ -875,15 +931,15 @@ private fun ProviderRow(
     var model by remember { mutableStateOf(provider.model) }
     var extra by remember { mutableStateOf("") }
 
-    val padding = if (compact) 4.dp else 12.dp
-    val verticalPadding = if (compact) 2.dp else 6.dp
+    val padding = if (compact) 8.dp else 12.dp
+    val verticalPadding = if (compact) 4.dp else 6.dp
 
-    Surface(
+    // Tan fill so the row stands out from the cream section card; PixelCard keeps the square ink border.
+    PixelCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = verticalPadding),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
+        fill = Pal.tan,
     ) {
         Column(Modifier.padding(padding)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -898,19 +954,20 @@ private fun ProviderRow(
                             if (spec?.keyRequired == false) append(" · keyless")
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Pal.navy,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Switch(checked = provider.enabled, onCheckedChange = onToggle)
+                Spacer(Modifier.width(8.dp))
+                PixelSwitch(checked = provider.enabled, onChange = onToggle)
             }
 
             if (spec != null && !compact) {
                 Text(
                     text = spec.freeNote,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Pal.navy,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -918,102 +975,108 @@ private fun ProviderRow(
             if (test != null) {
                 Spacer(Modifier.height(4.dp))
                 if (test.testing) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.width(14.dp).height(14.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Testing...", style = MaterialTheme.typography.labelSmall)
-                    }
+                    Text("Testing...", style = MaterialTheme.typography.labelSmall)
                 } else if (test.ok == true) {
                     Text(
                         text = test.message,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = Pal.teal,
                     )
                 } else if (test.ok == false) {
                     Text(
                         text = test.message,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = Pal.red,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
+            Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "Hide setup" else "Configure")
-                }
-                TextButton(onClick = onTest) { Text("Test") }
+                PixelButton(
+                    text = if (expanded) "Hide setup" else "Configure",
+                    onClick = { expanded = !expanded },
+                    small = true,
+                    fill = Pal.cream,
+                )
+                PixelButton(text = "Test", onClick = onTest, small = true, fill = Pal.cream)
             }
 
             if (expanded) {
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
+                Spacer(Modifier.height(8.dp))
+                PixelTextField(
                     value = key,
                     onValueChange = { key = it },
-                    label = {
-                        Text(
-                            if (provider.apiKeyEnc != null) {
-                                "${spec?.keyLabel ?: "API key"} (saved)"
-                            } else {
-                                spec?.keyLabel ?: "API key"
-                            },
-                        )
+                    label = if (provider.apiKeyEnc != null) {
+                        "${spec?.keyLabel ?: "API key"} (saved)"
+                    } else {
+                        spec?.keyLabel ?: "API key"
                     },
-                    supportingText = {
-                        Text(spec?.keyHint ?: "Optional. Some providers work without a key.")
-                    },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                    ),
+                    hint = spec?.keyHint ?: "Optional. Some providers work without a key.",
+                    password = true,
+                    labelColor = Pal.navy,
+                    hintColor = Pal.navy,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = {
-                        onSaveKey(key)
-                        key = ""
-                    }) { Text("Save key") }
-                    if (provider.apiKeyEnc != null) {
-                        TextButton(onClick = {
-                            onSaveKey("")
+                    PixelButton(
+                        text = "Save key",
+                        onClick = {
+                            onSaveKey(key)
                             key = ""
-                        }) { Text("Clear key") }
+                        },
+                        small = true,
+                    )
+                    if (provider.apiKeyEnc != null) {
+                        PixelButton(
+                            text = "Clear key",
+                            onClick = {
+                                onSaveKey("")
+                                key = ""
+                            },
+                            small = true,
+                            fill = Pal.red,
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
+                Spacer(Modifier.height(10.dp))
+                PixelTextField(
                     value = model,
                     onValueChange = { model = it },
-                    label = { Text("Model") },
-                    supportingText = { Text(spec?.models?.joinToString(", ") { it.id }?.take(400) ?: "") },
-                    singleLine = true,
+                    label = "Model",
+                    hint = spec?.models?.joinToString(", ") { it.id }?.take(400) ?: "",
+                    labelColor = Pal.navy,
+                    hintColor = Pal.navy,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TextButton(onClick = { onSaveModel(model) }) { Text("Save model") }
+                Spacer(Modifier.height(6.dp))
+                PixelButton(text = "Save model", onClick = { onSaveModel(model) }, small = true)
 
                 if (spec?.needsExtra == true) {
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
+                    Spacer(Modifier.height(10.dp))
+                    PixelTextField(
                         value = extra,
                         onValueChange = { extra = it },
-                        label = { Text(spec.extraLabel) },
-                        supportingText = { Text(spec.extraHint) },
-                        singleLine = true,
+                        label = spec.extraLabel,
+                        hint = spec.extraHint,
+                        labelColor = Pal.navy,
+                        hintColor = Pal.navy,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    TextButton(onClick = { onSaveExtra(extra) }) { Text("Save ${spec.extraLabel}") }
+                    Spacer(Modifier.height(6.dp))
+                    PixelButton(text = "Save ${spec.extraLabel}", onClick = { onSaveExtra(extra) }, small = true)
                 }
 
                 if (!provider.lastError.isNullOrBlank()) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = provider.lastError,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = Pal.red,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1034,35 +1097,6 @@ private fun formatCents(cents: Long): String {
 }
 
 @Composable
-private fun SummaryCard(
-    title: String,
-    value: String,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier
-            .fillMaxSize(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = color.copy(alpha = 0.15f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = color)
-            Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, color = color)
-        }
-    }
-}
-
-@Composable
 private fun RevenueRow(
     agentName: String,
     amountCents: Long,
@@ -1077,7 +1111,7 @@ private fun RevenueRow(
         Text(
             formatCents(amountCents),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
+            color = Pal.teal,
         )
     }
 }
@@ -1099,12 +1133,12 @@ private fun RevenueEventRow(
     ) {
         Column {
             Text("$agentName — $source", style = MaterialTheme.typography.labelMedium)
-            Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(time, style = MaterialTheme.typography.bodySmall, color = Dim)
         }
         Text(
             formatCents(amountCents),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
+            color = Pal.teal,
         )
     }
 }
