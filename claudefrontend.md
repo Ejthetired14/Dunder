@@ -4,7 +4,7 @@ Any AI (or person) can pick this file up and continue. Read "Rules" first, then 
 top open task on the board. When you finish something, change its status and add a log line.
 Keep this file honest: if something was not compiled or not tested on a phone, say so.
 
-Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 06:05 UTC (CI fix entry).
+Last updated by: Claude (Anthropic chat), Monday 23 Nov 2026 16:30 UTC (T-HOME VERIFIED).
 
 ---
 
@@ -107,6 +107,8 @@ Status: DONE, DOING, TODO. "Verified" = compiled in CI; "Phone" = seen on the te
 | T-SOUND | Sound effects (alert, talk, click; 3 generated WAVs in res/raw) with a mute switch in the directory | VERIFIED (CI) |
 | T-NIGHT | Night shift: warm lamp glow around every agent when the tint is dark | VERIFIED (CI) |
 | T-SEASON | Christmas decor (parol lanterns, tree, string lights), shown Sep 1 - Jan 6 | VERIFIED (CI) |
+| T-HOME | Pixel Home page: hero card (OfficeThumbnail + amber status pill), approvals banner (PixelCard amber), runtime card, diary rows, "Hire agent" PixelButton(small=) under The agents, hire dialog (Dialog + PixelPanel, PixelTextField singleLine=false, PixelButton, PixelSwitch); all Phase 6 files compile and CI green | VERIFIED (CI) |
+| T-HIRE | "Hire agent" button under The agents opens the pixel hire dialog with PixelTextField, PixelButton, PixelSwitch | VERIFIED (CI) |
 
 ### Open (not started), in priority order
 | ID | What | Notes |
@@ -180,6 +182,7 @@ set `place` to that room. Rooms: library, web, mail, server, workshop, finance, 
 
 Format: `YYYY-MM-DD HH:MM  who  task  what happened  [verified / phone / untested]`
 
+- 2026-11-23 16:30  Claude  T-HOME / T-HIRE  PR #16 merged to main (commit aed7dba). Build APK runs 45149116952 and 45150197241 green; Backup guard runs green. Phase 6 Home page implemented with PixelUi components: hero card, approvals banner, runtime card, diary rows, hire dialog. PixelSwitch, PixelButton(small=), PixelTextField(singleLine=false) added to PixelUi.kt. DeskPanel uses shared PixelSwitch from PixelUi.kt. Common.kt has PixelCard(fill=Pal.navy) and PixelPill; HomeScreen uses PixelPill for diary entry kinds. Auto-approve rule unchanged (SAFE_TYPES only: build_project, connector_install, other). No Material Card/Button/Switch/OutlinedTextField/AlertDialog or RoundedCornerShape in Phase 6 files. CI failures on kilo/phase6-home-pixel were caused by the branch being based on an old commit (74de3f8) with AGP 8.2.2 / Kotlin 1.9.20 / Gradle 8.2.1; fixed by rebasing onto main HEAD (36339f8) which has AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.11.1 + SSL truststore config. [verified]
 - 2026-11-23 06:05  Claude  CI  **main could not compile at all; the last-green tree was restored.** PR #14 merged to main (merge commit 8962318). Green: Build APK run 45120165921 (#800) on commit 8633715 — Build Debug APK, Unit tests, Build Release APK and Upload APKs all success; Backup config guard run 45120166000 green. [verified]
 
   Two separate faults, one behind the other.
