@@ -247,22 +247,35 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Create latest-release.json
+        env:
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+          RELEASE_URL: ${{ needs.build.outputs.release_url }}
+          RELEASE_NOTES: ${{ needs.build.outputs.release_notes }}
+          APK_URL: ${{ needs.build.outputs.apk_url }}
+          APK_SHA: ${{ needs.build.outputs.apk_sha256 }}
+          TAG: ${{ github.ref_name }}
         run: |
           mkdir site
-          cat > site/latest-release.json << EOF
-          {
-            "versionName": "${{ needs.build.outputs.version_name }}",
-            "versionCode": ${{ needs.build.outputs.version_code }},
-            "releaseUrl": "${{ needs.build.outputs.release_url }}",
-            "releaseNotes": "${{ needs.build.outputs.release_notes }}",
-            "apkUrl": "${{ needs.build.outputs.apk_url }}",
-            "sha256": "${{ needs.build.outputs.apk_sha256 }}",
-            "tagName": "${{ github.ref_name }}",
-            "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          }
-          EOF
+          jq -n \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg releaseUrl "$RELEASE_URL" \
+            --arg releaseNotes "$RELEASE_NOTES" \
+            --arg apkUrl "$APK_URL" \
+            --arg sha256 "$APK_SHA" \
+            --arg tagName "$TAG" \
+            --arg publishedAt "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            '{versionName: $versionName, versionCode: $versionCode, releaseUrl: $releaseUrl, releaseNotes: $releaseNotes, apkUrl: $apkUrl, sha256: $sha256, tagName: $tagName, publishedAt: $publishedAt}' \
+            > site/latest-release.json
           cat site/latest-release.json
 
       - name: Setup Pages
@@ -272,6 +285,8 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
+          name: github-pages
 
       - name: Deploy Pages
+        id: deployment
         uses: actions/deploy-pages@v4
