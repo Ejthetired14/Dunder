@@ -1,7 +1,10 @@
 package com.agoria.app.ui.approvals
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,27 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,21 +42,30 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
+import com.agoria.app.ui.office.world.OfficeSound
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelBody
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
 import com.agoria.app.ui.office.world.PixelIconButton
+import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelSwitch
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Json
 import com.agoria.app.util.Time
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ApprovalsScreen(
     viewModel: AgoriaViewModel,
@@ -110,17 +111,17 @@ fun ApprovalsScreen(
                 onClick = { showAutoApproveDialog = true },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Pending") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("History") })
-            }
+            PixelTabs(
+                labels = listOf("Pending", "History"),
+                selected = tab,
+                onSelect = { tab = it },
+            )
 
             if (tab == 0) {
                 ApprovalList(
@@ -181,7 +182,7 @@ fun ApprovalsScreen(
             onEnabledChange = { enabled ->
                 viewModel.updateSettings { s ->
                     val newTypes = if (enabled && s.autoApproveTypes.isBlank()) {
-                        "connector_action" // Default to connector actions when first enabling
+                        "build_project,connector_install,other"
                     } else {
                         s.autoApproveTypes
                     }
@@ -189,7 +190,7 @@ fun ApprovalsScreen(
                 }
                 // Update local state to reflect the default
                 if (enabled && autoApproveTypes.isBlank()) {
-                    autoApproveTypes = "connector_action"
+                    autoApproveTypes = "build_project,connector_install,other"
                 }
             },
             onTypesChange = { types ->
@@ -273,7 +274,7 @@ private fun ApprovalCard(
         append(approval.title).append(". ")
         append(approval.summary.take(160))
     }
-    Card(
+    PixelCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClickAction)
@@ -282,10 +283,7 @@ private fun ApprovalCard(
                 role = Role.Button
                 onClick(label = "Open approval") { open(); true }
             },
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -330,17 +328,14 @@ private fun ConnectorRequestCard(
         append(agentName).append(" requests ").append(request.connectorId).append(". ")
         append(request.reason.take(160))
     }
-    Card(
+    PixelCard(
         modifier = Modifier
             .fillMaxWidth()
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button
             },
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = Pal.amber.copy(alpha = 0.14f),
-        ),
+        fill = Pal.amber.copy(alpha = 0.14f),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -376,14 +371,13 @@ private fun ConnectorRequestCard(
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onApprove) { Text("Approve & set up") }
-                TextButton(onClick = onDeny) { Text("Deny") }
+                PixelButton(text = "Approve & set up", onClick = onApprove)
+                PixelButton(text = "Deny", onClick = onDeny, small = true, fill = Pal.tan)
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ApprovalHistoryList(
     approvals: List<ApprovalEntity>,
@@ -405,7 +399,7 @@ private fun ApprovalHistoryList(
                 append(approval.title).append(". ")
                 if (!approval.result.isNullOrBlank()) append(approval.result.take(120))
             }
-            Surface(
+            PixelPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = open)
@@ -414,8 +408,7 @@ private fun ApprovalHistoryList(
                         role = Role.Button
                         onClick(label = "Open approval history") { open(); true }
                     },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                fill = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -464,85 +457,84 @@ private fun ApprovalDialog(
     onNote: (String) -> Unit,
 ) {
     val pending = approval.status == "pending"
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(approval.title) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    var noteText by remember(note) { mutableStateOf(note) }
+
+    PixelDialog(
+        onDismiss = onDismiss,
+        title = approval.title,
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 460.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(agentName, style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.width(8.dp))
+                Pill(text = typeLabel(approval.type))
+                Spacer(Modifier.width(8.dp))
+                RiskBadge(approval.risk)
+            }
+            Text(approval.summary, style = MaterialTheme.typography.bodyMedium)
+            if (approval.type == "build_project") {
+                Text(
+                    text = "This generates a downloadable project ZIP inside the app. Nothing is published or sent to an external service.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Pal.tan,
+                )
+            }
+            if (approval.type == "connector_action") {
+                Text(
+                    text = "This runs the connector action exactly as shown below. Review the arguments carefully.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Pal.tan,
+                )
+            }
+            if (approval.details.isNotBlank()) {
+                PixelPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    fill = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = Json.pretty(approval.details),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+            if (pending) {
+                PixelTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it; onNote(it) },
+                    label = "Note for the agent (optional)",
+                    singleLine = false,
+                    hint = "Optional: add a note for the agent",
+                    labelColor = Pal.navy,
+                    hintColor = Pal.tan,
+                )
+            }
+            if (!pending && !approval.result.isNullOrBlank()) {
+                Text(
+                    text = "Result: ${approval.result}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Pal.tan,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(agentName, style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.width(8.dp))
-                    Pill(text = typeLabel(approval.type))
-                    Spacer(Modifier.width(8.dp))
-                    RiskBadge(approval.risk)
-                }
-                Text(approval.summary, style = MaterialTheme.typography.bodyMedium)
-                if (approval.type == "build_project") {
-                    Text(
-                        text = "This generates a downloadable project ZIP inside the app. Nothing is published or sent to an external service.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Pal.tan,
-                    )
-                }
-                if (approval.type == "connector_action") {
-                    Text(
-                        text = "This runs the connector action exactly as shown below. Review the arguments carefully.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Pal.tan,
-                    )
-                }
-                if (approval.details.isNotBlank()) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = Json.pretty(approval.details),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(10.dp),
-                        )
-                    }
-                }
                 if (pending) {
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = onNote,
-                        label = { Text("Note for the agent (optional)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                    )
-                }
-                if (!pending && !approval.result.isNullOrBlank()) {
-                    Text(
-                        text = "Result: ${approval.result}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Pal.tan,
-                    )
+                    PixelButton(text = "Approve", onClick = onApprove, modifier = Modifier.weight(1f))
+                    PixelButton(text = "Deny", onClick = onDeny, modifier = Modifier.weight(1f), fill = Pal.red)
+                } else {
+                    PixelButton(text = "Close", onClick = onDismiss, modifier = Modifier.weight(1f), fill = Pal.tan)
                 }
             }
-        },
-        confirmButton = {
-            if (pending) {
-                TextButton(onClick = onApprove) { Text("Approve") }
-            } else {
-                TextButton(onClick = onDismiss) { Text("Close") }
-            }
-        },
-        dismissButton = {
-            if (pending) {
-                TextButton(onClick = onDeny) { Text("Deny") }
-            } else {
-                TextButton(onClick = onDismiss) { Text("Close") }
-            }
-        },
-    )
+        }
+    }
 }
 
 private fun typeLabel(type: String): String = when (type) {
@@ -556,12 +548,37 @@ private fun typeLabel(type: String): String = when (type) {
     else -> type.replaceFirstChar { it.uppercase() }
 }
 
-@Composable
 private fun statusTint(status: String): Color = when (status) {
     "executed" -> Pal.teal
     "failed" -> Pal.red
     "denied" -> Pal.red
     else -> Pal.amber
+}
+
+/** Square checkbox for pixel UI. */
+@Composable
+private fun PixelCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .background(if (checked) Pal.amber else Pal.cream)
+            .border(2.dp, Pal.ink)
+            .clickable(onClick = { onCheckedChange(!checked) }),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = Pal.ink,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -575,57 +592,100 @@ private fun AutoApproveDialog(
 ) {
     val allTypes = listOf(
         "build_project" to "Build projects",
-        "connector_action" to "Connector actions (GitHub, Notion, etc.)",
-        "send_email" to "Send emails",
-        "publish" to "Publish content",
-        "delete" to "Delete resources",
-        "spend_api" to "Spend API credits",
         "connector_install" to "Install connectors",
+        "other" to "Other safe types",
     )
 
-    // Default to connector_action if enabled but no types selected
-    val effectiveTypes = if (enabled && types.isBlank()) "connector_action" else types
+    // Only SAFE_TYPES per Rule 3: build_project, connector_install, other
+    val effectiveTypes = if (enabled && types.isBlank()) "build_project,connector_install,other" else types
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Auto-approve Settings") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 500.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Enable auto-approve", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
-                }
-                Text(
-                    text = "When enabled, approvals of selected types will be automatically approved without prompting. Use with caution. Connector actions must be checked for GitHub/Notion auto-approve.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Pal.tan,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Auto-approve these types:", style = MaterialTheme.typography.labelLarge)
-                allTypes.forEach { (typeId, typeLabel) ->
-                    val isChecked = effectiveTypes.split(",").map { it.trim() }.contains(typeId)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(checked = isChecked, onCheckedChange = { checked ->
-                            val current = effectiveTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
-                            if (checked) current.add(typeId) else current.remove(typeId)
-                            onTypesChange(current.joinToString(","))
-                        })
-                        Spacer(Modifier.width(12.dp))
-                        Text(typeLabel, style = MaterialTheme.typography.bodyMedium)
-                    }
+    PixelDialog(
+        onDismiss = onDismiss,
+        title = "Auto-approve Settings",
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 500.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Enable auto-approve", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.weight(1f))
+                PixelSwitch(checked = enabled, onChange = onEnabledChange)
+            }
+            Text(
+                text = "When enabled, approvals of selected SAFE types will be automatically approved without prompting. Per Rule 3, only build_project, connector_install, and other are offered. Connector actions (payments), send_email, publish, delete, and spend_api are never auto-approved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Pal.tan,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Auto-approve these safe types:", style = MaterialTheme.typography.labelLarge)
+            allTypes.forEach { (typeId, typeLabel) ->
+                val isChecked = effectiveTypes.split(",").map { it.trim() }.contains(typeId)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PixelCheckbox(checked = isChecked, onCheckedChange = { checked ->
+                        val current = effectiveTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                        if (checked) current.add(typeId) else current.remove(typeId)
+                        onTypesChange(current.joinToString(","))
+                    })
+                    Spacer(Modifier.width(12.dp))
+                    Text(typeLabel, style = MaterialTheme.typography.bodyMedium)
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = { onSave(); onDismiss() }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PixelButton(text = "Save", onClick = { onSave(); onDismiss() }, modifier = Modifier.weight(1f))
+                PixelButton(text = "Cancel", onClick = onDismiss, modifier = Modifier.weight(1f), fill = Pal.tan)
+            }
+        }
+    }
+}
+
+/** Square tab strip (replaces the Material TabRow): selected tab amber with ink text, others teal with cream text. */
+@Composable
+private fun PixelTabs(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val on = index == selected
+            val open = { onSelect(index) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .background(if (on) Pal.amber else Pal.teal)
+                    .border(2.dp, Pal.ink)
+                    .clickable {
+                        if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
+                        onSelect(index)
+                    }
+                    .clearAndSetSemantics {
+                        contentDescription = "${label} tab, ${if (on) "selected" else "not selected"}"
+                        role = Role.Tab
+                        onClick(label = "Select ${label} tab") { open(); true }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label.uppercase(),
+                    style = PixelLabel.copy(fontSize = 11.sp, color = if (on) Pal.ink else Pal.cream),
+                )
+            }
+        }
+    }
 }
