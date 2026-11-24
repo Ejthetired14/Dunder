@@ -261,7 +261,14 @@ class Repository(
         const val DEFAULT_PROJECT_ID = "office-project"
     }
 
-    suspend fun deleteAgent(id: String) = db.agentDao().delete(id)
+    suspend fun deleteAgent(id: String) {
+        val agent = db.agentDao().get(id) ?: return
+        if (agent.isUndeletable) {
+            android.util.Log.w("Repository", "Attempted to delete undeletable agent: $id")
+            return
+        }
+        db.agentDao().delete(id)
+    }
 
     suspend fun setAgentStatus(id: String, status: String, error: String? = null) {
         val agent = db.agentDao().get(id) ?: return

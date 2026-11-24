@@ -25,6 +25,8 @@ data class AgentEntity(
     val allowedConnectors: String = "",
     /** Optional bearer token this agent alone can present through the HTTP connector. */
     val apiToken: String = "",
+    /** If true, this agent cannot be deleted from the UI. Used for the Platform Engineer (the Boss's representative). */
+    val isUndeletable: Boolean = false,
 )
 
 @Entity(
