@@ -23,15 +23,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,12 +58,15 @@ import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.connectorIcon
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelSwitch
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Time
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectorsScreen(
     viewModel: AgoriaViewModel,
@@ -405,8 +403,8 @@ private fun RequestRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        TextButton(onClick = { viewModel.approveConnectorRequest(request.id) }) { Text("Approve") }
-        TextButton(onClick = { viewModel.denyConnectorRequest(request.id) }) { Text("Deny") }
+        PixelButton(text = "Approve", onClick = { viewModel.approveConnectorRequest(request.id) }, small = true)
+        PixelButton(text = "Deny", onClick = { viewModel.denyConnectorRequest(request.id) }, small = true, fill = Pal.tan)
     }
 }
 
@@ -425,21 +423,18 @@ private fun CategoryHeaderRow(
             .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(
+        PixelButton(
+            text = (if (isExpanded) "▾ " else "▸ ") + title,
             onClick = onToggle,
-            contentPadding = PaddingValues(horizontal = 4.dp),
+            small = true,
+            fill = Pal.tan,
             modifier = Modifier
                 .clearAndSetSemantics {
                     contentDescription = "${if (isExpanded) "Collapse" else "Expand"} $title category, $onCount of $totalCount connectors on"
                     role = Role.Button
                     onClick(label = "${if (isExpanded) "Collapse" else "Expand"} $title") { open(); true }
                 }
-        ) {
-            Text(
-                text = (if (isExpanded) "▾ " else "▸ ") + title,
-                style = MaterialTheme.typography.titleSmall,
-            )
-        }
+        )
         Spacer(Modifier.weight(1f))
         Text(
             text = "$onCount/$totalCount on",
@@ -505,10 +500,12 @@ private fun ConnectorRow(
         )
         StatusDot(status = connector.status)
         Spacer(Modifier.width(10.dp))
-        Switch(checked = enabled, onCheckedChange = onToggle)
-        TextButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 8.dp)) {
-            Text(if (def?.auth == ConnectorAuth.ACCOUNT || connector.configEnc != null) "Edit" else "Set up")
-        }
+        PixelSwitch(checked = enabled, onChange = onToggle)
+        PixelButton(
+            text = if (def?.auth == ConnectorAuth.ACCOUNT || connector.configEnc != null) "Edit" else "Set up",
+            onClick = onOpen,
+            small = true,
+        )
     }
 }
 
@@ -519,18 +516,18 @@ private fun LogsToggleRow(
     count: Int,
 ) {
     val open = onToggle
-    TextButton(
+    PixelButton(
+        text = if (isExpanded) "Hide recent calls" else "Recent calls ($count)",
         onClick = onToggle,
-        contentPadding = PaddingValues(0.dp),
+        small = true,
+        fill = Pal.tan,
         modifier = Modifier
             .clearAndSetSemantics {
                 contentDescription = if (isExpanded) "Hide recent calls" else "Show recent calls, $count total"
                 role = Role.Button
                 onClick(label = if (isExpanded) "Hide recent calls" else "Show recent calls") { open(); true }
             }
-    ) {
-        Text(if (isExpanded) "Hide recent calls" else "Recent calls ($count)")
-    }
+    )
 }
 
 @Composable
@@ -541,7 +538,7 @@ private fun StatusDot(status: String) {
         "error" -> Pal.red
         else -> Pal.wood
     }
-    Surface(color = color, shape = MaterialTheme.shapes.small, modifier = Modifier.size(8.dp)) {}
+    PixelPanel(fill = color, modifier = Modifier.size(8.dp)) {}
 }
 
 @Composable
@@ -582,7 +579,6 @@ private fun ConnectorLogRow(log: ConnectorLogEntity) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectorSetupDialog(
     connector: ConnectorEntity?,
@@ -605,90 +601,100 @@ private fun ConnectorSetupDialog(
     }
 
     if (def == null) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(connector?.name ?: "Connector") },
-            text = { Text("Not in the built-in catalog.") },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        )
+        PixelDialog(
+            onDismiss = onDismiss,
+            title = connector?.name ?: "Connector",
+        ) {
+            Text("Not in the built-in catalog.")
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                PixelButton(text = "Close", onClick = onDismiss, small = true, fill = Pal.tan)
+            }
+        }
         return
     }
 
     val usesDeviceAccounts = def.auth == ConnectorAuth.ACCOUNT
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(def.name) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 480.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = def.setupHelp,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Pal.tan,
+    PixelDialog(
+        onDismiss = onDismiss,
+        title = def.name,
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 480.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = def.setupHelp,
+                style = MaterialTheme.typography.bodySmall,
+                color = Pal.tan,
+            )
+            if (usesDeviceAccounts) {
+                BrowserSessionBlock(
+                    signedIn = browserSignedIn,
+                    onOpen = {
+                        runCatching {
+                            context.startActivity(
+                                com.agoria.app.browser.AgentBrowserActivity.intent(
+                                    context,
+                                    "https://accounts.google.com/ServiceLogin",
+                                ),
+                            )
+                        }
+                    },
                 )
-                if (usesDeviceAccounts) {
-                    BrowserSessionBlock(
-                        signedIn = browserSignedIn,
-                        onOpen = {
-                            runCatching {
-                                context.startActivity(
-                                    com.agoria.app.browser.AgentBrowserActivity.intent(
-                                        context,
-                                        "https://accounts.google.com/ServiceLogin",
-                                    ),
-                                )
-                            }
-                        },
-                    )
-                }
-                if (def.actions.isNotEmpty()) {
-                    Text(
-                        text = def.actions.joinToString(", ") { it.id },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Pal.wood,
-                    )
-                }
-                def.fields.forEach { field ->
-                    val saved = connector?.configEnc != null
-                    OutlinedTextField(
-                        value = values[field.key] ?: "",
-                        onValueChange = { onValue(field.key, it) },
-                        label = { Text(field.label) },
-                        placeholder = {
-                            Text(if (field.secret && saved) "Saved — leave blank to keep" else field.placeholder)
-                        },
-                        singleLine = true,
-                        visualTransformation = if (field.secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = if (field.secret) KeyboardType.Password else KeyboardType.Text,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (error.isNotBlank()) {
-                    Text(error, style = MaterialTheme.typography.bodySmall, color = Pal.red)
-                }
-                if (connector?.configEnc != null && !usesDeviceAccounts) {
-                    TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp)) { Text("Clear") }
-                }
             }
-        },
-        confirmButton = {
-            if (usesDeviceAccounts) TextButton(onClick = onDismiss) { Text("Done") }
-            else TextButton(onClick = onSave) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+            if (def.actions.isNotEmpty()) {
+                Text(
+                    text = def.actions.joinToString(", ") { it.id },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Pal.wood,
+                )
+            }
+            def.fields.forEach { field ->
+                val saved = connector?.configEnc != null
+                PixelTextField(
+                    value = values[field.key] ?: "",
+                    onValueChange = { onValue(field.key, it) },
+                    label = field.label,
+                    singleLine = true,
+                    password = field.secret,
+                    hint = if (field.secret && saved) "Saved — leave blank to keep" else field.placeholder,
+                    labelColor = Pal.navy,
+                    hintColor = Pal.tan,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (error.isNotBlank()) {
+                Text(error, style = MaterialTheme.typography.bodySmall, color = Pal.red)
+            }
+            if (connector?.configEnc != null && !usesDeviceAccounts) {
+                PixelButton(text = "Clear", onClick = onClear, small = true, fill = Pal.tan)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (usesDeviceAccounts) {
+                PixelButton(text = "Done", onClick = onDismiss, modifier = Modifier.weight(1f), fill = Pal.tan)
+            } else {
+                PixelButton(text = "Save", onClick = onSave, modifier = Modifier.weight(1f))
+            }
+            PixelButton(text = "Close", onClick = onDismiss, modifier = Modifier.weight(1f), fill = Pal.tan)
+        }
     )
 }
 
 @Composable
 private fun BrowserSessionBlock(signedIn: Boolean, onOpen: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.medium, color = Pal.teal.copy(alpha = 0.14f)) {
+    PixelPanel(fill = Pal.teal.copy(alpha = 0.14f)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = if (signedIn) "Office browser is signed in" else "Office browser is signed out",
@@ -698,9 +704,7 @@ private fun BrowserSessionBlock(signedIn: Boolean, onOpen: () -> Unit) {
                 text = "Sign in once inside the office browser. Your phone's accounts are never read.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = onOpen, contentPadding = PaddingValues(0.dp)) {
-                Text(if (signedIn) "Open office browser" else "Sign in")
-            }
+            PixelButton(text = if (signedIn) "Open office browser" else "Sign in", onClick = onOpen, small = true)
         }
     }
 }
