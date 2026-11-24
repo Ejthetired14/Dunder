@@ -417,7 +417,18 @@ class Repository(
 
     suspend fun getAllPendingApprovals(): List<ApprovalEntity> {
         val result = db.approvalDao().getAllPending()
-        Log.d("ApprovalFlow", "getAllPendingApprovals returned ${result.size} items")
+        Log.i("ApprovalFlow", "getAllPendingApprovals returned ${result.size} items")
+        if (result.isNotEmpty()) {
+            result.forEach { Log.d("ApprovalFlow", "  Pending: id=${it.id} agent=${it.agentId} type=${it.type} status=${it.status} created=${it.createdAt}") }
+        }
+        return result
+    }
+
+    // Debug: get all approvals regardless of status
+    suspend fun getAllApprovals(): List<ApprovalEntity> {
+        val result = db.approvalDao().getAll()
+        Log.i("ApprovalFlow", "getAllApprovals returned ${result.size} items")
+        result.forEach { Log.d("ApprovalFlow", "  All: id=${it.id} agent=${it.agentId} type=${it.type} status=${it.status} created=${it.createdAt}") }
         return result
     }
 

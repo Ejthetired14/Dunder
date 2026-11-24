@@ -128,13 +128,22 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     private fun startPendingApprovalsPolling() {
         viewModelScope.launch {
             Log.i("ApprovalFlow", "Pending approvals polling STARTED")
+            // One-time debug dump of all approvals on startup
+            viewModelScope.launch {
+                try {
+                    val all = repo.getAllApprovals()
+                    Log.i("ApprovalFlow", "Startup debug: all approvals count = ${all.size}")
+                } catch (e: Exception) {
+                    Log.e("ApprovalFlow", "Startup debug dump failed", e)
+                }
+            }
             while (coroutineContext[Job]?.isActive == true) {
                 try {
                     val approvals = repo.getAllPendingApprovals()
                     val requests = repo.getAllPendingConnectorRequests()
-                    if (approvals.isNotEmpty() || requests.isNotEmpty()) {
-                        Log.i("ApprovalFlow", "Poll found approvals=${approvals.size} requests=${requests.size}")
-                        approvals.forEach { Log.d("ApprovalFlow", "  Pending approval: id=${it.id} agent=${it.agentId} type=${it.type} status=${it.status}") }
+                    Log.i("ApprovalFlow", "Poll: approvals=${approvals.size} requests=${requests.size}")
+                    if (approvals.isNotEmpty()) {
+                        approvals.forEach { Log.d("ApprovalFlow", "  Pending: id=${it.id} agent=${it.agentId} type=${it.type} status=${it.status}") }
                     }
                     _pendingApprovals.value = approvals
                     _pendingConnectorRequests.value = requests
@@ -144,6 +153,21 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 delay(2000) // Poll every 2 seconds
             }
             Log.i("ApprovalFlow", "Pending approvals polling STOPPED")
+        }
+    }
+
+    // Manual refresh for debugging
+    fun refreshPendingApprovals() {
+        viewModelScope.launch {
+            try {
+                val approvals = repo.getAllPendingApprovals()
+                val requests = repo.getAllPendingConnectorRequests()
+                Log.i("ApprovalFlow", "Manual refresh: approvals=${approvals.size} requests=${requests.size}")
+                _pendingApprovals.value = approvals
+                _pendingConnectorRequests.value = requests
+            } catch (e: Exception) {
+                Log.e("ApprovalFlow", "Manual refresh error", e)
+            }
         }
     }
 
