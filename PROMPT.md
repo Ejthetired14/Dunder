@@ -1,0 +1,12 @@
+You are working on the Android repo Ejthetired14/Dunder (Kotlin, Jetpack Compose, pixel-art office app). Read claudefrontend.md at the repo root first (Rules, section 2, and the Log, section 6).
+
+I am giving you a zip, dunder-t-agent-pixel.zip. It was written WITHOUT a compiler, so you must compile it.
+
+1. Unzip it at the repo root. Create a branch kilo/t-agent-pixel from the latest main.
+2. Copy app/src/main/java/com/agoria/app/ui/agent/AgentScreen.kt over the repo file (whole-file replacement).
+3. Run: python3 apply_t_agent_pixel.py (from the repo root). It patches SettingsScreen.kt (About shows the real version), PixelUi.kt (PixelTextField gets an optional onDone), and claudefrontend.md (task board, phone checklist, log). It asserts every anchor and is safe to run twice. If an anchor fails, fix the script or do the edit by hand, do not skip it.
+4. Build with ./gradlew assembleDebug (or let CI "Build Debug & Release APK" run). Fix every compile error. Likely suspects: Modifier.weight(1f, fill = false) in the agent bubble Row, the OfficeSound.Fx.CLICK import, PixelPanel called without a modifier, the PixelTextField(onDone=) patch, PixelSwitch(checked =, onChange =). Keep the pixel rules in claudefrontend.md section 2 (square corners, 2 dp ink border, Pal colours, no Material Card/Switch/TextButton/AlertDialog/OutlinedTextField/Slider/TabRow/spinner on the Agent page).
+5. Then update claudefrontend.md honestly: change T-AGENT-PIXEL and T-ABOUT-VERSION from "CODE WRITTEN, NOT COMPILED" to "VERIFIED (CI, PR #n, commit sha, run ids)" in the Done recently table, set "Last updated by:", and ADD one new log line at the top of section 6 (newest first, never rewrite old lines) saying what you compiled, what you fixed, and that nothing was tested on a phone. Keep the new open task T-AGENT-TOPBAR. Add a short note if you changed any code beyond the zip.
+6. Delete the zip, apply_t_agent_pixel.py and PROMPT.md from the repo before committing.
+7. Commit with a clear message ("T-AGENT-PIXEL + T-ABOUT-VERSION: pixel Agent page, real version in About"), push, and wait for CI. Only when the build is green, merge/push to main (the owner wants this on main). If CI is red and you cannot fix it, do NOT push to main: leave the branch and report the errors.
+8. Reply with: the commit sha, the CI run ids and result, anything you changed beyond the zip, and a one-line phone test to run (open an agent, check tabs, chat bubbles, Edit/Delete dialogs).

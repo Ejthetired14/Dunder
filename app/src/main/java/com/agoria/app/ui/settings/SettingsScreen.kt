@@ -789,7 +789,7 @@ fun SettingsScreen(
             }
 
             SettingsCard(title = "About") {
-                Text("Dunder 1.0.0", style = MaterialTheme.typography.titleMedium)
+                Text("Dunder $currentVersionName ($currentVersionCode)", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "A local autonomous office for Android 13+. Agents run on free model APIs and keep their thoughts in a local diary. Builds and outward-facing actions require approval.",
                     style = MaterialTheme.typography.bodySmall,
