@@ -40,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.data.AgentEntity
@@ -55,6 +54,7 @@ import com.agoria.app.ui.components.PixelPill
 import com.agoria.app.ui.components.SectionHeader
 import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
 import com.agoria.app.ui.office.world.PixelSwitch
@@ -434,44 +434,41 @@ private fun AddAgentDialog(
     var persona by remember { mutableStateOf("") }
     var goal by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        PixelPanel(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("HIRE AN AGENT", style = PixelLabel)
-                PixelTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Name",
-                )
-                PixelTextField(
-                    value = role,
-                    onValueChange = { role = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Role",
-                )
-                PixelTextField(
-                    value = persona,
-                    onValueChange = { persona = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Persona (optional)",
-                    singleLine = false,
-                )
-                PixelTextField(
-                    value = goal,
-                    onValueChange = { goal = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Goal (optional)",
-                    singleLine = false,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton("Create", { if (name.isNotBlank()) onCreate(name, role, persona, goal) })
-                    PixelButton("Cancel", onDismiss, fill = Pal.cream)
-                }
-            }
+    // Field labels are navy: the dialog is cream and the PixelTextField default label colour is amber (rule 8).
+    PixelDialog(onDismiss = onDismiss, title = "Hire an agent") {
+        PixelTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Name",
+            labelColor = Pal.navy,
+        )
+        PixelTextField(
+            value = role,
+            onValueChange = { role = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Role",
+            labelColor = Pal.navy,
+        )
+        PixelTextField(
+            value = persona,
+            onValueChange = { persona = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Persona (optional)",
+            singleLine = false,
+            labelColor = Pal.navy,
+        )
+        PixelTextField(
+            value = goal,
+            onValueChange = { goal = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Goal (optional)",
+            singleLine = false,
+            labelColor = Pal.navy,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton("Create", { if (name.isNotBlank()) onCreate(name, role, persona, goal) })
+            PixelButton("Cancel", onDismiss, fill = Pal.cream)
         }
     }
 }

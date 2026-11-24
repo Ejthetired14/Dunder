@@ -32,6 +32,25 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Dialog
+import kotlin.math.roundToInt
 
 /** Palette pulled from the office map: navy walls, teal floor, warm wood, paper cream. */
 object Pal {
@@ -217,6 +236,135 @@ fun PixelSwitch(
         Box(
             Modifier
                 .size(22.dp)
+                .background(Pal.cream)
+                .border(2.dp, Pal.ink),
+        )
+    }
+}
+
+
+/**
+ * Shared square dialog (task T-PIXEL-WIDGETS): cream [PixelPanel] with a hard shadow and 2 dp ink border,
+ * ink content colour (so default Text is readable on cream), 16 dp padding, 10 dp between children.
+ * `title` is drawn as an uppercase [PixelLabel]. Replaces the private ResetDialog (Settings) and the
+ * hand-built hire dialog (Home). Put fields and buttons in `content`.
+ */
+@Composable
+fun PixelDialog(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        PixelPanel(modifier = modifier.fillMaxWidth()) {
+            CompositionLocalProvider(LocalContentColor provides Pal.ink) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (title != null) {
+                        Text(title.uppercase(), style = PixelLabel)
+                    }
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** Flat square progress bar: navy track, amber fill, 2 dp ink border. `fraction` is 0f..1f. */
+@Composable
+fun PixelProgressBar(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+    fill: Color = Pal.amber,
+) {
+    Box(
+        modifier = modifier
+            .height(16.dp)
+            .background(Pal.navy)
+            .border(2.dp, Pal.ink),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .background(fill),
+        )
+    }
+}
+
+/**
+ * Square slider (task T-PIXEL-WIDGETS): navy track with 2 dp ink border, amber fill, 16 x 28 dp cream thumb.
+ * Same contract as the Material Slider for the parameters we use: `valueRange`, and `steps` = number of
+ * discrete values strictly between the ends (so there are `steps + 1` intervals). Tap or drag anywhere.
+ * 32 dp tall, fills the width it is given.
+ */
+@Composable
+fun PixelSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    fill: Color = Pal.amber,
+) {
+    val start = valueRange.start
+    val span = valueRange.endInclusive - start
+    val fraction = if (span <= 0f) 0f else ((value - start) / span).coerceIn(0f, 1f)
+    val thumbWidth = 16.dp
+    val thumbPx = with(LocalDensity.current) { thumbWidth.roundToPx() }
+    var widthPx by remember { mutableStateOf(0) }
+    val latestOnChange by rememberUpdatedState(onValueChange)
+
+    fun valueAt(x: Float): Float {
+        val usable = (widthPx - thumbPx).coerceAtLeast(1)
+        var f = ((x - thumbPx / 2f) / usable).coerceIn(0f, 1f)
+        if (steps > 0) {
+            val n = steps + 1
+            f = (f * n).roundToInt() / n.toFloat()
+        }
+        return start + f * span
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .onSizeChanged { widthPx = it.width }
+            .pointerInput(start, span, steps, thumbPx) {
+                detectTapGestures { offset -> latestOnChange(valueAt(offset.x)) }
+            }
+            .pointerInput(start, span, steps, thumbPx) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset -> latestOnChange(valueAt(offset.x)) },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        latestOnChange(valueAt(change.position.x))
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+                .background(Pal.navy)
+                .border(2.dp, Pal.ink),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction)
+                    .background(fill),
+            )
+        }
+        Box(
+            Modifier
+                .offset { IntOffset(((widthPx - thumbPx) * fraction).roundToInt().coerceAtLeast(0), 0) }
+                .size(thumbWidth, 28.dp)
                 .background(Pal.cream)
                 .border(2.dp, Pal.ink),
         )
