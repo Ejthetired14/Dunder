@@ -59,6 +59,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -254,10 +257,10 @@ fun PixelCard(
 fun AgentCard(
     agent: AgentEntity,
     latestDiary: String?,
-    onClick: () -> Unit,
+    onClickAction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val open = onClick
+    val open = onClickAction
     val description = buildString {
         append(agent.name).append(", ").append(agent.role).append(". ")
         append("Status: ").append(statusLabel(agent.status)).append(". ")
