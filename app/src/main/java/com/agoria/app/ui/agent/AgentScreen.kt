@@ -1,5 +1,6 @@
 package com.agoria.app.ui.agent
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,8 +55,8 @@ import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.TaskEntity
-import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.AgentScreenState
+import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.PaginationState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
@@ -92,16 +91,13 @@ fun AgentScreen(
         onBack = onBack,
         actions = {
             if (agent != null) {
-                IconButton(
+                PixelIconButton(
+                    icon = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    description = if (agent.autonomy) "Pause" else "Resume",
                     onClick = {
                         if (agent.autonomy) viewModel.pauseAgent(agent.id) else viewModel.resumeAgent(agent.id)
                     },
-                ) {
-                    Icon(
-                        imageVector = if (agent.autonomy) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (agent.autonomy) "Pause" else "Resume",
-                    )
-                }
+                )
             }
         },
     ) { padding ->

@@ -13,14 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -31,8 +31,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +53,7 @@ import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.util.Json
 import com.agoria.app.util.Time
 import kotlinx.coroutines.launch
@@ -99,12 +98,11 @@ fun ApprovalsScreen(
         subtitle = "${pending.size} waiting · nothing external runs without you",
         onBack = onBack,
         actions = {
-            IconButton(onClick = { showAutoApproveDialog = true }) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "Auto-approve settings",
-                )
-            }
+            PixelIconButton(
+                icon = Icons.Filled.Settings,
+                description = "Auto-approve settings",
+                onClick = { showAutoApproveDialog = true },
+            )
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
