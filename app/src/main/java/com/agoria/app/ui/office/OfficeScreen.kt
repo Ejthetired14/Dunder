@@ -804,8 +804,9 @@ private fun AgentDesk(
     onClick: () -> Unit,
 ) {
     PixelCard(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         fill = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.padding(14.dp)) {
