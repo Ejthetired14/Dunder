@@ -120,7 +120,7 @@ class LlmClient(private val repo: Repository) {
             val configuredModel = provider.model.ifBlank { spec.defaultModel }
             val modelFallbacks = buildModelFallbacks(spec, configuredModel)
             
-            val result = callProviderWithFallbacks(
+            val (fallbackResult, fallbackAttempts) = callProviderWithFallbacks(
                 spec = spec,
                 provider = provider,
                 models = modelFallbacks,
@@ -128,12 +128,12 @@ class LlmClient(private val repo: Repository) {
                 extra = extra,
                 request = request,
             )
-            attempts.addAll(result.attempts)
+            attempts.addAll(fallbackAttempts)
 
-            if (result.result.ok) {
-                return result.result.copy(attempts = attempts)
+            if (fallbackResult.ok) {
+                return fallbackResult.copy(attempts = attempts)
             }
-            lastError = result.attempts.lastOrNull()?.error ?: "Unknown provider error"
+            lastError = fallbackAttempts.lastOrNull()?.error ?: "Unknown provider error"
         }
 
         return LlmResult(
