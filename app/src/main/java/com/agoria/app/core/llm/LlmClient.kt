@@ -354,21 +354,24 @@ class LlmClient(private val repo: Repository) {
             if (choices.length() == 0) return Parsed(false, error = "No choices in response")
             val message = choices.getJSONObject(0).optJSONObject("message")
                 ?: return Parsed(false, error = "No message in response")
-            val content = message.opt("content")
+            
+            // Try multiple content fields (OpenAI, Anthropic, streaming, etc.)
+            val content = message.opt("content") 
+                ?: message.opt("text") 
+                ?: message.opt("delta")
+                ?: message.opt("content_block")
             val text = when (content) {
                 is String -> content
-                is JSONArray -> {
-                    val sb = StringBuilder()
-                    for (i in 0 until content.length()) {
-                        val part = content.optJSONObject(i)
-                        sb.append(part?.optString("text") ?: "")
-                    }
-                    sb.toString()
-                }
-                else -> message.optString("content")
+                is JSONArray -> content.joinToString("") { it.optString("text") }
+                else -> message.optString("content") ?: message.optString("text") ?: ""
             }
-            if (text.isBlank()) Parsed(false, error = "Model returned an empty message") else Parsed(true, text = text)
+            
+            if (text.isBlank()) {
+                android.util.Log.w("LlmClient", "Empty content in 200 response: $body")
+                Parsed(false, error = "Model returned an empty message")
+            } else Parsed(true, text = text)
         } catch (e: Exception) {
+            android.util.Log.e("LlmClient", "Parse failed: ${e.message}, body: $body")
             Parsed(false, error = "Could not parse response: ${e.message}")
         }
     }
