@@ -393,7 +393,7 @@ private fun DiaryRow(
     PixelCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClickAction)
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button

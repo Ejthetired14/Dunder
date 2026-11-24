@@ -270,7 +270,7 @@ fun AgentCard(
     PixelCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClickAction)
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button
