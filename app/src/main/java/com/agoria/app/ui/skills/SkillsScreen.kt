@@ -18,17 +18,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,8 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +49,7 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelBody
 import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelDialog
 import com.agoria.app.ui.office.world.PixelIconButton
@@ -84,27 +77,38 @@ fun SkillsScreen(
     val selectedAgent = selectedAgentId?.let { id -> agents.find { it.id == id } }
 
     // Get installed skills for selected agent
-    val agentSkills = if (selectedAgentId != null) {
-        viewModel.agentSkillConfigs(selectedAgentId)
-    } else {
-        emptyList()
+    val agentSkills by remember {
+        mutableStateOf<List<AgentSkillEntity>>(emptyList())
     }
     val installedSkillIds = agentSkills.map { it.skillId }.toSet()
+
+    // Fetch agent skills when selectedAgentId changes
+    androidx.compose.runtime.LaunchedEffect(selectedAgentId) {
+        if (selectedAgentId != null) {
+            viewModel.appScope.launch {
+                val skills = viewModel.agentSkillConfigs(selectedAgentId!!)
+                agentSkills = skills
+            }
+        } else {
+            agentSkills = emptyList()
+        }
+    }
 
     PixelScaffold(
         title = "Skills",
         onBack = onBack,
-        titleAction = {
+        actions = {
             PixelIconButton(
                 icon = Icons.Default.Settings,
-                contentDescription = "Sync skills from catalog",
+                description = "Sync skills from catalog",
                 onClick = { viewModel.syncSkillCatalog() },
             )
         },
-    ) {
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .padding(16.dp)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -121,7 +125,7 @@ fun SkillsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            PixelLabel("Filter by agent:", style = MaterialTheme.typography.labelMedium)
+                            Text("Filter by agent:", style = PixelLabel)
                             Spacer(Modifier.width(8.dp))
                             agents.forEach { agent ->
                                 val isSelected = selectedAgentId == agent.id
@@ -194,9 +198,8 @@ fun SkillsScreen(
 
             if (skills.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Default.Download,
                     title = "No skills available",
-                    message = "Pull to refresh or check back later.",
+                    body = "Pull to refresh or check back later.",
                 )
             }
         }
@@ -270,10 +273,10 @@ private fun SkillRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             skillDef.actions.take(3).forEach { action ->
-                                PixelLabel(action.label, style = MaterialTheme.typography.labelSmall)
+                                Text(action.label, style = PixelLabel.copy(fontSize = 10.sp))
                             }
                             if (skillDef.actions.size > 3) {
-                                PixelLabel("+${skillDef.actions.size - 3} more", style = MaterialTheme.typography.labelSmall)
+                                Text("+${skillDef.actions.size - 3} more", style = PixelLabel.copy(fontSize = 10.sp))
                             }
                         }
                     }
@@ -372,8 +375,6 @@ private fun ConfigPanel(
                 value = text,
                 onValueChange = onConfigChange,
                 label = "Config",
-                placeholder = "{}",
-                maxLines = 8,
                 singleLine = false,
             )
             if (skillDef != null) {
@@ -404,8 +405,6 @@ private fun InfoDialog(
     PixelDialog(
         title = skill.name,
         onDismiss = onDismiss,
-        confirmText = "Close",
-        onConfirm = onDismiss,
     ) {
         Column(
             modifier = Modifier

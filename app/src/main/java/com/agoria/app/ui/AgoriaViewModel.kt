@@ -11,6 +11,7 @@ import com.agoria.app.core.ConnectorResult
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
 import com.agoria.app.data.AgentEntity
+import com.agoria.app.data.AgentSkillEntity
 import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.ConnectorRequestEntity
@@ -19,6 +20,7 @@ import com.agoria.app.data.MessageEntity
 import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.SettingsEntity
 import com.agoria.app.data.TaskEntity
+import com.agoria.app.core.SkillExecutor
 import android.util.Log
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
@@ -923,7 +925,7 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         emptyList(),
     )
 
-    fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> {
+    suspend fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> {
         return repo.agentSkillConfigs(agentId)
     }
 

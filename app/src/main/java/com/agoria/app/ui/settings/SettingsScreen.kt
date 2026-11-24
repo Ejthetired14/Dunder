@@ -804,7 +804,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Download,
+                                imageVector = Icons.Default.FileDownload,
                                 contentDescription = null,
                                 tint = Pal.teal,
                                 modifier = Modifier.size(24.dp),
