@@ -13,8 +13,8 @@ android {
         applicationId = "com.agoria.app"
         minSdk = 33
         targetSdk = 35
-        versionCode = 226
-        versionName = "1.0.226"
+        versionCode = 227
+        versionName = "1.0.227"
 
         vectorDrawables {
             useSupportLibrary = true
