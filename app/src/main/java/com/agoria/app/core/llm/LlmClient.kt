@@ -116,21 +116,24 @@ class LlmClient(private val repo: Repository) {
                 continue
             }
 
-            val model = provider.model.ifBlank { spec.defaultModel }
-            val result = callProvider(
+            // Build model fallback list: user's configured model first, then all other models from the provider
+            val configuredModel = provider.model.ifBlank { spec.defaultModel }
+            val modelFallbacks = buildModelFallbacks(spec, configuredModel)
+            
+            val result = callProviderWithFallbacks(
                 spec = spec,
                 provider = provider,
-                model = model,
+                models = modelFallbacks,
                 key = key,
                 extra = extra,
                 request = request,
             )
-            attempts += result.attempt
+            attempts.addAll(result.attempts)
 
             if (result.result.ok) {
                 return result.result.copy(attempts = attempts)
             }
-            lastError = result.attempt.error ?: "Unknown provider error"
+            lastError = result.attempts.lastOrNull()?.error ?: "Unknown provider error"
         }
 
         return LlmResult(
@@ -196,7 +199,7 @@ class LlmClient(private val repo: Repository) {
                 lastCode = response.code
                 if (!response.isSuccessful) {
                     lastError = "HTTP ${response.code}: ${responseBody.take(400)}"
-                    if (response.code == 429 || response.code >= 500) {
+                    if (response.code >= 500) {
                         delay(600)
                     } else {
                         return@repeat
@@ -275,6 +278,69 @@ class LlmClient(private val repo: Repository) {
                 attempt = attempt,
             )
         }
+    }
+
+    private fun buildModelFallbacks(spec: ProviderSpec, configuredModel: String): List<String> {
+        val fallbacks = mutableListOf<String>()
+        if (configuredModel.isNotBlank()) {
+            fallbacks.add(configuredModel)
+        }
+        for (model in spec.models) {
+            if (model.id !in fallbacks) {
+                fallbacks.add(model.id)
+            }
+        }
+        if (spec.defaultModel.isNotBlank() && spec.defaultModel !in fallbacks) {
+            fallbacks.add(spec.defaultModel)
+        }
+        return fallbacks
+    }
+
+    private suspend fun callProviderWithFallbacks(
+        spec: ProviderSpec,
+        provider: com.agoria.app.data.ProviderEntity,
+        models: List<String>,
+        key: String?,
+        extra: String?,
+        request: LlmRequest,
+    ): Pair<LlmResult, List<ProviderAttempt>> {
+        val allAttempts = mutableListOf<ProviderAttempt>()
+        var lastError = "No model succeeded"
+
+        for (model in models) {
+            val call = callProvider(
+                spec = spec,
+                provider = provider,
+                model = model,
+                key = key,
+                extra = extra,
+                request = request,
+            )
+            allAttempts.add(call.attempt)
+
+            if (call.result.ok) {
+                return Pair(call.result.copy(attempts = allAttempts), allAttempts)
+            }
+
+            val errorCode = call.attempt.error?.takeWhile { it.isDigit() }?.toIntOrNull()
+            val isRateLimit = errorCode == 429
+            val isPaymentError = errorCode == 402
+
+            if (isRateLimit || isPaymentError) {
+                lastError = call.attempt.error ?: "HTTP $errorCode"
+                continue
+            } else {
+                lastError = call.attempt.error ?: "Unknown error"
+                break
+            }
+        }
+
+        val finalResult = LlmResult(
+            ok = false,
+            error = lastError,
+            attempts = allAttempts,
+        )
+        return Pair(finalResult, allAttempts)
     }
 
     private data class Parsed(val isSuccess: Boolean, val text: String = "", val error: String? = null)
