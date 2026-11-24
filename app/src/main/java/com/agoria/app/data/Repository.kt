@@ -1069,17 +1069,17 @@ class Repository(
             if (json.has("agent_skills")) {
                 val array = json.getJSONArray("agent_skills")
                 for (i in 0 until array.length()) {
-                    val as = array.optJSONObject(i) ?: continue
-                    val agentId = as.optString("agentId")
-                    val skillId = as.optString("skillId")
+                    val agentSkillJson = array.optJSONObject(i) ?: continue
+                    val agentId = agentSkillJson.optString("agentId")
+                    val skillId = agentSkillJson.optString("skillId")
                     if (agentId.isBlank() || skillId.isBlank()) continue
                     db.skillDao().install(
                         AgentSkillEntity(
                             agentId = agentId,
                             skillId = skillId,
-                            config = as.optString("config", "{}"),
-                            installedAt = as.optLong("installedAt", Time.now()),
-                            updatedAt = as.optLong("updatedAt", Time.now()),
+                            config = agentSkillJson.optString("config", "{}"),
+                            installedAt = agentSkillJson.optLong("installedAt", Time.now()),
+                            updatedAt = agentSkillJson.optLong("updatedAt", Time.now()),
                         ),
                     )
                 }
