@@ -689,7 +689,7 @@ private fun ConnectorSetupDialog(
             }
             PixelButton(text = "Close", onClick = onDismiss, modifier = Modifier.weight(1f), fill = Pal.tan)
         }
-    )
+    }
 }
 
 @Composable
