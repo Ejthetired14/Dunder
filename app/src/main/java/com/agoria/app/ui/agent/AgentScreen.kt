@@ -45,6 +45,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -248,6 +253,7 @@ private fun PixelTabs(
     ) {
         labels.forEachIndexed { index, label ->
             val on = index == selected
+            val open = { onSelect(index) }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -257,6 +263,11 @@ private fun PixelTabs(
                     .clickable {
                         if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
                         onSelect(index)
+                    }
+                    .clearAndSetSemantics {
+                        contentDescription = "${label} tab, ${if (on) "selected" else "not selected"}"
+                        role = Role.Tab
+                        onClick(label = "Select ${label} tab") { open(); true }
                     },
                 contentAlignment = Alignment.Center,
             ) {
@@ -292,6 +303,7 @@ private fun AgentHeader(
             var goalOpen by remember(agent.id) { mutableStateOf(false) }
             Spacer(Modifier.height(8.dp))
             // Long goals take two lines; tap to read all of it, tap again to fold it back.
+            val goalToggle = { goalOpen = !goalOpen }
             Text(
                 text = "Goal: ${agent.goal}",
                 style = MaterialTheme.typography.bodySmall,
@@ -301,7 +313,12 @@ private fun AgentHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateContentSize()
-                    .clickable { goalOpen = !goalOpen },
+                    .clickable { goalOpen = !goalOpen }
+                    .clearAndSetSemantics {
+                        contentDescription = "Goal: ${agent.goal}, ${if (goalOpen) "expanded" else "collapsed"}"
+                        role = Role.Button
+                        onClick(label = if (goalOpen) "Collapse goal" else "Expand goal") { goalToggle(); true }
+                    },
             )
             Spacer(Modifier.height(8.dp))
             Row(
@@ -436,15 +453,21 @@ private fun ChatTab(
 @Composable
 private fun CopyMessageButton(text: String) {
     val clipboard = LocalClipboardManager.current
+    val open = { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) }
     Box(
         modifier = Modifier
             .size(28.dp)
-            .clickable { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) },
+            .clickable { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) }
+            .clearAndSetSemantics {
+                contentDescription = "Copy message"
+                role = Role.Button
+                onClick(label = "Copy message") { open(); true }
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
-            contentDescription = "Copy message",
+            contentDescription = null,
             tint = Pal.wood,
             modifier = Modifier.size(15.dp),
         )

@@ -1,5 +1,6 @@
 package com.agoria.app.ui.diary
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,6 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -132,7 +138,7 @@ fun DiaryScreen(
                                 entry = entry,
                                 agentName = agent?.name ?: "Office",
                                 avatarAgent = agent,
-                                onClick = { onOpenAgent(entry.agentId) },
+                                onClickAction = { onOpenAgent(entry.agentId) },
                             )
                         }
                     }
@@ -148,11 +154,24 @@ private fun DiaryEntryCard(
     entry: com.agoria.app.data.DiaryEntryEntity,
     agentName: String,
     avatarAgent: com.agoria.app.data.AgentEntity?,
-    onClick: () -> Unit,
+    onClickAction: () -> Unit,
 ) {
+    val open = onClickAction
+    val description = buildString {
+        append(agentName).append(", ").append(entry.kind).append(", ")
+        append(Time.clock(entry.createdAt)).append(". ")
+        append(entry.content.take(160)).append(". ")
+        append(entry.importance).append(" importance")
+    }
     Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClickAction)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open diary entry") { open(); true }
+            },
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {

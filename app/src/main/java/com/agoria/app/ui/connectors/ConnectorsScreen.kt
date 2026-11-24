@@ -2,6 +2,7 @@ package com.agoria.app.ui.connectors
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +42,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -381,14 +387,19 @@ private fun RequestRow(
     request: ConnectorRequestEntity,
     viewModel: AgoriaViewModel,
 ) {
+    val description = "Agent asks for ${request.connectorId}"
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Agent asks for ${request.connectorId}",
+            text = description,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
             maxLines = 1,
@@ -407,13 +418,23 @@ private fun CategoryHeaderRow(
     onCount: Int,
     totalCount: Int,
 ) {
+    val open = onToggle
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onToggle, contentPadding = PaddingValues(horizontal = 4.dp)) {
+        TextButton(
+            onClick = onToggle,
+            contentPadding = PaddingValues(horizontal = 4.dp),
+            modifier = Modifier
+                .clearAndSetSemantics {
+                    contentDescription = "${if (isExpanded) "Collapse" else "Expand"} $title category, $onCount of $totalCount connectors on"
+                    role = Role.Button
+                    onClick(label = "${if (isExpanded) "Collapse" else "Expand"} $title") { open(); true }
+                }
+        ) {
             Text(
                 text = (if (isExpanded) "▾ " else "▸ ") + title,
                 style = MaterialTheme.typography.titleSmall,
@@ -437,6 +458,12 @@ private fun ConnectorRow(
 ) {
     val def = ConnectorCatalog.get(connector.id)
     val enabled = connector.status != "disabled"
+    val open = onOpen
+    val description = buildString {
+        append(connector.name).append(", ")
+        append(if (enabled) "enabled" else "disabled").append(". ")
+        append(def?.description ?: "")
+    }
     
     // Simple highlight - amber border when highlighted
     val borderWidth = if (isHighlighted) 2.dp else 0.dp
@@ -453,7 +480,13 @@ private fun ConnectorRow(
                 shape = MaterialTheme.shapes.medium
             )
             .background(color = backgroundColor)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .clickable(onClick = onOpen)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open ${connector.name}") { open(); true }
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -485,7 +518,17 @@ private fun LogsToggleRow(
     onToggle: () -> Unit,
     count: Int,
 ) {
-    TextButton(onClick = onToggle, contentPadding = PaddingValues(0.dp)) {
+    val open = onToggle
+    TextButton(
+        onClick = onToggle,
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier
+            .clearAndSetSemantics {
+                contentDescription = if (isExpanded) "Hide recent calls" else "Show recent calls, $count total"
+                role = Role.Button
+                onClick(label = if (isExpanded) "Hide recent calls" else "Show recent calls") { open(); true }
+            }
+    ) {
         Text(if (isExpanded) "Hide recent calls" else "Recent calls ($count)")
     }
 }
@@ -503,10 +546,19 @@ private fun StatusDot(status: String) {
 
 @Composable
 private fun ConnectorLogRow(log: ConnectorLogEntity) {
+    val description = buildString {
+        append(if (log.status == "ok") "Success" else "Error").append(", ")
+        append(log.connectorId).append(".").append(log.action).append(", ")
+        append(Time.relativeTime(log.createdAt))
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .padding(vertical = 3.dp)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
