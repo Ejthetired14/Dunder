@@ -991,13 +991,13 @@ class Repository(
 
         val agentSkillsList = mutableListOf<JSONObject>()
         db.agentDao().getAll().forEach { agent ->
-            db.skillDao().getAgentSkills(agent.id).forEach { as ->
+            db.skillDao().getAgentSkills(agent.id).forEach { agentSkill ->
                 val obj = JSONObject().apply {
-                    put("agentId", as.agentId)
-                    put("skillId", as.skillId)
-                    put("config", as.config)
-                    put("installedAt", as.installedAt)
-                    put("updatedAt", as.updatedAt)
+                    put("agentId", agentSkill.agentId)
+                    put("skillId", agentSkill.skillId)
+                    put("config", agentSkill.config)
+                    put("installedAt", agentSkill.installedAt)
+                    put("updatedAt", agentSkill.updatedAt)
                 }
                 agentSkillsList.add(obj)
             }
