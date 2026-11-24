@@ -26,7 +26,7 @@ import java.io.File
         ConnectorLogEntity::class,
         RevenueEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "agoria.db"
-        const val VERSION = 4
+        const val VERSION = 5
 
         fun create(context: Context): AppDatabase {
             val database = build(context)
@@ -71,7 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
                 // older APK over a newer one) falls back, because Room refuses to open a database
                 // written by a newer schema.
@@ -241,4 +241,11 @@ private fun SupportSQLiteDatabase.rebuildMemories() {
     )
     execSQL("DROP TABLE `memories`")
     execSQL("ALTER TABLE `memories_v4` RENAME TO `memories`")
+}
+
+/** 4 -> 5: add isUndeletable column to agents for the Platform Engineer. */
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.addColumn("agents", "isUndeletable", "INTEGER NOT NULL DEFAULT 0")
+    }
 }

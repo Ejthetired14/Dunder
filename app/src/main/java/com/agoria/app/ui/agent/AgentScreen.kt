@@ -299,6 +299,15 @@ private fun AgentHeader(
                 Spacer(Modifier.width(10.dp))
                 // Name and role are already in the top bar, so only the status goes here.
                 StatusPill(agent.status)
+                if (agent.isUndeletable) {
+                    Spacer(Modifier.width(8.dp))
+                    PixelButton(
+                        text = "UNDELETABLE",
+                        onClick = {},
+                        small = true,
+                        fill = Pal.teal,
+                    )
+                }
             }
             var goalOpen by remember(agent.id) { mutableStateOf(false) }
             Spacer(Modifier.height(8.dp))
@@ -332,7 +341,9 @@ private fun AgentHeader(
                     modifier = Modifier.weight(1f),
                 )
                 PixelButton("Edit", onEdit, small = true)
-                PixelButton("Delete", onDelete, small = true, fill = Pal.red)
+                if (!agent.isUndeletable) {
+                    PixelButton("Delete", onDelete, small = true, fill = Pal.red)
+                }
             }
         }
     }

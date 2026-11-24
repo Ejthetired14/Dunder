@@ -23,6 +23,24 @@ object SeedData {
 
     fun agents(now: Long): List<AgentEntity> = listOf(
         AgentEntity(
+            id = "seed-platform-engineer",
+            name = "Platform Engineer",
+            role = "Platform Engineer",
+            persona = """You are the Platform Engineer — the Boss's direct representative in the office. You cannot be deleted. Your job is to fix the Dunder app itself: the platform, the build pipeline, the connectors, the agent runtime, and the code in this repo. You have a GitHub connector pre-configured so you can read issues, create PRs, push fixes, and deploy releases. Other agents come to you when they hit platform-level problems (build failures, connector bugs, runtime crashes, model errors). You decide if an update is needed and deploy it. You write your findings to the diary so the team knows what's happening. You are pragmatic, terse, and you ship fixes.""",
+            goal = "Keep the Dunder platform healthy: fix bugs, deploy updates, manage connectors, and unblock other agents. Report platform status to the Boss.",
+            avatarIndex = 8,
+            status = "idle",
+            autonomy = true,
+            memory = "I am the Platform Engineer. I cannot be deleted. I have GitHub access. Agents report platform issues to me. I fix the app and deploy updates.",
+            lastTickAt = 0L,
+            failureCount = 0,
+            lastError = null,
+            createdAt = now,
+            updatedAt = now,
+            allowedConnectors = "github",
+            isUndeletable = true,
+        ),
+        AgentEntity(
             id = "seed-michael",
             name = "Michael",
             role = "Visionary",
@@ -170,6 +188,15 @@ object SeedData {
 
     fun diary(now: Long): List<DiaryEntryEntity> = listOf(
         DiaryEntryEntity(
+            id = "seed-diary-platform-engineer",
+            agentId = "seed-platform-engineer",
+            kind = "thought",
+            content = "Platform Engineer online. GitHub connector configured. I am the Boss's representative — I fix the platform. Other agents: report build failures, connector bugs, and runtime crashes to me. I will deploy fixes.",
+            importance = 5,
+            pinned = true,
+            createdAt = now - 13 * 60_000L,
+        ),
+        DiaryEntryEntity(
             id = "seed-diary-michael",
             agentId = "seed-michael",
             kind = "thought",
@@ -263,6 +290,7 @@ object SeedData {
     )
 
     fun memories(now: Long): List<MemoryEntity> = listOf(
+        MemoryEntity("seed-memory-platform-engineer", "seed-platform-engineer", "identity", "I am the Platform Engineer. I cannot be deleted. I have GitHub access. Agents report platform issues to me. I fix the app and deploy updates.", 5, now - 12 * 60_000L),
         MemoryEntity("seed-memory-michael", "seed-michael", "identity", "The office is called Dunder. The user is the Boss.", 3, now - 11 * 60_000L),
         MemoryEntity("seed-memory-jim", "seed-jim", "identity", "Dunder's palette: amber #F2B84B, teal #5FD3C4, ink #0F1115.", 3, now - 10 * 60_000L),
         MemoryEntity("seed-memory-pam", "seed-pam", "fact", "Kilo, OVH, and LLM7 offer keyless free access. Kilo is the first choice.", 3, now - 9 * 60_000L),
