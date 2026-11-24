@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,8 +48,10 @@ import com.agoria.app.data.ConnectorRequestEntity
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.RiskBadge
+import com.agoria.app.ui.office.world.OfficeSound
 import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.ui.office.world.PixelBody
 import com.agoria.app.ui.office.world.PixelButton
@@ -76,7 +82,7 @@ fun ApprovalsScreen(
     var denyNote by remember { mutableStateOf("") }
     var showAutoApproveDialog by remember { mutableStateOf(false) }
     var autoApproveTypes by remember { mutableStateOf("") }
-    val snackbar = remember { com.google.accompanist.adaptive.SnackbarHostState() }
+    val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(setupConnectorId) {
@@ -175,7 +181,7 @@ fun ApprovalsScreen(
             onEnabledChange = { enabled ->
                 viewModel.updateSettings { s ->
                     val newTypes = if (enabled && s.autoApproveTypes.isBlank()) {
-                        "connector_action" // Default to connector actions when first enabling
+                        "build_project,connector_install,other"
                     } else {
                         s.autoApproveTypes
                     }
@@ -183,7 +189,7 @@ fun ApprovalsScreen(
                 }
                 // Update local state to reflect the default
                 if (enabled && autoApproveTypes.isBlank()) {
-                    autoApproveTypes = "connector_action"
+                    autoApproveTypes = "build_project,connector_install,other"
                 }
             },
             onTypesChange = { types ->
@@ -564,14 +570,12 @@ private fun PixelCheckbox(
         contentAlignment = Alignment.Center,
     ) {
         if (checked) {
-            androidx.compose.material.icons.Icons.Default.Check.apply {
-                androidx.compose.material3.Icon(
-                    imageVector = this,
-                    contentDescription = null,
-                    tint = Pal.ink,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = Pal.ink,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -666,7 +670,7 @@ private fun PixelTabs(
                     .background(if (on) Pal.amber else Pal.teal)
                     .border(2.dp, Pal.ink)
                     .clickable {
-                        if (!on) com.agoria.app.ui.office.world.OfficeSound.play(com.agoria.app.ui.office.world.OfficeSound.Fx.CLICK)
+                        if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
                         onSelect(index)
                     }
                     .clearAndSetSemantics {
