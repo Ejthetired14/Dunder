@@ -80,7 +80,6 @@ fun SkillsScreen(
 
     // Get installed skills for selected agent
     val agentSkills = remember { mutableStateOf<List<AgentSkillEntity>>(emptyList()) }
-    val installedSkillIds = agentSkills.value.map { it.skillId }.toSet()
 
     // Fetch agent skills when selectedAgentId changes
     androidx.compose.runtime.LaunchedEffect(selectedAgentId) {
@@ -145,7 +144,7 @@ fun SkillsScreen(
                         }
                         if (selectedAgent != null) {
                             Text(
-                                text = "Showing skills for ${selectedAgent.name} (${installedSkillIds.size} installed)",
+                                text = "Showing skills for ${selectedAgent.name} (${agentSkills.value.map { it.skillId }.toSet().size} installed)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Pal.navy.copy(alpha = 0.75f),
                             )
@@ -174,8 +173,8 @@ fun SkillsScreen(
                                     SkillRow(
                                         skill = skill,
                                         agentId = selectedAgentId,
-                                        installed = installedSkillIds.contains(skill.id),
-                                        agentSkills = agentSkills.associateBy { it.skillId },
+                                        installed = agentSkills.value.map { it.skillId }.toSet().contains(skill.id),
+                                        agentSkills = agentSkills.value.associateBy { it.skillId },
                                         onInstall = { agentId, skillId ->
                                             viewModel.installSkill(agentId, skillId)
                                         },
