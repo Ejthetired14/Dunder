@@ -57,6 +57,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -255,10 +257,22 @@ fun AgentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val open = onClick
+    val description = buildString {
+        append(agent.name).append(", ").append(agent.role).append(". ")
+        append("Status: ").append(statusLabel(agent.status)).append(". ")
+        append("Goal: ").append(agent.goal.take(140)).append(". ")
+        if (!latestDiary.isNullOrBlank()) append("Latest: ").append(latestDiary.take(120))
+    }
     PixelCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open ${agent.name}") { open(); true }
+            },
         fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(14.dp)) {

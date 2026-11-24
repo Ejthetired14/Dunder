@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -128,7 +130,14 @@ fun HomeScreen(
                     PixelCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onOpenApprovals),
+                            .clickable(onClick = onOpenApprovals)
+                            .clearAndSetSemantics {
+                                contentDescription =
+                                    "${pending.size} approval${if (pending.size == 1) "" else "s"} waiting. " +
+                                        "Next: ${pending.first().title}"
+                                role = Role.Button
+                                onClick(label = "Review approvals") { onOpenApprovals(); true }
+                            },
                         fill = Pal.amber,
                     ) {
                         Row(
@@ -372,10 +381,21 @@ private fun DiaryRow(
     agent: AgentEntity?,
     onClick: () -> Unit,
 ) {
+    val open = onClick
+    val description = buildString {
+        append(agent?.name ?: "Office").append(", ").append(entry.kind).append(", ")
+        append(Time.relativeTime(entry.createdAt)).append(". ")
+        append(entry.content.take(160))
+    }
     PixelCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open diary entry") { open(); true }
+            },
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
