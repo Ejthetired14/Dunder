@@ -192,6 +192,8 @@ object ConnectorCatalog {
                 ConnectorActionDef("download", "Download file", "Download a file or PDF from the current page. Requires approval.", true, "{\"url\": \"https://example.com/file.pdf\", \"filename\": \"file.pdf\"}"),
                 // JS-heavy page handling
                 ConnectorActionDef("wait", "Wait for condition", "Wait for element, text, or network idle before reading. Use for SPA pages.", false, "{\"selector\": \".results\", \"timeoutMs\": 10000}"),
+                // Scroll support
+                ConnectorActionDef("scroll", "Scroll page", "Scroll the page by pixels, to an element, or to top/bottom.", true, "{\"direction\": \"down\", \"pixels\": 500, \"selector\": \".results\"}"),
             ),
             setupHelp = "Sign in once inside the office browser with the account the office should use. Every agent then browses in its own background window: it can open pages, click, fill forms, submit, take screenshots, extract data, manage tabs, download files, and wait for JS rendering — all without covering your screen. Browsers shows any agent's page when you want to look.",
             docsUrl = "",

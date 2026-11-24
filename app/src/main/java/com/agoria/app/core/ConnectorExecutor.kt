@@ -778,10 +778,12 @@ class ConnectorExecutor(
         "download" -> downloadFile(agentId, connector, args)
         // JS-heavy page handling
         "wait" -> waitForCondition(agentId, connector, args)
+        // Scroll support
+        "scroll" -> scrollElement(agentId, connector, args)
         else -> ConnectorResult(
             false,
             "Unknown Office Browser action '$action'. Use list_actions to see them: " +
-                "list, signin, email, event, open_url, read, view, click, fill, submit, screenshot, extract, tab, download, wait.",
+                "list, signin, email, event, open_url, read, view, click, fill, submit, screenshot, extract, tab, download, wait, scroll.",
         )
     }
 
@@ -975,6 +977,27 @@ class ConnectorExecutor(
             ConnectorResult(true, "Wait condition met: $condition$extra")
         } else {
             ConnectorResult(false, "Wait failed: ${result.error}")
+        }
+    }
+
+    private suspend fun scrollElement(
+        agentId: String?,
+        connector: ConnectorEntity,
+        args: JSONObject,
+    ): ConnectorResult {
+        if (agentId == null) return ConnectorResult(false, "This action needs an agent context.")
+        val direction = args.optString("direction", "down").trim().lowercase() // up, down, top, bottom
+        val pixels = args.optInt("pixels", 500).coerceIn(10, 10000)
+        val selector = args.optString("selector").trim()
+        val behavior = args.optString("behavior", "smooth").trim().lowercase() // smooth, instant
+
+        val script = buildScrollScript(direction, pixels, selector, behavior)
+        val result = executeBrowserScript(agentId, script)
+        return if (result.ok) {
+            val target = selector.ifBlank { "by ${direction} $pixels px" } ?: ""
+            ConnectorResult(true, "Scrolled $target")
+        } else {
+            ConnectorResult(false, "Scroll failed: ${result.error}")
         }
     }
 
@@ -1232,6 +1255,63 @@ class ConnectorExecutor(
                 }
             })();
         """.trimIndent()
+    }
+
+    private fun buildScrollScript(direction: String, pixels: Int, selector: String, behavior: String): String {
+        return when {
+            selector.isNotBlank() -> """
+                (function() {
+                    try {
+                        var element = document.querySelector('$selector');
+                        if (!element) return 'Element not found for scroll: $selector';
+                        element.scrollIntoView({behavior: '$behavior', block: 'center'});
+                        return 'Scrolled to element: $selector';
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+            direction == "top" -> """
+                (function() {
+                    try {
+                        window.scrollTo({top: 0, behavior: '$behavior'});
+                        return 'Scrolled to top';
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+            direction == "bottom" -> """
+                (function() {
+                    try {
+                        window.scrollTo({top: document.body.scrollHeight, behavior: '$behavior'});
+                        return 'Scrolled to bottom';
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+            direction == "up" -> """
+                (function() {
+                    try {
+                        window.scrollBy({top: -$pixels, behavior: '$behavior'});
+                        return 'Scrolled up $pixels px';
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+            else -> """
+                (function() {
+                    try {
+                        window.scrollBy({top: $pixels, behavior: '$behavior'});
+                        return 'Scrolled down $pixels px';
+                    } catch (e) {
+                        return 'Error: ' + e.message;
+                    }
+                })();
+            """.trimIndent()
+        }
     }
 
     private fun buildWaitScript(selector: String, textMatch: String, condition: String, timeoutMs: Long): String {
