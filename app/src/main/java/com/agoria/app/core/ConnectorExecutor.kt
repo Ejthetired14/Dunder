@@ -3006,18 +3006,19 @@ object TerminalManager {
     fun register(key: String, process: Process) {
         processes[key] = process
         outputs[key] = StringBuilder()
+        val sb = outputs[key]!!
         // Start reading stdout and stderr in background threads
         thread(start = true, isDaemon = true) {
             process.inputStream.bufferedReader().use { reader ->
                 reader.forEachLine { line ->
-                    outputs[key]?.append(line).append('\n')
+                    sb.append(line).append('\n')
                 }
             }
         }
         thread(start = true, isDaemon = true) {
             process.errorStream.bufferedReader().use { reader ->
                 reader.forEachLine { line ->
-                    outputs[key]?.append("[stderr] ").append(line).append('\n')
+                    sb.append("[stderr] ").append(line).append('\n')
                 }
             }
         }
