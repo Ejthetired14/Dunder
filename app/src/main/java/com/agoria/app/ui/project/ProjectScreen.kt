@@ -53,40 +53,8 @@ import com.agoria.app.ui.office.world.PixelDialog
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
 import com.agoria.app.ui.office.world.PixelProgressBar
+import com.agoria.app.ui.office.world.OfficeSound
 import com.agoria.app.ui.office.world.PixelTextField
-import com.agoria.app.util.Files
-import com.agoria.app.util.Time
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agoria.app.data.AgentEntity
-import com.agoria.app.data.BuildEntity
-import com.agoria.app.data.ProjectEntity
-import com.agoria.app.data.TaskEntity
-import com.agoria.app.ui.AgoriaViewModel
-import com.agoria.app.ui.components.EmptyState
-import com.agoria.app.ui.components.Pill
-import com.agoria.app.ui.components.PixelScaffold
-import com.agoria.app.ui.components.StatusPill
-import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
@@ -98,7 +66,6 @@ import java.io.File
  * files that exist. Only the lead agent writes into it, so there is a single place to check
  * progress instead of a build tab on every agent.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectScreen(
     viewModel: AgoriaViewModel,
@@ -311,7 +278,7 @@ private fun ProgressTab(
                 append(task.progress).append(" percent complete, ")
                 append(Time.relativeTime(task.updatedAt))
             }
-            Surface(
+            PixelPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = open)
@@ -320,8 +287,7 @@ private fun ProgressTab(
                         role = Role.Button
                         onClick(label = "Open agent $agentName") { open(); true }
                     },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                fill = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -398,15 +364,14 @@ private fun BuildsTab(
                 append(build.fileCount).append(" files, ")
                 append(Time.relativeTime(build.createdAt))
             }
-            Surface(
+            PixelPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clearAndSetSemantics {
                         contentDescription = description
                         role = Role.Button
                     },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                fill = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -499,7 +464,48 @@ private fun FilesTab(project: ProjectEntity, onView: (File) -> Unit) {
                     color = Pal.wood,
                 )
                 Spacer(Modifier.width(8.dp))
-                TextButton(onClick = { onView(file) }) { Text("View") }
+                PixelButton(text = "View", onClick = { onView(file) }, small = true)
+            }
+        }
+    }
+}
+/** Square tab strip (replaces the Material TabRow): selected tab amber with ink text, others teal with cream text. */
+@Composable
+private fun PixelTabs(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val on = index == selected
+            val open = { onSelect(index) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .background(if (on) Pal.amber else Pal.teal)
+                    .border(2.dp, Pal.ink)
+                    .clickable {
+                        if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
+                        onSelect(index)
+                    }
+                    .clearAndSetSemantics {
+                        contentDescription = "${label} tab, ${if (on) "selected" else "not selected"}"
+                        role = Role.Tab
+                        onClick(label = "Select ${label} tab") { open(); true }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label.uppercase(),
+                    style = PixelLabel.copy(fontSize = 11.sp, color = if (on) Pal.ink else Pal.cream),
+                )
             }
         }
     }
