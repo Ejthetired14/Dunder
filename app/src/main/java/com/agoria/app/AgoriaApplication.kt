@@ -4,6 +4,7 @@ import android.app.Application
 import com.agoria.app.core.AgentRuntime
 import com.agoria.app.core.BuildRunner
 import com.agoria.app.core.ConnectorExecutor
+import com.agoria.app.core.SkillExecutor
 import com.agoria.app.core.llm.LlmClient
 import com.agoria.app.data.AppDatabase
 import com.agoria.app.data.Repository
@@ -46,11 +47,13 @@ class AgoriaApplication : Application() {
         this.llm = llm
         val buildRunner = BuildRunner(repository, llm, this)
         val connectorExecutor = ConnectorExecutor(repository, this)
+        val skillExecutor = SkillExecutor(repository, this)
         runtime = AgentRuntime(
             repo = repository,
             llm = llm,
             buildRunner = buildRunner,
             connectorExecutorInstance = connectorExecutor,
+            skillExecutorInstance = skillExecutor,
             context = this,
             scope = appScope,
         )

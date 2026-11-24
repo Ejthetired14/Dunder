@@ -7,6 +7,8 @@ import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef
 import com.agoria.app.core.ProviderCatalog
 import com.agoria.app.core.ProviderSpec
+import com.agoria.app.core.SkillCatalog
+import com.agoria.app.core.SkillDef
 import com.agoria.app.data.RevenueEntity
 import com.agoria.app.util.Files
 import com.agoria.app.util.Json
@@ -31,6 +33,8 @@ class Repository(
     val pendingConnectorRequests = db.connectorRequestDao().observePending()
     val builds = db.buildDao().observeAll()
     val providers = db.providerDao().observeAll()
+    val skills = db.skillDao().observeAll()
+    val enabledSkills = db.skillDao().observeEnabled()
     val settingsFlow = db.settingsDao().observe()
     val memories = db.memoryDao().observeAll()
     val connectorLogs = db.connectorLogDao().observeRecent(50)
@@ -76,6 +80,8 @@ class Repository(
         db.settingsDao().upsert(settings.copy(seedVersion = 1))
         }
         syncConnectorCatalog()
+        syncSkillCatalog()
+        seedSkillsIfNeeded()
         ensureProject()
     }
 
@@ -117,6 +123,50 @@ class Repository(
             if (row.name != def.name || row.category != def.category || row.status != status) {
                 db.connectorDao().update(
                     row.copy(name = def.name, category = def.category, status = status),
+                )
+            }
+        }
+    }
+
+    /**
+     * Keeps the installed skills aligned with [SkillCatalog]: rows for skills that no
+     * longer exist are removed, and missing ones are added or refreshed.
+     */
+    suspend fun syncSkillCatalog() {
+        val existing = db.skillDao().getAll().associateBy { it.id }
+        existing.keys
+            .filter { SkillCatalog.get(it) == null }
+            .forEach { db.skillDao().delete(it) }
+
+        val now = Time.now()
+        SkillCatalog.all.forEach { def ->
+            val row = existing[def.id]
+            if (row == null) {
+                db.skillDao().insert(
+                    SkillEntity(
+                        id = def.id,
+                        name = def.name,
+                        category = def.category,
+                        description = def.description,
+                        actions = JSONArray(def.actions.map { it.id }).toString(),
+                        enabled = true,
+                        version = def.version,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
+                return@forEach
+            }
+            if (row.name != def.name || row.category != def.category || row.description != def.description || row.version != def.version) {
+                db.skillDao().update(
+                    row.copy(
+                        name = def.name,
+                        category = def.category,
+                        description = def.description,
+                        actions = JSONArray(def.actions.map { it.id }).toString(),
+                        version = def.version,
+                        updatedAt = now,
+                    ),
                 )
             }
         }
@@ -557,6 +607,73 @@ class Repository(
         )
     }
 
+    // ---------------------------------------------------------------- skills
+
+    suspend fun skill(id: String): SkillEntity? = db.skillDao().get(id)
+
+    suspend fun allSkills(): List<SkillEntity> = db.skillDao().getAll()
+
+    suspend fun enabledSkillsList(): List<SkillEntity> = db.skillDao().getAll().filter { it.enabled }
+
+    suspend fun agentSkills(agentId: String): List<SkillEntity> = db.skillDao().getForAgent(agentId)
+
+    suspend fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> = db.skillDao().getAgentSkills(agentId)
+
+    suspend fun installSkill(agentId: String, skillId: String, config: JSONObject = JSONObject()) {
+        val skill = db.skillDao().get(skillId) ?: return
+        if (!skill.enabled) return
+        val now = Time.now()
+        db.skillDao().install(
+            AgentSkillEntity(
+                agentId = agentId,
+                skillId = skillId,
+                config = config.toString(),
+                installedAt = now,
+                updatedAt = now,
+            ),
+        )
+    }
+
+    suspend fun uninstallSkill(agentId: String, skillId: String) {
+        db.skillDao().uninstall(agentId, skillId)
+    }
+
+    suspend fun updateSkillConfig(agentId: String, skillId: String, config: JSONObject) {
+        val existing = db.skillDao().getAgentSkill(agentId, skillId) ?: return
+        db.skillDao().install(
+            existing.copy(
+                config = config.toString(),
+                updatedAt = Time.now(),
+            ),
+        )
+    }
+
+    suspend fun getSkillConfig(agentId: String, skillId: String): JSONObject? {
+        val agentSkill = db.skillDao().getAgentSkill(agentId, skillId) ?: return null
+        return org.json.JSONObject(agentSkill.config)
+    }
+
+    suspend fun seedSkillsIfNeeded() {
+        val now = Time.now()
+        if (db.skillDao().getAll().isEmpty()) {
+            SkillCatalog.all.forEach { def ->
+                db.skillDao().insert(
+                    SkillEntity(
+                        id = def.id,
+                        name = def.name,
+                        category = def.category,
+                        description = def.description,
+                        actions = org.json.JSONArray(def.actions.map { it.id }).toString(),
+                        enabled = true,
+                        version = def.version,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- providers
 
     suspend fun provider(id: String): ProviderEntity? = db.providerDao().get(id)
@@ -851,6 +968,47 @@ class Repository(
             },
         )
 
+        root.put(
+            "skills",
+            JSONArray().apply {
+                db.skillDao().getAll().forEach { s ->
+                    put(
+                        JSONObject().apply {
+                            put("id", s.id)
+                            put("name", s.name)
+                            put("category", s.category)
+                            put("description", s.description)
+                            put("actions", s.actions)
+                            put("enabled", s.enabled)
+                            put("version", s.version)
+                            put("createdAt", s.createdAt)
+                            put("updatedAt", s.updatedAt)
+                        },
+                    )
+                }
+                db.skillDao().getAgentSkills("").forEach { /* agent skills are per-agent, not exported globally */ }
+            },
+        )
+
+        root.put(
+            "agent_skills",
+            JSONArray().apply {
+                db.agentDao().getAll().forEach { agent ->
+                    db.skillDao().getAgentSkills(agent.id).forEach { as ->
+                        put(
+                            JSONObject().apply {
+                                put("agentId", as.agentId)
+                                put("skillId", as.skillId)
+                                put("config", as.config)
+                                put("installedAt", as.installedAt)
+                                put("updatedAt", as.updatedAt)
+                            },
+                        )
+                    }
+                }
+            },
+        )
+
         return root
     }
 
@@ -883,6 +1041,47 @@ class Repository(
                     if (config.length() > 0) {
                         saveConnectorConfig(id, config)
                     }
+                }
+            }
+
+            if (json.has("skills")) {
+                val array = json.getJSONArray("skills")
+                for (i in 0 until array.length()) {
+                    val s = array.optJSONObject(i) ?: continue
+                    val id = s.optString("id")
+                    if (id.isBlank()) continue
+                    db.skillDao().insert(
+                        SkillEntity(
+                            id = id,
+                            name = s.optString("name", ""),
+                            category = s.optString("category", ""),
+                            description = s.optString("description", ""),
+                            actions = s.optString("actions", "[]"),
+                            enabled = s.optBoolean("enabled", true),
+                            version = s.optInt("version", 1),
+                            createdAt = s.optLong("createdAt", Time.now()),
+                            updatedAt = s.optLong("updatedAt", Time.now()),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("agent_skills")) {
+                val array = json.getJSONArray("agent_skills")
+                for (i in 0 until array.length()) {
+                    val as = array.optJSONObject(i) ?: continue
+                    val agentId = as.optString("agentId")
+                    val skillId = as.optString("skillId")
+                    if (agentId.isBlank() || skillId.isBlank()) continue
+                    db.skillDao().install(
+                        AgentSkillEntity(
+                            agentId = agentId,
+                            skillId = skillId,
+                            config = as.optString("config", "{}"),
+                            installedAt = as.optLong("installedAt", Time.now()),
+                            updatedAt = as.optLong("updatedAt", Time.now()),
+                        ),
+                    )
                 }
             }
 

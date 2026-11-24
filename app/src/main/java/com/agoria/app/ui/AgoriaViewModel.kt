@@ -910,4 +910,50 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         return app.runtime.connectorExecutor.execute(connectorId, agentId, action, args)
     }
 
+    // Skills
+    val skills = repo.skills.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
+    val enabledSkills = repo.enabledSkills.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
+    fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> {
+        return repo.agentSkillConfigs(agentId)
+    }
+
+    fun syncSkillCatalog() {
+        viewModelScope.launch { repo.syncSkillCatalog() }
+    }
+
+    fun installSkill(agentId: String, skillId: String) {
+        viewModelScope.launch { repo.installSkill(agentId, skillId) }
+    }
+
+    fun uninstallSkill(agentId: String, skillId: String) {
+        viewModelScope.launch { repo.uninstallSkill(agentId, skillId) }
+    }
+
+    fun updateSkillConfig(agentId: String, skillId: String, config: JSONObject) {
+        viewModelScope.launch { repo.updateSkillConfig(agentId, skillId, config) }
+    }
+
+    suspend fun getSkillConfig(agentId: String, skillId: String): JSONObject? {
+        return repo.getSkillConfig(agentId, skillId)
+    }
+
+    suspend fun executeSkill(
+        agentId: String,
+        skillId: String,
+        actionId: String,
+        args: JSONObject,
+    ): SkillExecutor.SkillResult {
+        return app.runtime.skillExecutor.execute(agentId, skillId, actionId, args)
+    }
+
 }

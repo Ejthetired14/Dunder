@@ -5,6 +5,7 @@ import android.util.Log
 import com.agoria.app.core.llm.LlmClient
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
+import com.agoria.app.core.SkillExecutor
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.ApprovalEntity
 import com.agoria.app.data.ProviderEntity
@@ -32,6 +33,7 @@ class AgentRuntime(
     private val llm: LlmClient,
     private val buildRunner: BuildRunner,
     private val connectorExecutorInstance: ConnectorExecutor,
+    private val skillExecutorInstance: SkillExecutor,
     private val context: Context,
     private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
@@ -45,6 +47,9 @@ class AgentRuntime(
 
     // Expose connector executor for direct connector calls (e.g., backup/restore)
     val connectorExecutor: ConnectorExecutor = connectorExecutorInstance
+
+    // Expose skill executor for skill actions
+    val skillExecutor: SkillExecutor = skillExecutorInstance
 
     private var loopJob: Job? = null
 

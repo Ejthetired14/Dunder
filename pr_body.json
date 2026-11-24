@@ -1,0 +1,6 @@
+{
+  "title": "T-A11Y-SCREENS-2: TalkBack labels for Approvals, Connectors, Project, Diary, and Agent screens",
+  "head": "claude/t-a11y-screens-2",
+  "base": "main",
+  "body": "Part 2 of TalkBack accessibility pass for clickable rows.\n\nChanges:\n- ApprovalsScreen.kt: `ApprovalCard`, `ConnectorRequestCard`, `ApprovalHistoryList` get `clearAndSetSemantics`\n- ConnectorsScreen.kt: `RequestRow`, `CategoryHeaderRow`, `ConnectorRow`, `LogsToggleRow`, `ConnectorLogRow` get `clearAndSetSemantics`\n- ProjectScreen.kt: `ProgressTab` tasks, `BuildsTab` builds, `FilesTab` files get `clearAndSetSemantics`\n- DiaryScreen.kt: `DiaryEntryCard` gets `clearAndSetSemantics`\n- AgentScreen.kt: `PixelTabs` tabs, `AgentHeader` goal expand, `CopyMessageButton` get `clearAndSetSemantics`\n\nPattern: `val open = onClickAction` alias, `clickable` then `clearAndSetSemantics { contentDescription; role = Role.Button; onClick(label) { open(); true } }`\nDecorative icons get `contentDescription = null`.\nParameter renamed from `onClick` to `onClickAction` to avoid shadowing `SemanticsPropertyReceiver.onClick`.\n\nCode written without compiler; needs CI verification."
+}

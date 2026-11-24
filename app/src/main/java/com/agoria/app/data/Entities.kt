@@ -291,3 +291,44 @@ data class MemoryEntity(
     val importance: Int,
     val createdAt: Long,
 )
+
+/**
+ * Skill entity: a reusable capability that can be installed on agents.
+ * Skills are like "apps" for agents - they provide specific actions the agent can perform.
+ */
+@Entity(tableName = "skills")
+data class SkillEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val category: String,
+    val description: String,
+    /** JSON array of action IDs this skill provides. */
+    val actions: String = "[]",
+    /** Whether this skill is enabled globally. */
+    val enabled: Boolean = true,
+    /** Version of the skill definition. */
+    val version: Int = 1,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/**
+ * Join table for agent-skill assignments. An agent can have multiple skills.
+ */
+@Entity(
+    tableName = "agent_skills",
+    primaryKeys = ["agentId", "skillId"],
+    foreignKeys = [
+        ForeignKey(entity = AgentEntity::class, parentColumns = ["id"], childColumns = ["agentId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = SkillEntity::class, parentColumns = ["id"], childColumns = ["skillId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("agentId"), Index("skillId")],
+)
+data class AgentSkillEntity(
+    val agentId: String,
+    val skillId: String,
+    /** JSON config for this skill on this agent (e.g., API keys, preferences). */
+    val config: String = "{}",
+    val installedAt: Long,
+    val updatedAt: Long,
+)

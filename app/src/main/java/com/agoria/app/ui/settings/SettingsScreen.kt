@@ -100,6 +100,7 @@ fun rememberCurrentVersion(context: android.content.Context): Pair<String, Int> 
 fun SettingsScreen(
     viewModel: AgoriaViewModel,
     onOpenConnectors: (String?) -> Unit,
+    onOpenSkills: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -785,6 +786,46 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            SettingsCard(title = "Agent Skills") {
+                Text(
+                    text = "Install skills on agents to give them new capabilities. Each skill provides specific actions (code review, testing, deployment, git, debugging, research, security, performance).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Dim,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = Pal.teal,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Open Skills", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    text = "Browse and install skills for your agents",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Dim,
+                                )
+                            }
+                        }
+                    }
+                    PixelButton(
+                        text = "Open",
+                        onClick = onOpenSkills,
+                        small = true,
+                        fill = Pal.amber,
+                    )
                 }
             }
 

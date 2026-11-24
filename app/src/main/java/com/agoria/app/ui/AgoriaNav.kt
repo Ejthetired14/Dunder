@@ -18,6 +18,7 @@ import com.agoria.app.ui.home.HomeScreen
 import com.agoria.app.ui.office.OfficeScreen
 import com.agoria.app.ui.project.ProjectScreen
 import com.agoria.app.ui.settings.SettingsScreen
+import com.agoria.app.ui.skills.SkillsScreen
 
 /**
  * The office is the only top-level view. There is no bottom bar: every other page is opened from
@@ -102,6 +103,13 @@ fun AgoriaNav(viewModel: AgoriaViewModel) {
                             val route = if (connectorId != null) "connectors?focus=$connectorId" else "connectors"
                             navController.navigate(route)
                         },
+                        onOpenSkills = { navController.navigate("skills") },
+                        onBack = { navController.popBackStack("office", false) },
+                    )
+                }
+                composable("skills") {
+                    SkillsScreen(
+                        viewModel = viewModel,
                         onBack = { navController.popBackStack("office", false) },
                     )
                 }
