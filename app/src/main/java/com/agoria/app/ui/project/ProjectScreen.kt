@@ -1,7 +1,10 @@
 package com.agoria.app.ui.project
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,18 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +39,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.BuildEntity
@@ -56,6 +51,14 @@ import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelBody
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
+import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelProgressBar
+import com.agoria.app.ui.office.world.OfficeSound
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Files
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +70,6 @@ import java.io.File
  * files that exist. Only the lead agent writes into it, so there is a single place to check
  * progress instead of a build tab on every agent.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectScreen(
     viewModel: AgoriaViewModel,
@@ -119,15 +121,15 @@ fun ProjectScreen(
                     color = Pal.tan,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { showLead = true }) { Text("Lead") }
-                TextButton(onClick = { showRename = true }) { Text("Edit") }
+                PixelButton(text = "Lead", onClick = { showLead = true }, small = true)
+                PixelButton(text = "Edit", onClick = { showRename = true }, small = true)
             }
 
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Progress") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Builds") })
-                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Files") })
-            }
+            PixelTabs(
+                labels = listOf("Progress", "Builds", "Files"),
+                selected = tab,
+                onSelect = { tab = it },
+            )
 
             when (tab) {
                 0 -> ProgressTab(viewModel, project, agents, onOpenAgent)
@@ -163,68 +165,86 @@ fun ProjectScreen(
     }
 
     if (showLead) {
-        AlertDialog(
-            onDismissRequest = { showLead = false },
-            title = { Text("Who leads ${project?.name ?: "this project"}?") },
-            text = {
-                Column(Modifier.height(320.dp).verticalScroll(rememberScrollState())) {
-                    agents.forEach { agent ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(agent.name, modifier = Modifier.weight(1f))
-                            if (agent.id == project?.leadAgentId) {
-                                Pill(text = "Lead")
-                            } else {
-                                TextButton(onClick = {
+        PixelDialog(
+            onDismiss = { showLead = false },
+            title = "Who leads ${project?.name ?: "this project"}?",
+        ) {
+            Column(
+                modifier = Modifier
+                    .height(320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                agents.forEach { agent ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(agent.name, modifier = Modifier.weight(1f))
+                        if (agent.id == project?.leadAgentId) {
+                            Pill(text = "Lead")
+                        } else {
+                            PixelButton(
+                                text = "Make lead",
+                                onClick = {
                                     project?.let { viewModel.setProjectLead(it.id, agent.id) }
                                     showLead = false
-                                }) { Text("Make lead") }
-                            }
+                                },
+                                small = true,
+                            )
                         }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showLead = false }) { Text("Close") } },
-        )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                PixelButton(text = "Close", onClick = { showLead = false }, small = true, fill = Pal.tan)
+            }
+        }
     }
 
     if (showRename && project != null) {
         var name by remember { mutableStateOf(project.name) }
         var description by remember { mutableStateOf(project.description) }
-        AlertDialog(
-            onDismissRequest = { showRename = false },
-            title = { Text("Project details") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Description") },
-                        minLines = 2,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        PixelDialog(
+            onDismiss = { showRename = false },
+            title = "Project details",
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PixelTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = "Name",
+                    singleLine = true,
+                    labelColor = Pal.navy,
+                    hintColor = Pal.tan,
+                )
+                PixelTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = "Description",
+                    singleLine = false,
+                    labelColor = Pal.navy,
+                    hintColor = Pal.tan,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PixelButton(text = "Save", onClick = {
                     viewModel.renameProject(project.id, name, description)
                     showRename = false
-                }) { Text("Save") }
-            },
-            dismissButton = { TextButton(onClick = { showRename = false }) { Text("Cancel") } },
-        )
+                }, modifier = Modifier.weight(1f))
+                PixelButton(text = "Cancel", onClick = { showRename = false }, modifier = Modifier.weight(1f), fill = Pal.tan)
+            }
+        }
     }
 }
 
@@ -262,7 +282,7 @@ private fun ProgressTab(
                 append(task.progress).append(" percent complete, ")
                 append(Time.relativeTime(task.updatedAt))
             }
-            Surface(
+            PixelPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = open)
@@ -271,8 +291,7 @@ private fun ProgressTab(
                         role = Role.Button
                         onClick(label = "Open agent $agentName") { open(); true }
                     },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                fill = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -300,8 +319,8 @@ private fun ProgressTab(
                         )
                     }
                     Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { task.progress.coerceIn(0, 100) / 100f },
+                    PixelProgressBar(
+                        fraction = task.progress.coerceIn(0, 100) / 100f,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
@@ -349,15 +368,14 @@ private fun BuildsTab(
                 append(build.fileCount).append(" files, ")
                 append(Time.relativeTime(build.createdAt))
             }
-            Surface(
+            PixelPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clearAndSetSemantics {
                         contentDescription = description
                         role = Role.Button
                     },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                fill = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -383,14 +401,16 @@ private fun BuildsTab(
                     }
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilledTonalButton(onClick = { onView(build) }) { Text("View") }
-                        TextButton(
+                        PixelButton(text = "View", onClick = { onView(build) }, small = true)
+                        PixelButton(
+                            text = if (saving == build.id) "Saving" else "Save ZIP",
                             onClick = {
                                 saving = build.id
                                 viewModel.saveBuildToDownloads(context, build) { saving = null }
                             },
-                            enabled = saving != build.id,
-                        ) { Text(if (saving == build.id) "Saving" else "Save ZIP") }
+                            small = true,
+                            fill = if (saving == build.id) Pal.tan else Pal.amber,
+                        )
                     }
                 }
             }
@@ -448,7 +468,48 @@ private fun FilesTab(project: ProjectEntity, onView: (File) -> Unit) {
                     color = Pal.wood,
                 )
                 Spacer(Modifier.width(8.dp))
-                TextButton(onClick = { onView(file) }) { Text("View") }
+                PixelButton(text = "View", onClick = { onView(file) }, small = true)
+            }
+        }
+    }
+}
+/** Square tab strip (replaces the Material TabRow): selected tab amber with ink text, others teal with cream text. */
+@Composable
+private fun PixelTabs(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val on = index == selected
+            val open = { onSelect(index) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .background(if (on) Pal.amber else Pal.teal)
+                    .border(2.dp, Pal.ink)
+                    .clickable {
+                        if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
+                        onSelect(index)
+                    }
+                    .clearAndSetSemantics {
+                        contentDescription = "${label} tab, ${if (on) "selected" else "not selected"}"
+                        role = Role.Tab
+                        onClick(label = "Select ${label} tab") { open(); true }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label.uppercase(),
+                    style = PixelLabel.copy(fontSize = 11.sp, color = if (on) Pal.ink else Pal.cream),
+                )
             }
         }
     }
