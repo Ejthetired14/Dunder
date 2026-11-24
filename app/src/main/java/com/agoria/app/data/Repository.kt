@@ -397,12 +397,16 @@ class Repository(
             result = if (autoApprove) "Auto-approved" else null,
         )
         db.approvalDao().insert(approval)
+        Log.i("ApprovalFlow", "Created approval id=${approval.id} agent=${approval.agentId} type=${approval.type} status=${approval.status} autoApprove=$autoApprove")
         return approval
     }
 
     suspend fun approval(id: String): ApprovalEntity? = db.approvalDao().get(id)
 
-    suspend fun updateApproval(approval: ApprovalEntity) = db.approvalDao().update(approval)
+    suspend fun updateApproval(approval: ApprovalEntity) {
+        Log.i("ApprovalFlow", "Updating approval id=${approval.id} status=${approval.status} result=${approval.result}")
+        db.approvalDao().update(approval)
+    }
 
     suspend fun pendingApprovalsFor(agentId: String): List<ApprovalEntity> =
         db.approvalDao().pendingForAgent(agentId)
@@ -410,8 +414,11 @@ class Repository(
     suspend fun pendingConnectorRequestsFor(agentId: String): List<ConnectorRequestEntity> =
         db.connectorRequestDao().pendingForAgent(agentId)
 
-    suspend fun getAllPendingApprovals(): List<ApprovalEntity> =
-        db.approvalDao().getAllPending()
+    suspend fun getAllPendingApprovals(): List<ApprovalEntity> {
+        val result = db.approvalDao().getAllPending()
+        Log.d("ApprovalFlow", "getAllPendingApprovals returned ${result.size} items")
+        return result
+    }
 
     suspend fun getAllPendingConnectorRequests(): List<ConnectorRequestEntity> =
         db.connectorRequestDao().getAllPending()

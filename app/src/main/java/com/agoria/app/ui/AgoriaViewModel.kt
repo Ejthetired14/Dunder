@@ -127,17 +127,23 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun startPendingApprovalsPolling() {
         viewModelScope.launch {
+            Log.i("ApprovalFlow", "Pending approvals polling STARTED")
             while (coroutineContext[Job]?.isActive == true) {
                 try {
                     val approvals = repo.getAllPendingApprovals()
                     val requests = repo.getAllPendingConnectorRequests()
+                    if (approvals.isNotEmpty() || requests.isNotEmpty()) {
+                        Log.i("ApprovalFlow", "Poll found approvals=${approvals.size} requests=${requests.size}")
+                        approvals.forEach { Log.d("ApprovalFlow", "  Pending approval: id=${it.id} agent=${it.agentId} type=${it.type} status=${it.status}") }
+                    }
                     _pendingApprovals.value = approvals
                     _pendingConnectorRequests.value = requests
                 } catch (e: Exception) {
-                    Log.w("AgoriaViewModel", "Pending approvals polling error: ${e.message}")
+                    Log.e("ApprovalFlow", "Pending approvals polling error", e)
                 }
                 delay(2000) // Poll every 2 seconds
             }
+            Log.i("ApprovalFlow", "Pending approvals polling STOPPED")
         }
     }
 

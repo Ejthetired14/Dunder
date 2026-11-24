@@ -122,6 +122,7 @@ class AgentRuntime(
     suspend fun approve(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
         if (approval.status != "pending" && approval.status != "auto_pending") return
+        Log.i("ApprovalFlow", "Manual approve approval id=$approvalId status=${approval.status}")
         val now = Time.now()
         val decided = approval.copy(
             status = "approved",
@@ -139,6 +140,7 @@ class AgentRuntime(
     suspend fun deny(approvalId: String, note: String = "") {
         val approval = repo.approval(approvalId) ?: return
         if (approval.status != "pending" && approval.status != "auto_pending") return
+        Log.i("ApprovalFlow", "Manual deny approval id=$approvalId status=${approval.status}")
         val now = Time.now()
         val decided = approval.copy(
             status = "denied",
@@ -261,10 +263,14 @@ class AgentRuntime(
         if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
 
         val autoApproveTypes = settings.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
-        val autoPending = repo.approvals.first()
-            .filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
+        val allApprovals = repo.approvals.first()
+        val autoPending = allApprovals.filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
 
+        if (autoPending.isNotEmpty()) {
+            Log.i("ApprovalFlow", "Auto-approve processing ${autoPending.size} approvals (autoApproveTypes=$autoApproveTypes)")
+        }
         autoPending.forEach { approval ->
+            Log.i("ApprovalFlow", "Auto-approving approval id=${approval.id} type=${approval.type}")
             val decided = approval.copy(
                 status = "approved",
                 decidedAt = Time.now(),
