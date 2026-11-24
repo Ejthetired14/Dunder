@@ -16,12 +16,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,6 +33,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.ui.AgoriaViewModel
 import com.agoria.app.ui.components.AgentAvatar
@@ -44,9 +41,11 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.Pill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Time
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiaryScreen(
     viewModel: AgoriaViewModel,
@@ -73,15 +72,17 @@ fun DiaryScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            OutlinedTextField(
+            PixelTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search thoughts, plans, decisions...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                label = "Search",
+                hint = "Search thoughts, plans, decisions...",
                 singleLine = true,
+                labelColor = Pal.navy,
+                hintColor = Pal.tan,
             )
 
             LazyRow(
@@ -89,17 +90,21 @@ fun DiaryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item {
-                    FilterChip(
-                        selected = selectedAgent == null,
+                    val selected = selectedAgent == null
+                    PixelButton(
+                        text = "Everyone",
                         onClick = { selectedAgent = null },
-                        label = { Text("Everyone") },
+                        small = true,
+                        fill = if (selected) Pal.amber else Pal.tan,
                     )
                 }
                 items(agents, key = { it.id }) { agent ->
-                    FilterChip(
-                        selected = selectedAgent == agent.id,
+                    val selected = selectedAgent == agent.id
+                    PixelButton(
+                        text = agent.name,
                         onClick = { selectedAgent = agent.id },
-                        label = { Text(agent.name) },
+                        small = true,
+                        fill = if (selected) Pal.amber else Pal.tan,
                     )
                 }
             }
@@ -148,7 +153,6 @@ fun DiaryScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiaryEntryCard(
     entry: com.agoria.app.data.DiaryEntryEntity,
@@ -163,7 +167,7 @@ private fun DiaryEntryCard(
         append(entry.content.take(160)).append(". ")
         append(entry.importance).append(" importance")
     }
-    Surface(
+    PixelPanel(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClickAction)
@@ -172,8 +176,7 @@ private fun DiaryEntryCard(
                 role = Role.Button
                 onClick(label = "Open diary entry") { open(); true }
             },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        fill = Pal.cream,
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
