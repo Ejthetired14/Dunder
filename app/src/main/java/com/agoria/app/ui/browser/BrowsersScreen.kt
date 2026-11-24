@@ -21,13 +21,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -45,6 +43,7 @@ import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.ui.office.world.PixelBody
+import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.util.Time
@@ -161,7 +160,7 @@ fun BrowsersScreen(
                         AgentAvatar(agent, 36.dp, showStatus = false)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(agent.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(agent.name, style = PixelLabel)
                             Text(
                                 text = when {
                                     session == null -> "No page loaded yet"
@@ -169,30 +168,25 @@ fun BrowsersScreen(
                                     session.error != null -> "Failed: ${session.error}"
                                     else -> session.title.ifBlank { session.url }
                                 },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Pal.tan,
+                                style = PixelBody.copy(color = Pal.tan),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             if (session != null) {
                                 Text(
                                     text = "${session.url.take(60)} · ${Time.relativeTime(session.updatedAt)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Pal.wood,
+                                    style = PixelBody.copy(color = Pal.wood, fontSize = 12.sp),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }
                         if (session != null && session.url.isNotBlank()) {
-                            TextButton(onClick = { BrowserHub.show(agent.id) }) {
-                                Icon(
-                                    Icons.Default.OpenInBrowser,
-                                    contentDescription = null,
-                                    modifier = Modifier.padding(end = 4.dp),
-                                )
-                                Text("View")
-                            }
+                            PixelButton(
+                                text = "View",
+                                onClick = { BrowserHub.show(agent.id) },
+                                small = true,
+                            )
                         }
                     }
                 }
@@ -201,8 +195,7 @@ fun BrowsersScreen(
                         text = "Agents open pages here through the Office Browser connector. " +
                             "They load in the background, and the sign-in stays in the office browser " +
                             "instead of the phone's accounts.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Pal.wood,
+                        style = PixelBody.copy(color = Pal.wood),
                         modifier = Modifier.padding(16.dp),
                     )
                 }
