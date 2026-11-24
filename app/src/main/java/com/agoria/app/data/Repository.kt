@@ -990,23 +990,20 @@ class Repository(
             },
         )
 
-        root.put(
-            "agent_skills",
-            JSONArray().apply { array ->
-                db.agentDao().getAll().forEach { agent ->
-                    db.skillDao().getAgentSkills(agent.id).forEach { as ->
-                        val obj = JSONObject().apply {
-                            put("agentId", as.agentId)
-                            put("skillId", as.skillId)
-                            put("config", as.config)
-                            put("installedAt", as.installedAt)
-                            put("updatedAt", as.updatedAt)
-                        }
-                        array.put(obj)
-                    }
+        val agentSkillsArray = JSONArray()
+        db.agentDao().getAll().forEach { agent ->
+            db.skillDao().getAgentSkills(agent.id).forEach { as ->
+                val obj = JSONObject().apply {
+                    put("agentId", as.agentId)
+                    put("skillId", as.skillId)
+                    put("config", as.config)
+                    put("installedAt", as.installedAt)
+                    put("updatedAt", as.updatedAt)
                 }
-            },
-        )
+                agentSkillsArray.put(obj)
+            }
+        }
+        root.put("agent_skills", agentSkillsArray)
 
         return root
     }
