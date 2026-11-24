@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -176,6 +178,7 @@ fun PixelTextField(
     hint: String? = null,
     labelColor: Color = Pal.amber,
     hintColor: Color = Pal.tan,
+    onDone: (() -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         if (label != null) {
@@ -192,7 +195,12 @@ fun PixelTextField(
             textStyle = PixelBody.copy(fontSize = 14.sp),
             cursorBrush = SolidColor(Pal.ink),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = if (password) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
+            keyboardOptions = when {
+                password -> KeyboardOptions(keyboardType = KeyboardType.Password)
+                onDone != null -> KeyboardOptions(imeAction = ImeAction.Done)
+                else -> KeyboardOptions.Default
+            },
+            keyboardActions = if (onDone != null) KeyboardActions(onDone = { onDone() }) else KeyboardActions.Default,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (singleLine) 44.dp else 88.dp)

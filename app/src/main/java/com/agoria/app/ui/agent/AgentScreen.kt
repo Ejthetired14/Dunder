@@ -1,10 +1,11 @@
 package com.agoria.app.ui.agent
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,52 +17,26 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,19 +45,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agoria.app.core.BuildProgress
 import com.agoria.app.data.AgentEntity
-import com.agoria.app.data.BuildEntity
 import com.agoria.app.data.DiaryEntryEntity
 import com.agoria.app.data.MemoryEntity
 import com.agoria.app.data.MessageEntity
@@ -92,13 +61,20 @@ import com.agoria.app.ui.AgentScreenState
 import com.agoria.app.ui.PaginationState
 import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
-import com.agoria.app.ui.components.Pill
+import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.components.StatusPill
+import com.agoria.app.ui.office.world.OfficeSound
 import com.agoria.app.ui.office.world.Pal
-import com.agoria.app.util.Share
+import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
+import com.agoria.app.ui.office.world.PixelIconButton
+import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.office.world.PixelSlider
+import com.agoria.app.ui.office.world.PixelSwitch
+import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.Time
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +83,6 @@ fun AgentScreen(
     agentId: String,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val agent = agents.firstOrNull { it.id == agentId }
 
@@ -162,7 +137,6 @@ private fun AgentContent(
     val newestMessageId = state.messages.lastOrNull()?.id
     val diary = state.diary
     val tasks = state.tasks
-    val builds = state.builds
     val memories = state.memories
 
     var tab by remember { mutableStateOf(0) }
@@ -187,12 +161,11 @@ private fun AgentContent(
             onDelete = { showDelete = true },
         )
 
-        TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Chat") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Diary") })
-            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Tasks") })
-            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Memory") })
-        }
+        PixelTabs(
+            labels = listOf("Chat", "Diary", "Tasks", "Memory"),
+            selected = tab,
+            onSelect = { tab = it },
+        )
 
         when (tab) {
             0 -> ChatTab(
@@ -223,11 +196,6 @@ private fun AgentContent(
                 viewModel.updateAgent(updated)
                 showEdit = false
             },
-            onDelete = {
-                viewModel.deleteAgent(agent.id)
-                showEdit = false
-                onBack()
-            },
         )
     }
 
@@ -242,19 +210,66 @@ private fun AgentContent(
     }
 
     if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text("Delete this agent?") },
-            text = { Text("This removes the agent, its diary, messages, tasks, and builds from this device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteAgent(agent.id)
-                    showDelete = false
-                    onBack()
-                }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancel") } },
-        )
+        PixelDialog(onDismiss = { showDelete = false }, title = "Delete this agent?") {
+            Text(
+                text = "This removes the agent, its diary, messages, tasks, and builds from this device.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PixelButton(
+                    text = "Delete",
+                    onClick = {
+                        viewModel.deleteAgent(agent.id)
+                        showDelete = false
+                        onBack()
+                    },
+                    small = true,
+                    fill = Pal.red,
+                )
+                PixelButton(
+                    text = "Cancel",
+                    onClick = { showDelete = false },
+                    small = true,
+                    fill = Pal.tan,
+                )
+            }
+        }
+    }
+}
+
+/** Square tab strip (replaces the Material TabRow): selected tab amber with ink text, others teal with cream text. */
+@Composable
+private fun PixelTabs(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val on = index == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .background(if (on) Pal.amber else Pal.teal)
+                    .border(2.dp, Pal.ink)
+                    .clickable {
+                        if (!on) OfficeSound.play(OfficeSound.Fx.CLICK)
+                        onSelect(index)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label.uppercase(),
+                    style = PixelLabel.copy(fontSize = 11.sp, color = if (on) Pal.ink else Pal.cream),
+                )
+            }
+        }
     }
 }
 
@@ -265,48 +280,21 @@ private fun AgentHeader(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+    PixelCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(agent, 40.dp)
                 Spacer(Modifier.width(10.dp))
                 // Name and role are already in the top bar, so only the status goes here.
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    StatusPill(agent.status)
-                }
-                var menu by remember { mutableStateOf(false) }
-                TextButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit")
-                    Spacer(Modifier.width(6.dp))
-                    Text("Edit")
-                }
-                Box {
-                    IconButton(onClick = { menu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Edit agent") },
-                            onClick = {
-                                menu = false
-                                onEdit()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete agent") },
-                            onClick = {
-                                menu = false
-                                onDelete()
-                            },
-                        )
-                    }
-                }
+                StatusPill(agent.status)
             }
             var goalOpen by remember(agent.id) { mutableStateOf(false) }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             // Long goals take two lines; tap to read all of it, tap again to fold it back.
             Text(
                 text = "Goal: ${agent.goal}",
@@ -319,14 +307,19 @@ private fun AgentHeader(
                     .animateContentSize()
                     .clickable { goalOpen = !goalOpen },
             )
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(checked = agent.autonomy, onCheckedChange = { onToggle() })
-                Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PixelSwitch(checked = agent.autonomy, onChange = { onToggle() })
                 Text(
                     text = if (agent.autonomy) "Autonomy on" else "Autonomy paused",
                     style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.weight(1f),
                 )
+                PixelButton("Edit", onEdit, small = true)
+                PixelButton("Delete", onDelete, small = true, fill = Pal.red)
             }
         }
     }
@@ -340,7 +333,7 @@ private fun ChatTab(
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState,
+    listState: LazyListState,
 ) {
     val agentId = agent.id
     // Both of these are observed state now. Reading a snapshot once per composition meant new
@@ -363,7 +356,7 @@ private fun ChatTab(
             modifier = Modifier.weight(1f),
             state = listState,
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             // Newest first in a reversed list: index 0 sits at the bottom, next to the composer.
             reverseLayout = true,
         ) {
@@ -381,10 +374,7 @@ private fun ChatTab(
             }
             if (agent.status == "thinking") {
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
+                    PixelPanel(fill = MaterialTheme.colorScheme.surfaceVariant) {
                         Text(
                             text = "${agent.name} is thinking...",
                             style = MaterialTheme.typography.bodySmall,
@@ -399,54 +389,50 @@ private fun ChatTab(
             if (messagesPagination.hasMore) {
                 item {
                     if (messagesPagination.isLoading) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
+                        // No spinner: Material's round progress indicator breaks the pixel look.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.padding(16.dp),
-                            )
+                            Text("LOADING...", style = PixelLabel.copy(color = Pal.amber))
                         }
                     } else {
-                        TextButton(
+                        PixelButton(
+                            text = "Load older messages",
                             onClick = { viewModel.loadPagedMessages(agentId) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        ) {
-                            Text("Load older messages")
-                        }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            fill = Pal.tan,
+                            small = true,
+                        )
                     }
                 }
             }
         }
 
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Pal.ink)
+                .padding(12.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = onInput,
-                    label = { Text("Message") },
-                    placeholder = { Text("Ask ${agent.name}...") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    keyboardActions = KeyboardActions(onDone = { onSend() }),
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onSend, enabled = input.isNotBlank()) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-                }
-            }
+            PixelTextField(
+                value = input,
+                onValueChange = onInput,
+                label = "Message ${agent.name}",
+                modifier = Modifier.weight(1f),
+                onDone = onSend,
+            )
+            PixelIconButton(
+                icon = Icons.AutoMirrored.Filled.Send,
+                description = "Send",
+                onClick = onSend,
+            )
         }
     }
 }
@@ -454,9 +440,11 @@ private fun ChatTab(
 @Composable
 private fun CopyMessageButton(text: String) {
     val clipboard = LocalClipboardManager.current
-    IconButton(
-        onClick = { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) },
-        modifier = Modifier.size(28.dp),
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clickable { clipboard.setText(AnnotatedString(text.replace("\u0000", ""))) },
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
@@ -475,16 +463,16 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
-                    color = Pal.amber,
+                PixelPanel(
+                    modifier = Modifier.widthIn(max = 300.dp),
+                    fill = Pal.amber,
                 ) {
                     SelectionContainer {
                         Text(
                             text = message.content,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Pal.ink,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -495,28 +483,23 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Start,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                PixelPanel(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    fill = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            AgentAvatar(agent, 32.dp)
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = message.content,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Pal.cream,
-                                )
-                                CopyMessageButton(message.content)
-                            }
+                        AgentAvatar(agent, 32.dp)
+                        Column(Modifier.weight(1f, fill = false)) {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Pal.cream,
+                            )
+                            CopyMessageButton(message.content)
                         }
                     }
                 }
@@ -533,28 +516,28 @@ private fun MessageRow(message: MessageEntity, agent: AgentEntity) {
             }
         }
         "tool" -> {
-            Surface(
+            // Opaque teal (not a translucent tint) so the panel's hard shadow does not show through.
+            PixelPanel(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Pal.teal.copy(alpha = 0.14f),
+                fill = Pal.teal,
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Build,
-                            contentDescription = "Tool",
-                            tint = Pal.teal,
-                        )
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Pal.teal,
-                        )
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "Tool",
+                        tint = Pal.cream,
+                    )
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Pal.cream,
+                    )
                 }
             }
         }
@@ -569,7 +552,7 @@ private fun DiaryTab(viewModel: AgoriaViewModel, agentId: String, diary: List<Di
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (diary.isEmpty()) {
             EmptyState(
@@ -590,7 +573,7 @@ private fun TasksTab(tasks: List<TaskEntity>) {
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (tasks.isEmpty()) {
             EmptyState(
@@ -611,16 +594,15 @@ private fun MemoryTab(memories: List<MemoryEntity>, onAdd: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Memories", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onAdd) {
-                Text("Add")
-            }
+            PixelButton("Add", onAdd, small = true)
         }
         if (memories.isEmpty()) {
             EmptyState(
@@ -640,62 +622,64 @@ private fun EditAgentDialog(
     agent: AgentEntity,
     onDismiss: () -> Unit,
     onSave: (AgentEntity) -> Unit,
-    onDelete: () -> Unit,
 ) {
     var name by remember { mutableStateOf(agent.name) }
     var role by remember { mutableStateOf(agent.role) }
     var persona by remember { mutableStateOf(agent.persona) }
     var goal by remember { mutableStateOf(agent.goal) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Agent") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = role,
-                    onValueChange = { role = it },
-                    label = { Text("Role") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = persona,
-                    onValueChange = { persona = it },
-                    label = { Text("Persona") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = goal,
-                    onValueChange = { goal = it },
-                    label = { Text("Goal") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(agent.copy(name = name, role = role, persona = persona, goal = goal))
-                },
-            ) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+    PixelDialog(onDismiss = onDismiss, title = "Edit agent") {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 380.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            PixelTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = "Name",
+                labelColor = Pal.navy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PixelTextField(
+                value = role,
+                onValueChange = { role = it },
+                label = "Role",
+                labelColor = Pal.navy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PixelTextField(
+                value = persona,
+                onValueChange = { persona = it },
+                label = "Persona",
+                singleLine = false,
+                labelColor = Pal.navy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PixelTextField(
+                value = goal,
+                onValueChange = { goal = it },
+                label = "Goal",
+                singleLine = false,
+                labelColor = Pal.navy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton(
+                text = "Save",
+                onClick = { onSave(agent.copy(name = name, role = role, persona = persona, goal = goal)) },
+                small = true,
+            )
+            PixelButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                small = true,
+                fill = Pal.tan,
+            )
+        }
+    }
 }
 
 @Composable
@@ -707,50 +691,52 @@ private fun AddMemoryDialog(
     var content by remember { mutableStateOf("") }
     var importance by remember { mutableStateOf(3f) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a memory") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = kind,
-                    onValueChange = { kind = it },
-                    label = { Text("Kind (fact, value, plan...)") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("What should the agent remember?") },
-                    minLines = 3,
-                )
-                Text("Importance: ${importance.toInt()}")
-                androidx.compose.material3.Slider(
-                    value = importance,
-                    onValueChange = { importance = it },
-                    valueRange = 1f..5f,
-                    steps = 3,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
+    PixelDialog(onDismiss = onDismiss, title = "Add a memory") {
+        PixelTextField(
+            value = kind,
+            onValueChange = { kind = it },
+            label = "Kind (fact, value, plan...)",
+            labelColor = Pal.navy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        PixelTextField(
+            value = content,
+            onValueChange = { content = it },
+            label = "What should the agent remember?",
+            singleLine = false,
+            labelColor = Pal.navy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Importance: ${importance.toInt()}", style = MaterialTheme.typography.labelLarge)
+        PixelSlider(
+            value = importance,
+            onValueChange = { importance = it },
+            valueRange = 1f..5f,
+            steps = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton(
+                text = "Add",
                 onClick = {
                     if (content.isNotBlank()) onAdd(kind, content, importance.toInt())
                 },
-            ) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+                small = true,
+            )
+            PixelButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                small = true,
+                fill = Pal.tan,
+            )
+        }
+    }
 }
 
 @Composable
 private fun DiaryEntryCard(entry: DiaryEntryEntity) {
-    Card(
+    PixelCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(
@@ -779,11 +765,9 @@ private fun DiaryEntryCard(entry: DiaryEntryEntity) {
 
 @Composable
 private fun TaskCard(task: TaskEntity) {
-    Card(
+    PixelCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(
@@ -795,6 +779,7 @@ private fun TaskCard(task: TaskEntity) {
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = Time.relativeTime(task.createdAt),
@@ -809,9 +794,11 @@ private fun TaskCard(task: TaskEntity) {
                     color = Pal.tan,
                 )
             }
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 StatusPill(task.status)
                 Text(
@@ -826,11 +813,9 @@ private fun TaskCard(task: TaskEntity) {
 
 @Composable
 private fun MemoryCard(memory: MemoryEntity) {
-    Card(
+    PixelCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        fill = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(
