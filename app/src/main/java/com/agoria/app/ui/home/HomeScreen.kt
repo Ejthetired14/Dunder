@@ -38,6 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -128,7 +133,14 @@ fun HomeScreen(
                     PixelCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onOpenApprovals),
+                            .clickable(onClick = onOpenApprovals)
+                            .clearAndSetSemantics {
+                                contentDescription =
+                                    "${pending.size} approval${if (pending.size == 1) "" else "s"} waiting. " +
+                                        "Next: ${pending.first().title}"
+                                role = Role.Button
+                                onClick(label = "Review approvals") { onOpenApprovals(); true }
+                            },
                         fill = Pal.amber,
                     ) {
                         Row(
@@ -206,7 +218,7 @@ fun HomeScreen(
                             AgentCard(
                                 agent = agent,
                                 latestDiary = diary.firstOrNull { it.agentId == agent.id }?.content,
-                                onClick = { onOpenAgent(agent.id) },
+                                onClickAction = { onOpenAgent(agent.id) },
                                 modifier = Modifier.width(280.dp),
                             )
                         }
@@ -233,7 +245,7 @@ fun HomeScreen(
             } else {
                 items(latestDiary, key = { it.id }) { entry ->
                     val agent = agents.firstOrNull { it.id == entry.agentId }
-                    DiaryRow(entry = entry, agent = agent, onClick = { onOpenAgent(entry.agentId) })
+                    DiaryRow(entry = entry, agent = agent, onClickAction = { onOpenAgent(entry.agentId) })
                 }
             }
 
@@ -370,12 +382,23 @@ private fun RuntimeCard(
 private fun DiaryRow(
     entry: DiaryEntryEntity,
     agent: AgentEntity?,
-    onClick: () -> Unit,
+    onClickAction: () -> Unit,
 ) {
+    val open = onClickAction
+    val description = buildString {
+        append(agent?.name ?: "Office").append(", ").append(entry.kind).append(", ")
+        append(Time.relativeTime(entry.createdAt)).append(". ")
+        append(entry.content.take(160))
+    }
     PixelCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClickAction)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open diary entry") { open(); true }
+            },
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
