@@ -5,12 +5,16 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +24,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.browser.BrowserHub
@@ -40,6 +44,9 @@ import com.agoria.app.ui.components.AgentAvatar
 import com.agoria.app.ui.components.EmptyState
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
+import com.agoria.app.ui.office.world.PixelBody
+import com.agoria.app.ui.office.world.PixelIconButton
+import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.util.Time
 
 /**
@@ -56,33 +63,40 @@ fun BrowserOverlay() {
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.fillMaxWidth().background(Pal.ink)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "${session.agentName.ifBlank { "Agent" }}'s browser",
-                            style = MaterialTheme.typography.titleSmall,
+                            text = "${session.agentName.ifBlank { "Agent" }}'s browser".uppercase(),
+                            style = PixelLabel.copy(color = Pal.cream, fontSize = 13.sp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = session.url.ifBlank { "about:blank" },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Pal.tan,
+                            style = PixelBody.copy(color = Pal.tan, fontSize = 12.sp, lineHeight = 15.sp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = { BrowserHub.reload(session.agentId) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Reload")
-                    }
-                    IconButton(onClick = { BrowserHub.stopViewing() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
+                    PixelIconButton(
+                        icon = Icons.Default.Refresh,
+                        description = "Reload",
+                        onClick = { BrowserHub.reload(session.agentId) },
+                    )
+                    PixelIconButton(
+                        icon = Icons.Default.Close,
+                        description = "Close",
+                        onClick = { BrowserHub.stopViewing() },
+                    )
                 }
+                Box(Modifier.fillMaxWidth().height(2.dp).background(Pal.tan))
             }
             LiveWebPage(url = session.url)
         }
