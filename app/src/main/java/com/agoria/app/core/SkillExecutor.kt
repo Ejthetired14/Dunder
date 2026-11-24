@@ -188,8 +188,12 @@ class SkillExecutor(
             "commit" -> {
                 val message = args.optString("message", "").trim()
                 val filesJson = args.optString("files", "[]")
-                val files = try { JSONArray(filesJson) } catch (_: Exception) { JSONArray() }
-                val fileArgs = files.joinToString(" ") { "\"$it\"" }
+                val filesArray = try { JSONArray(filesJson) } catch (_: Exception) { JSONArray() }
+                val fileList = mutableListOf<String>()
+                for (i in 0 until filesArray.length()) {
+                    filesArray.optString(i)?.let { fileList.add(it) }
+                }
+                val fileArgs = fileList.joinToString(" ") { "\"$it\"" }
                 val command = "git add $fileArgs && git commit -m \"$message\""
                 val result = executor.execute("terminal", agentId, "run", JSONObject().put("command", command).put("cwd", "/workspace/app"))
                 SkillResult(result.ok, result.summary)

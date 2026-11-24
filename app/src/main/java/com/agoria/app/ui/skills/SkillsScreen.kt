@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -77,20 +79,18 @@ fun SkillsScreen(
     val selectedAgent = selectedAgentId?.let { id -> agents.find { it.id == id } }
 
     // Get installed skills for selected agent
-    val agentSkills by remember {
-        mutableStateOf<List<AgentSkillEntity>>(emptyList())
-    }
-    val installedSkillIds = agentSkills.map { it.skillId }.toSet()
+    val agentSkills = remember { mutableStateOf<List<AgentSkillEntity>>(emptyList()) }
+    val installedSkillIds = agentSkills.value.map { it.skillId }.toSet()
 
     // Fetch agent skills when selectedAgentId changes
     androidx.compose.runtime.LaunchedEffect(selectedAgentId) {
         if (selectedAgentId != null) {
             viewModel.appScope.launch {
                 val skills = viewModel.agentSkillConfigs(selectedAgentId!!)
-                agentSkills = skills
+                agentSkills.value = skills
             }
         } else {
-            agentSkills = emptyList()
+            agentSkills.value = emptyList()
         }
     }
 
@@ -157,11 +157,9 @@ fun SkillsScreen(
 
             // Skills by category
             SkillCatalog.categories.forEach { category ->
-                val categorySkills = SkillCatalog.getByCategory(category)
                 val enabledCategorySkills = skills.filter { it.category == category && it.enabled }
-                val allCategorySkills = if (enabledCategorySkills.isEmpty()) categorySkills else enabledCategorySkills
 
-                if (allCategorySkills.isNotEmpty()) {
+                if (enabledCategorySkills.isNotEmpty()) {
                     PixelCard {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -172,7 +170,7 @@ fun SkillsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(allCategorySkills) { skill ->
+                                items(enabledCategorySkills) { skill ->
                                     SkillRow(
                                         skill = skill,
                                         agentId = selectedAgentId,
