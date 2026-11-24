@@ -377,8 +377,9 @@ private fun ConfigPanel(
                 singleLine = false,
             )
             if (skillDef != null) {
+                val actionList = skillDef.actions.map { it.id }.joinToString(", ")
                 Text(
-                    "Available actions: ${skillDef.actions.map { it.id }.joinToString(\", \")}",
+                    "Available actions: $actionList",
                     style = MaterialTheme.typography.bodySmall,
                     color = Pal.navy.copy(alpha = 0.5f),
                 )
@@ -433,7 +434,7 @@ private fun InfoDialog(
                         ) {
                             Text(action.label, style = MaterialTheme.typography.titleSmall, color = Pal.navy)
                             Text(action.description, style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.75f))
-                            Text("Args: ${action.argsHint}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.5f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            Text("Args: ${action.argsHint}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.5f))
                         }
                     }
                 }
