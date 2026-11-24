@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -49,7 +48,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ProviderCatalog
@@ -62,7 +60,10 @@ import com.agoria.app.ui.components.PixelPill
 import com.agoria.app.ui.components.PixelScaffold
 import com.agoria.app.ui.office.world.Pal
 import com.agoria.app.ui.office.world.PixelButton
+import com.agoria.app.ui.office.world.PixelDialog
 import com.agoria.app.ui.office.world.PixelLabel
+import com.agoria.app.ui.office.world.PixelProgressBar
+import com.agoria.app.ui.office.world.PixelSlider
 import com.agoria.app.ui.office.world.PixelSwitch
 import com.agoria.app.ui.office.world.PixelTextField
 import com.agoria.app.util.UpdateManager
@@ -184,23 +185,21 @@ fun SettingsScreen(
                     text = "Cycle interval: ${formatSeconds(tick)}",
                     style = MaterialTheme.typography.labelLarge,
                 )
-                Slider(
+                PixelSlider(
                     value = tick.toFloat(),
                     onValueChange = { tick = it.roundToInt() },
                     valueRange = 30f..600f,
                     steps = 18,
-                    colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                 )
                 Text(
                     text = "Per-agent cooldown: ${formatSeconds(cooldown)}",
                     style = MaterialTheme.typography.labelLarge,
                 )
-                Slider(
+                PixelSlider(
                     value = cooldown.toFloat(),
                     onValueChange = { cooldown = it.roundToInt() },
                     valueRange = 30f..600f,
                     steps = 18,
-                    colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PixelButton("Save timing", {
@@ -313,22 +312,20 @@ fun SettingsScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("Agent Fund: ${agentSplit}%", style = MaterialTheme.typography.labelLarge)
-                        Slider(
+                        PixelSlider(
                             value = agentSplit.toFloat(),
                             onValueChange = { agentSplit = it.roundToInt().coerceIn(0, 100); userSplit = 100 - agentSplit },
                             valueRange = 0f..100f,
                             steps = 20,
-                            colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                         )
                     }
                     Column(Modifier.weight(1f)) {
                         Text("Your Share: ${userSplit}%", style = MaterialTheme.typography.labelLarge)
-                        Slider(
+                        PixelSlider(
                             value = userSplit.toFloat(),
                             onValueChange = { userSplit = it.roundToInt().coerceIn(0, 100); agentSplit = 100 - userSplit },
                             valueRange = 0f..100f,
                             steps = 20,
-                            colors = androidx.compose.material3.SliderDefaults.colors(activeTrackColor = Pal.amber, thumbColor = Pal.amber),
                         )
                     }
                 }
@@ -849,59 +846,31 @@ private fun SettingsCard(
     }
 }
 
-/** Square, bordered confirmation dialog (replaces the Material AlertDialog). */
+/** Reset confirmation: the shared [PixelDialog] (square, ink border, hard shadow). */
 @Composable
 private fun ResetDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        PixelCard(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Reset Dunder?", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PixelButton(
-                        text = "Reset everything",
-                        onClick = onConfirm,
-                        small = true,
-                        fill = Pal.red,
-                    )
-                    PixelButton(
-                        text = "Cancel",
-                        onClick = onDismiss,
-                        small = true,
-                        fill = Pal.tan,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Flat square progress bar: navy track, amber fill, 2 dp ink border. */
-@Composable
-private fun PixelProgressBar(
-    fraction: Float,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .height(16.dp)
-            .background(Pal.navy)
-            .border(2.dp, Pal.ink),
-    ) {
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                .background(Pal.amber),
+    PixelDialog(onDismiss = onDismiss, title = "Reset Dunder?") {
+        Text(
+            text = "This deletes all agents, diaries, builds, approvals, and connector configuration on this device. It cannot be undone.",
+            style = MaterialTheme.typography.bodyMedium,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton(
+                text = "Reset everything",
+                onClick = onConfirm,
+                small = true,
+                fill = Pal.red,
+            )
+            PixelButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                small = true,
+                fill = Pal.tan,
+            )
+        }
     }
 }
 
