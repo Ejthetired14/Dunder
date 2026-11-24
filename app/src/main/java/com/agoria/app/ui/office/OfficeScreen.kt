@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,16 +35,11 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,6 +91,7 @@ import com.agoria.app.ui.office.world.PixelButton
 import com.agoria.app.ui.office.world.PixelIconButton
 import com.agoria.app.ui.office.world.PixelLabel
 import com.agoria.app.ui.office.world.PixelPanel
+import com.agoria.app.ui.components.PixelCard
 import com.agoria.app.ui.office.world.buildSignals
 import com.agoria.app.ui.office.world.parseChatter
 import com.agoria.app.ui.office.world.statusText
@@ -699,51 +694,58 @@ private fun OfficeListScreen(
     val diary by viewModel.diary.collectAsStateWithLifecycle()
     val latest = diary.firstOrNull()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("The office", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${agents.size} agents · tap a desk to talk",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Pal.tan,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onShowMap) {
-                        Icon(
-                            Icons.Default.Map,
-                            contentDescription = "Map view",
-                        )
-                    }
-                    IconButton(onClick = onOpenBrowsers) {
-                        Icon(
-                            Icons.Default.Public,
-                            contentDescription = "Agent browsers",
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    Column(Modifier.fillMaxSize()) {
+        // Pixel-style ink top bar with actions
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Pal.ink)
+                .padding(top = 16.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(
+                        text = "The office",
+                        style = PixelLabel.copy(fontSize = 20.sp, color = Pal.cream),
+                    )
+                    Text(
+                        text = "${agents.size} agents · tap a desk to talk",
+                        style = PixelBody.copy(fontSize = 12.sp, color = Pal.tan),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelIconButton(
+                        icon = Icons.Default.Map,
+                        description = "Map view",
+                        onClick = onShowMap,
+                    )
+                    PixelIconButton(
+                        icon = Icons.Default.Public,
+                        description = "Agent browsers",
+                        onClick = onOpenBrowsers,
+                    )
+                }
+            }
+            // 2 dp ink bottom border
+            Box(Modifier.fillMaxWidth().height(2.dp).background(Pal.ink))
+        }
+
+        // Content with padding
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (latest != null) {
                 val agent = agents.firstOrNull { it.id == latest.agentId }
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(
-                        containerColor = Pal.amber.copy(alpha = 0.14f),
-                    ),
+                PixelCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    fill = Pal.amber.copy(alpha = 0.14f),
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -758,13 +760,11 @@ private fun OfficeListScreen(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = "${agent?.name ?: "Office"} is thinking",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Pal.ink,
+                                style = PixelLabel.copy(color = Pal.ink),
                             )
                             Text(
                                 text = latest.content,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Pal.ink,
+                                style = PixelBody.copy(color = Pal.ink),
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -772,8 +772,7 @@ private fun OfficeListScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = Time.relativeTime(latest.createdAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Pal.tan,
+                            style = PixelBody.copy(color = Pal.tan, fontSize = 12.sp),
                         )
                     }
                 }
@@ -782,7 +781,7 @@ private fun OfficeListScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(0.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -798,30 +797,26 @@ private fun OfficeListScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AgentDesk(
     agent: AgentEntity,
     latestDiary: String?,
     onClick: () -> Unit,
 ) {
-    Surface(
+    PixelCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
+        fill = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(agent, 46.dp)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(agent.name, style = MaterialTheme.typography.titleMedium)
+                    Text(agent.name, style = PixelLabel)
                     Text(
                         agent.role,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Pal.tan,
+                        style = PixelBody.copy(color = Pal.tan, fontSize = 12.sp),
                     )
                 }
             }
@@ -830,9 +825,7 @@ private fun AgentDesk(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = latestDiary ?: agent.goal,
-                style = MaterialTheme.typography.bodySmall,
-                color = Pal.tan,
-                fontStyle = FontStyle.Italic,
+                style = PixelBody.copy(color = Pal.tan, fontStyle = FontStyle.Italic),
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
