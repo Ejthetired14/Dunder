@@ -60,6 +60,12 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -745,7 +751,9 @@ private fun OfficeListScreen(
             if (latest != null) {
                 val agent = agents.firstOrNull { it.id == latest.agentId }
                 PixelCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {},
                     fill = Pal.amber.copy(alpha = 0.14f),
                 ) {
                     Row(
@@ -804,10 +812,25 @@ private fun AgentDesk(
     latestDiary: String?,
     onClick: () -> Unit,
 ) {
+    // TalkBack: one focus stop per agent that reads name, role, status, approval flag and the
+    // latest diary line, and opens the agent page. Children are cleared so nothing is read twice.
+    val open = onClick
+    val description = buildString {
+        append(agent.name).append(", ").append(agent.role).append(". ")
+        append("Status: ").append(statusLabel(agent.status)).append(". ")
+        if (agent.status == "waiting_approval") append("Waiting for your approval. ")
+        val note = latestDiary ?: agent.goal
+        if (note.isNotBlank()) append(note.take(140))
+    }
     PixelCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open ${agent.name}") { open(); true }
+            },
         fill = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.padding(14.dp)) {
