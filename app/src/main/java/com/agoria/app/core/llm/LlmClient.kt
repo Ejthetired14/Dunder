@@ -362,7 +362,14 @@ class LlmClient(private val repo: Repository) {
                 ?: message.opt("content_block")
             val text = when (content) {
                 is String -> content
-                is JSONArray -> content.joinToString("") { it.optString("text") }
+                is JSONArray -> {
+                    val sb = StringBuilder()
+                    for (i in 0 until content.length()) {
+                        val part = content.optJSONObject(i)
+                        sb.append(part?.optString("text") ?: "")
+                    }
+                    sb.toString()
+                }
                 else -> message.optString("content") ?: message.optString("text") ?: ""
             }
             
