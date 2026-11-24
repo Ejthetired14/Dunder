@@ -389,6 +389,7 @@ fun connectorIcon(iconKey: String): ImageVector {
         "paypal", "polar" -> Icons.Default.AttachMoney
         "agentmail" -> Icons.Default.Email
         "gdrive" -> Icons.Default.Folder
+        "terminal" -> Icons.Default.Terminal
         else -> Icons.Default.Hub
     }
 }

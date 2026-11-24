@@ -548,6 +548,25 @@ object ConnectorCatalog {
             risk = "high",
             iconKey = "cloudflare",
         ),
+        ConnectorDef(
+            id = "terminal",
+            name = "Terminal",
+            category = "System",
+            description = "Run shell commands in the app's sandbox. Use for build, test, git, and platform debugging. Every command needs approval.",
+            auth = ConnectorAuth.NONE,
+            fields = emptyList(),
+            actions = listOf(
+                ConnectorActionDef("run", "Run command", "Execute a shell command and return stdout/stderr. Requires approval.", true, "{\"command\": \"ls -la\", \"cwd\": \"/workspace/app\"}"),
+                ConnectorActionDef("run_background", "Run background", "Start a long-running command (build, dev server) and return immediately. Requires approval.", true, "{\"command\": \"./gradlew assembleDebug\", \"cwd\": \"/workspace/app\"}"),
+                ConnectorActionDef("list", "List processes", "List running background processes.", false, "{}"),
+                ConnectorActionDef("stop", "Stop process", "Stop a background process by PID. Requires approval.", true, "{\"pid\": 12345}"),
+                ConnectorActionDef("logs", "Get logs", "Get stdout/stderr of a background process.", false, "{\"pid\": 12345}"),
+            ),
+            setupHelp = "No setup needed. The terminal runs in the app's sandbox with access to the repository workspace. Commands run as the app user. Every command requires your approval.",
+            docsUrl = "https://github.com/Ejthetired14/Dunder",
+            risk = "high",
+            iconKey = "terminal",
+        ),
     )
 
     val byId: Map<String, ConnectorDef> = all.associateBy { it.id }
@@ -576,6 +595,7 @@ object ConnectorCatalog {
             "device" -> true
             "accounts" -> action == "list"
             "files" -> action == "list" || action == "read"
+            "terminal" -> action == "list" || action == "logs"
             else -> false
         }
     }

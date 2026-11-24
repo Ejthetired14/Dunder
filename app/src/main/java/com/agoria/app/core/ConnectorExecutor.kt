@@ -21,12 +21,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.lang.Process
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 data class ConnectorResult(
     val ok: Boolean,
@@ -239,6 +241,7 @@ class ConnectorExecutor(
         "vercel" -> vercel(config, action, args)
         "netlify" -> netlify(config, action, args)
         "linear" -> linear(config, action, args)
+        "terminal" -> terminal(config, action, args)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -614,6 +617,76 @@ class ConnectorExecutor(
                 ConnectorResult(true, "Posted local notification: $title")
             }
             else -> ConnectorResult(false, "Unknown device action '$action'")
+        }
+    }
+
+    // -------------------------------------------------------------------- terminal
+
+    private fun terminal(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
+        return when (action) {
+            "run" -> {
+                val command = args.optString("command").trim().ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app").trim()
+                try {
+                    val process = Runtime.getRuntime().exec(command, null, File(cwd))
+                    val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                    val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                    val exitCode = process.waitFor()
+                    val output = StringBuilder()
+                    if (stdout.isNotBlank()) output.append(stdout)
+                    if (stderr.isNotBlank()) {
+                        if (output.isNotEmpty()) output.append("\n")
+                        output.append("[stderr]\n").append(stderr)
+                    }
+                    if (exitCode != 0) output.append("\n[exit code: $exitCode]")
+                    ConnectorResult(exitCode == 0, output.toString().trim().ifBlank { "(no output)" })
+                } catch (e: Exception) {
+                    ConnectorResult(false, "Command failed: ${e.message}")
+                }
+            }
+            "run_background" -> {
+                val command = args.optString("command").trim().ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app").trim()
+                try {
+                    val process = Runtime.getRuntime().exec(command, null, File(cwd))
+                    val pid = try {
+                        val field = process.javaClass.getDeclaredField("pid")
+                        field.isAccessible = true
+                        field.getInt(process)
+                    } catch (_: Exception) {
+                        process.hashCode()
+                    }
+                    val key = "bg_$pid"
+                    TerminalManager.register(key, process)
+                    ConnectorResult(true, "Started background process $key (PID $pid). Use 'logs' action to get output, 'stop' to kill.")
+                } catch (e: Exception) {
+                    ConnectorResult(false, "Failed to start background process: ${e.message}")
+                }
+            }
+            "list" -> {
+                val processes = TerminalManager.list()
+                if (processes.isEmpty()) return ConnectorResult(true, "No background processes running.")
+                val sb = StringBuilder("Background processes:\n")
+                processes.forEach { (key, proc) ->
+                    sb.append("- $key\n")
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
+            "stop" -> {
+                val pid = args.optInt("pid", -1)
+                if (pid == -1) return ConnectorResult(false, "Missing pid")
+                val key = "bg_$pid"
+                val stopped = TerminalManager.stop(key)
+                ConnectorResult(stopped, if (stopped) "Stopped $key" else "Process $key not found")
+            }
+            "logs" -> {
+                val pid = args.optInt("pid", -1)
+                if (pid == -1) return ConnectorResult(false, "Missing pid")
+                val key = "bg_$pid"
+                val logs = TerminalManager.getLogs(key)
+                ConnectorResult(logs != null, logs ?: "No logs for $key")
+            }
+            else -> ConnectorResult(false, "Unknown terminal action '$action'")
         }
     }
 
@@ -2920,4 +2993,49 @@ class ConnectorExecutor(
             };
         """.trimIndent()
     }
+}
+
+/**
+ * Simple manager for background terminal processes.
+ * Stores Process objects by key and captures their output.
+ */
+object TerminalManager {
+    private val processes = mutableMapOf<String, Process>()
+    private val outputs = mutableMapOf<String, StringBuilder>()
+
+    fun register(key: String, process: Process) {
+        processes[key] = process
+        outputs[key] = StringBuilder()
+        // Start reading stdout and stderr in background threads
+        thread(start = true, isDaemon = true) {
+            process.inputStream.bufferedReader().use { reader ->
+                reader.forEachLine { line ->
+                    outputs[key]?.append(line).append('\n')
+                }
+            }
+        }
+        thread(start = true, isDaemon = true) {
+            process.errorStream.bufferedReader().use { reader ->
+                reader.forEachLine { line ->
+                    outputs[key]?.append("[stderr] ").append(line).append('\n')
+                }
+            }
+        }
+    }
+
+    fun list(): List<Pair<String, Process>> = processes.toList()
+
+    fun stop(key: String): Boolean {
+        val process = processes.remove(key) ?: return false
+        outputs.remove(key)
+        process.destroy()
+        try {
+            process.waitFor(5, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        return true
+    }
+
+    fun getLogs(key: String): String? = outputs[key]?.toString()?.trim()?.takeIf { it.isNotBlank() }
 }
