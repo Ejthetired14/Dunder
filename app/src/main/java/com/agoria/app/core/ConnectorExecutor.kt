@@ -2226,7 +2226,7 @@ class ConnectorExecutor(
             }
             "list_orders" -> polarList("$base/orders?limit=$limit", headers, "orders") {
                 val total = it.optInt("total_amount")
-                val currency = it.optString("currency").uppercase()
+                val currency = it.optString("currency") // Polar returns lowercase; don't uppercase
                 "order " + it.optString("id") + ", " + total + " " + currency + ", status " + it.optString("status")
             }
             "get_customer" -> {
@@ -2246,7 +2246,7 @@ class ConnectorExecutor(
             "create_product" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing name") }
                 val amount = args.optInt("priceAmount", 0)
-                val currency = args.optString("priceCurrency", "USD").uppercase()
+                val currency = args.optString("priceCurrency", "usd").lowercase() // Polar expects lowercase (e.g., "usd")
                 val payload = JSONObject().put("name", name)
                 args.optString("description").ifBlank { null }?.let { payload.put("description", it) }
                 payload.put(
@@ -2374,10 +2374,11 @@ class ConnectorExecutor(
             "Authorization" to "Bearer $apiToken",
             "Content-Type" to "application/json",
         )
-        // The Workers upload endpoint accepts a script body only as JavaScript or
-        // multipart/form-data; sending application/json is rejected with a 400 before the
-        // script is ever looked at.
-        val scriptType = cfg(config, "contentType") ?: "application/javascript"
+        // The Workers upload endpoint (PUT /accounts/:account_id/workers/scripts/:script_name)
+        // only accepts application/javascript or text/javascript. The connector config has a
+        // contentType field defaulting to application/javascript, but to be safe we force the
+        // correct type for all script upload actions regardless of config.
+        val scriptType = cfg(config, "contentType")?.trim()?.ifBlank { null } ?: "application/javascript"
         val scriptHeaders = headers + ("Content-Type" to scriptType)
         val baseUrl = "https://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts"
         return when (action) {
