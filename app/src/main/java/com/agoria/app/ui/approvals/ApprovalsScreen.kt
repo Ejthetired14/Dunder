@@ -1,5 +1,6 @@
 package com.agoria.app.ui.approvals
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +42,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -247,7 +253,7 @@ private fun ApprovalList(
                 ApprovalCard(
                     approval = approval,
                     agentName = agents.firstOrNull { it.id == approval.agentId }?.name ?: "Office",
-                    onClick = { onOpen(approval) },
+                    onClickAction = { onOpen(approval) },
                 )
             }
         }
@@ -258,11 +264,24 @@ private fun ApprovalList(
 private fun ApprovalCard(
     approval: ApprovalEntity,
     agentName: String,
-    onClick: () -> Unit,
+    onClickAction: () -> Unit,
 ) {
+    val open = onClickAction
+    val description = buildString {
+        append(agentName).append(", ").append(typeLabel(approval.type)).append(". ")
+        append("Risk: ").append(approval.risk).append(". ")
+        append(approval.title).append(". ")
+        append(approval.summary.take(160))
+    }
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClickAction)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(label = "Open approval") { open(); true }
+            },
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -307,8 +326,17 @@ private fun ConnectorRequestCard(
     onApprove: () -> Unit,
     onDeny: () -> Unit,
 ) {
+    val description = buildString {
+        append(agentName).append(" requests ").append(request.connectorId).append(". ")
+        append(request.reason.take(160))
+    }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+            },
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = Pal.amber.copy(alpha = 0.14f),
@@ -370,16 +398,29 @@ private fun ApprovalHistoryList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         approvals.forEach { approval ->
+            val agentName = agents.firstOrNull { it.id == approval.agentId }?.name ?: "Office"
+            val open = { onOpen(approval) }
+            val description = buildString {
+                append(agentName).append(", status ").append(approval.status).append(". ")
+                append(approval.title).append(". ")
+                if (!approval.result.isNullOrBlank()) append(approval.result.take(120))
+            }
             Surface(
-                onClick = { onOpen(approval) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = open)
+                    .clearAndSetSemantics {
+                        contentDescription = description
+                        role = Role.Button
+                        onClick(label = "Open approval history") { open(); true }
+                    },
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = agents.firstOrNull { it.id == approval.agentId }?.name ?: "Office",
+                            text = agentName,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Spacer(Modifier.width(8.dp))

@@ -1,5 +1,6 @@
 package com.agoria.app.ui.project
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,6 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -247,11 +253,26 @@ private fun ProgressTab(
     ) {
         items(tasks, key = { it.id }) { task ->
             val agent = agents.firstOrNull { it.id == task.agentId }
+            val agentName = agent?.name ?: "Agent"
+            val open = { onOpenAgent(task.agentId) }
+            val description = buildString {
+                append(task.title).append(", ")
+                append(agentName).append(", ")
+                append("status ").append(task.status).append(", ")
+                append(task.progress).append(" percent complete, ")
+                append(Time.relativeTime(task.updatedAt))
+            }
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = open)
+                    .clearAndSetSemantics {
+                        contentDescription = description
+                        role = Role.Button
+                        onClick(label = "Open agent $agentName") { open(); true }
+                    },
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                onClick = { onOpenAgent(task.agentId) },
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -265,7 +286,7 @@ private fun ProgressTab(
                         Pill(text = task.status)
                     }
                     Text(
-                        text = agent?.name ?: "Agent",
+                        text = agentName,
                         style = MaterialTheme.typography.labelSmall,
                         color = Pal.tan,
                     )
@@ -321,8 +342,20 @@ private fun BuildsTab(
     ) {
         items(builds, key = { it.id }) { build ->
             val agent = agents.firstOrNull { it.id == build.agentId }
+            val agentName = agent?.name ?: "Agent"
+            val description = buildString {
+                append(build.name).append(", ")
+                append(agentName).append(", ")
+                append(build.fileCount).append(" files, ")
+                append(Time.relativeTime(build.createdAt))
+            }
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearAndSetSemantics {
+                        contentDescription = description
+                        role = Role.Button
+                    },
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
@@ -336,7 +369,7 @@ private fun BuildsTab(
                         Pill(text = "${build.fileCount} files")
                     }
                     Text(
-                        text = "${agent?.name ?: "Agent"} · ${Time.relativeTime(build.createdAt)}",
+                        text = "$agentName · ${Time.relativeTime(build.createdAt)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Pal.tan,
                     )
@@ -389,21 +422,28 @@ private fun FilesTab(project: ProjectEntity, onView: (File) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         items(files, key = { it.absolutePath }) { file ->
+            val relPath = Files.relativePath(root, file)
+            val size = Files.prettySize(file.length())
+            val description = "$relPath, $size"
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .clearAndSetSemantics {
+                        contentDescription = description
+                        role = Role.Button
+                    },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = Files.relativePath(root, file),
+                    text = relPath,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = Files.prettySize(file.length()),
+                    text = size,
                     style = MaterialTheme.typography.labelSmall,
                     color = Pal.wood,
                 )
