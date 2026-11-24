@@ -1,6 +1,7 @@
 package com.agoria.app.data
 
 import android.content.Context
+import android.util.Log
 import androidx.room.withTransaction
 import com.agoria.app.core.ConnectorCatalog
 import com.agoria.app.core.ConnectorDef

@@ -1,6 +1,7 @@
 package com.agoria.app.core
 
 import android.content.Context
+import android.util.Log
 import com.agoria.app.core.llm.LlmClient
 import com.agoria.app.core.llm.LlmMessage
 import com.agoria.app.core.llm.LlmRequest
