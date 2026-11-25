@@ -526,7 +526,7 @@ class AgentRuntime(
                         type = "connector_action",
                         title = "${agent.name} wants to deploy service '$name'",
                         summary = "Deploy Cloudflare Worker '$name'. Review the code before approving.",
-                        details = JSONObject().put("name", name).put("code", code.take(2000)).put("routes", routes).toString(2),
+                        details = JSONObject().put("connector_id", "cloudflare_workers").put("action_name", "deploy").put("args", JSONObject().put("name", name).put("code", code).put("routes", routes)).toString(2),
                         risk = "high",
                     )
                     nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
@@ -565,7 +565,7 @@ class AgentRuntime(
                         type = "connector_action",
                         title = "${agent.name} wants to create Stripe product '$productName'",
                         summary = "Create Stripe product and price for monetization. Amount: ${amountCents/100}/$interval",
-                        details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
+                        details = JSONObject().put("connector_id", "stripe").put("action_name", "create_product").put("args", JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl)).toString(2),
                         risk = "high",
                     )
                     nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"

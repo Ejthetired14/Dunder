@@ -249,10 +249,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: a configured Stripe connector can run `list_products` against a test-mode key.
 
 ### BUG-2 - `setup_billing` and `deploy_service` approvals can never execute
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: both create approvals of type `connector_action` whose `details` hold `{productName,...}` / `{name,code,routes}`. `executeApproval` reads `connector_id`/`action_name` from details, finds none, returns "Approval data did not include a connector action." For `deploy_service` the code is also truncated to 2000 chars in the approval.
 - Fix: create dedicated approval types with their own executors, or store a normalized `{connector_id, action_name, args}` payload. Store the full code (file or full text) and show it in the approval UI before approving.
 - Done when: an approved deploy runs the exact code that was shown.
+- Implemented (2026-11-25): Approval details now include `connector_id`, `action_name`, and full `args` payload (including full code for deploy_service). Remaining: dedicated executors in executeApproval for multi-step setup_billing (product + price + webhook) and deploy_service (full code execution).
 
 ### BUG-3 - Agents never learn about the monetization actions
 - Status: NEEDS-DECISION (DEC-1) | Effort: S
