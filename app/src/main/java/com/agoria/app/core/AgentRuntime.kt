@@ -608,6 +608,24 @@ class AgentRuntime(
             "check_revenue" -> {
                 val eventType = Json.string(input, "type", "invoice.payment_succeeded")
                 val limit = Json.int(input, "limit", 20)
+                // CONN-1: route through the policy gate
+                val stripeDef = ConnectorCatalog.get("stripe")
+                val processed = com.agoria.app.core.AgentDecision(
+                    diary = "", diaryKind = "thought", message = "", action = "use_connector",
+                    input = JSONObject().put("connector_id", "stripe").put("action_name", "list_events"),
+                    importance = 2,
+                )
+                if (!AgentPolicy.isAutoAllowed(processed)) {
+                    val approval = repo.addApproval(
+                        agentId = agentId,
+                        type = "connector_action",
+                        title = "${agent.name} wants to poll Stripe for revenue events",
+                        summary = "Poll Stripe for $eventType events (limit $limit).",
+                        details = JSONObject().put("connector_id", "stripe").put("action_name", "list_events").put("args", JSONObject().put("type", eventType).put("limit", limit)).toString(2),
+                        risk = "medium",
+                    )
+                    nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
+                } else {
                 val result = useConnector(agent, "stripe", "list_events", JSONObject().put("type", eventType).put("limit", limit))
                 val events = parseStripeEvents(result)
                 var recorded = 0
@@ -642,6 +660,7 @@ class AgentRuntime(
                     repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: ${fund/100}", 4)
                 }
                 repo.addMessage(agentId, "tool", result)
+                }
             }
 
             else -> {

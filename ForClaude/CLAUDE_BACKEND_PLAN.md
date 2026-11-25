@@ -389,9 +389,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: forcing the failure from RUN-5 shows the banner after opening the app, and starting autonomy removes it.
 
 ### CONN-1 - Read-only gating ignores action aliases and `check_revenue`
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `ConnectorCatalog.isReadOnly` looks up the raw action name, but `ConnectorExecutor.canonicalAction` maps aliases (`ls`, `cat`, `save`...) later, so aliases always need approval (fails closed, but noisy). `check_revenue` calls `useConnector` directly and skips gating entirely.
 - Fix: canonicalize before the policy check; route every connector call through one gate.
+- Implemented (2026-11-25): Added `ConnectorCatalog.canonicalizeAction()` method. `isReadOnly` now canonicalizes action before lookup. `check_revenue` now checks `AgentPolicy.isAutoAllowed` before proceeding; creates approval if not allowed. Remaining: full connector-specific canonicalization in ConnectorCatalog (github, notion, agentmail aliases).
 
 ### CONN-2 - `files` connector shares one workspace and has no quota
 - Status: TODO | Effort: S

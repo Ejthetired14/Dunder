@@ -610,16 +610,30 @@ object ConnectorCatalog {
         else -> def.fields.filter { it.required }.joinToString(", ") { it.key }
     }
 
+    fun canonicalizeAction(connectorId: String, action: String): String {
+        val normalised = action.trim().lowercase().replace('-', '_').replace(' ', '_')
+        val generic = when (normalised) {
+            "list_files", "ls", "dir", "glob", "files" -> "list"
+            "cat", "open", "read_file", "show", "view" -> "read"
+            "save", "create", "write_file", "create_file", "append", "append_file" -> "write"
+            "rm", "remove", "unlink", "delete_file" -> "delete"
+            else -> normalised
+        }
+        return generic
+    }
+
     fun isReadOnly(connectorId: String, action: String): Boolean {
         val def = get(connectorId) ?: return false
-        val actionDef = def.actions.firstOrNull { it.id == action } ?: return false
+        // CONN-1: canonicalize action aliases before lookup
+        val canonical = canonicalizeAction(connectorId, action)
+        val actionDef = def.actions.firstOrNull { it.id == action || it.id == canonical } ?: return false
         if (actionDef.mutating) return false
         return when (connectorId) {
             "wikipedia", "hn", "search", "weather", "currency" -> true
             "device" -> true
-            "accounts" -> action == "list"
-            "files" -> action == "list" || action == "read"
-            "terminal" -> action == "list" || action == "logs"
+            "accounts" -> action == "list" || canonical == "list"
+            "files" -> action == "list" || action == "read" || canonical == "list" || canonical == "read"
+            "terminal" -> action == "list" || action == "logs" || canonical == "list" || canonical == "logs"
             else -> false
         }
     }
