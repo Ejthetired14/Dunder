@@ -659,8 +659,15 @@ class Repository(
         action: String,
         status: String,
         summary: String,
-    ) {
-        if (db.connectorDao().get(connectorId) == null) return
+    ): Unit {
+        // OBS-1: redact potential secrets/tokens from the summary before persisting
+        val redacted = summary
+            .replace(Regex("ghp_[A-Za-z0-9_]{10,}"), "ghp_***")
+            .replace(Regex("github_pat_[A-Za-z0-9_]{10,}"), "github_pat_***")
+            .replace(Regex("sk-[A-Za-z0-9]{10,}"), "sk-***")
+            .replace(Regex("Bearer [A-Za-z0-9._-]{10,}"), "Bearer ***")
+            .replace(Regex("bot[0-9]+:[A-Za-z0-9_-]{20,}"), "bot***:***")
+            .take(1000)
         db.connectorLogDao().insert(
             ConnectorLogEntity(
                 id = UUID.randomUUID().toString(),
@@ -668,7 +675,7 @@ class Repository(
                 agentId = agentId,
                 action = action,
                 status = status,
-                summary = summary.take(1000),
+                summary = redacted,
                 createdAt = Time.now(),
             ),
         )

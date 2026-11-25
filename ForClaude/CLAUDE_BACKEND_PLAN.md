@@ -445,9 +445,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: run unit tests and lint; remove the 3x retry loops that hide flaky builds; drop `continue-on-error` on artifact uploads; move to current `actions/setup-java`; add ktlint/detekt; Dependabot for Gradle and Actions; verify the minified release build starts (`isMinifyEnabled = true`, rules in `proguard-rules.pro` untested, Room/org.json usage).
 
 ### OBS-1 - Audit log and log redaction
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: runtime log is in memory only (last 80 entries); `connector_logs.summary` stores up to 1000 chars of responses and can contain URLs with tokens (Telegram bot token is in the request URL).
 - Fix: persisted audit trail (who approved what, with payload hash and result), redact tokens and secrets before writing diary/messages/logs.
+- Implemented (2026-11-25): `Repository.addConnectorLog()` now redacts potential secrets/tokens (GitHub PATs, Stripe keys, Bearer tokens, Telegram bot tokens) from the summary before persisting. Remaining: persisted audit trail with payload hashes, redact diary/messages.
 
 ### ARCH-1 - Split the two giant classes
 - Status: TODO | Effort: L
