@@ -1023,10 +1023,11 @@ class Repository(
                             put("name", s.name)
                             put("category", s.category)
                             put("description", s.description)
-                            put("actions", s.actions)
+                            put("manifestJson", s.manifestJson)
                             put("enabled", s.enabled)
                             put("version", s.version)
-                            put("createdAt", s.createdAt)
+                            put("author", s.author)
+                            put("installedAt", s.installedAt)
                             put("updatedAt", s.updatedAt)
                         },
                     )
@@ -1036,13 +1037,13 @@ class Repository(
 
         val agentSkillsList = mutableListOf<JSONObject>()
         db.agentDao().getAll().forEach { agent ->
-            db.skillDao().getAgentSkills(agent.id).forEach { agentSkill ->
+            db.agentSkillDao().getEnabledForAgent(agent.id).forEach { agentSkill ->
                 val obj = JSONObject().apply {
                     put("agentId", agentSkill.agentId)
                     put("skillId", agentSkill.skillId)
-                    put("config", agentSkill.config)
+                    put("config", agentSkill.configJson)
+                    put("enabled", agentSkill.enabled)
                     put("installedAt", agentSkill.installedAt)
-                    put("updatedAt", agentSkill.updatedAt)
                 }
                 agentSkillsList.add(obj)
             }
@@ -1099,13 +1100,14 @@ class Repository(
                         SkillEntity(
                             id = id,
                             name = s.optString("name", ""),
-                            category = s.optString("category", ""),
                             description = s.optString("description", ""),
-                            actions = s.optString("actions", "[]"),
-                            enabled = s.optBoolean("enabled", true),
-                            version = s.optInt("version", 1),
-                            createdAt = s.optLong("createdAt", Time.now()),
+                            category = s.optString("category", ""),
+                            version = s.optString("version", "1"),
+                            author = s.optString("author", "Dunder"),
+                            manifestJson = s.optString("manifestJson", "{}"),
+                            installedAt = s.optLong("installedAt", Time.now()),
                             updatedAt = s.optLong("updatedAt", Time.now()),
+                            enabled = s.optBoolean("enabled", true),
                         ),
                     )
                 }
@@ -1118,13 +1120,13 @@ class Repository(
                     val agentId = agentSkillJson.optString("agentId")
                     val skillId = agentSkillJson.optString("skillId")
                     if (agentId.isBlank() || skillId.isBlank()) continue
-                    db.skillDao().install(
+                    db.agentSkillDao().insert(
                         AgentSkillEntity(
                             agentId = agentId,
                             skillId = skillId,
-                            config = agentSkillJson.optString("config", "{}"),
+                            enabled = agentSkillJson.optBoolean("enabled", true),
+                            configJson = agentSkillJson.optString("config", "{}"),
                             installedAt = agentSkillJson.optLong("installedAt", Time.now()),
-                            updatedAt = agentSkillJson.optLong("updatedAt", Time.now()),
                         ),
                     )
                 }
