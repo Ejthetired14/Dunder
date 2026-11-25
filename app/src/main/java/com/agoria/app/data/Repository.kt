@@ -847,7 +847,12 @@ class Repository(
         return build
     }
 
-    suspend fun build(id: String): BuildEntity? = db.buildDao().get(id)
+    suspend fun completeBuild(id: String, status: String = "ready"): BuildEntity? {
+        val build = db.buildDao().get(id) ?: return null
+        val updated = build.copy(status = status, completedAt = Time.now())
+        db.buildDao().update(updated)
+        return updated
+    }
 
     // Paged queries for builds
     suspend fun pagedBuildsForAgent(agentId: String, limit: Int, offset: Int): List<BuildEntity> =

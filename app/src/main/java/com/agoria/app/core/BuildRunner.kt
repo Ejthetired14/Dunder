@@ -38,6 +38,7 @@ class BuildRunner(
     suspend fun build(agent: AgentEntity, approval: ApprovalEntity): BuildEntity? {
         _buildProgress.value = BuildProgress.Started(approval.id)
 
+        return try {
         val details = Json.tryObject(approval.details) ?: JSONObject()
         val requestedName = Json.string(details, "name", approval.title).ifBlank { "untitled-build" }
         val plan = Json.string(details, "plan", approval.summary)
@@ -58,9 +59,14 @@ class BuildRunner(
         val finalDescription = generated.description.ifBlank { description }
 
         var written = 0
+        var usedFallback = false
         val manifestFiles = JSONArray()
         _buildProgress.value = BuildProgress.WritingFiles(approval.id, 0, files.size)
         for ((index, file) in files.withIndex()) {
+            if (!kotlinx.coroutines.isActive) {
+                _buildProgress.value = BuildProgress.Failed(approval.id, "Build cancelled")
+                return null
+            }
             val path = file.path.replace('\\', '/').trimStart('/')
             if (path.isBlank() || path.contains("..") || path.startsWith("/")) continue
             val target = File(root, path)
@@ -74,6 +80,7 @@ class BuildRunner(
         if (written == 0) {
             writeFallback(root, finalName, finalDescription, plan, approval)
             written = 4
+            usedFallback = true
             manifestFiles.put("README.md")
             manifestFiles.put("PLAN.md")
             manifestFiles.put("manifest.json")
@@ -90,6 +97,7 @@ class BuildRunner(
             .put("goal", agent.goal)
             .put("plan", plan)
             .put("files", manifestFiles)
+            .put("fallback", usedFallback)
         Files.writeText(File(root, "manifest.json"), manifest.toString(2))
 
         _buildProgress.value = BuildProgress.Zipping(approval.id)
@@ -108,21 +116,29 @@ class BuildRunner(
             projectId = project.id,
         )
 
+        // BUG-9: update build status from "building" to "ready" (or "fallback" if stub was used)
+        repo.completeBuild(build.id, if (usedFallback) "fallback" else "ready")
+
         repo.addDiary(
             agent.id,
             "build",
-            "Built '$finalName': $finalDescription $written files are ready in a downloadable ZIP.",
+            "Built '$finalName': $finalDescription $written files are ready in a downloadable ZIP." + (if (usedFallback) " (fallback stub)" else ""),
             5,
         )
         repo.addMessage(
             agent.id,
             "system",
-            "Build complete: $finalName ($written files). Open Projects to inspect the files or save the ZIP.",
+            "Build complete: $finalName ($written files)." + (if (usedFallback) " (fallback stub)" else "") + " Open Projects to inspect the files or save the ZIP.",
         )
         Notifier.notifyBuild(context, "Build ready: $finalName", "$written files packaged. Open Dunder to download the ZIP.")
 
         _buildProgress.value = BuildProgress.Completed(approval.id, build)
         return build
+        } catch (e: Exception) {
+            _buildProgress.value = BuildProgress.Failed(approval.id, e.message ?: "Build failed")
+            kotlinx.coroutines.coroutineContext[kotlinx.coroutines.Job]?.let { }
+            return null
+        }
     }
 
     private data class GeneratedFile(val path: String, val content: String)

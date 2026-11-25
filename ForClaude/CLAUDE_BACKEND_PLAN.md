@@ -289,7 +289,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: unique index on `(source, externalId)`; read events as JSON; store amounts as integer minor units with currency; one ledger table (fund = sum of ledger rows, see DATA-1); validate splits; remove fake costs.
 
 ### BUG-9 - BuildRunner reports fake success and leaves builds "building"
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: when the LLM fails or returns invalid JSON, `writeFallback` creates a 4-file stub and the run still ends as "Build complete" and `executeApproval` sets the approval to `executed`; `BuildProgress.Failed` is never emitted; `repo.addBuild` stores status `"building"` and nothing ever updates it; exceptions leave `_buildProgress` stuck; `LlmRequest.json = true` is ignored by `LlmClient`; `next_steps` are parsed then discarded; one shared progress flow for concurrent builds; files are truncated to 30,000 chars silently; no cancellation (`isActive` is never checked).
 - Fix: mark stub builds as `fallback`/failed unless the user asked for a stub; set status to `ready`/`failed`; wrap in try/catch and emit `Failed`; keep `next_steps` in the manifest; key progress by approval id; support cancellation and cleanup.
 - Done when: a failed model call shows a failed build, not a successful one.
