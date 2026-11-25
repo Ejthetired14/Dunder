@@ -17,7 +17,9 @@ object AgentPolicy {
     )
 
     fun parseDecision(text: String): AgentDecision? {
-        val root = Json.tryObject(text) ?: return null
+        // LLM-1: lenient extraction of first balanced JSON object
+        val jsonText = extractFirstJsonObject(text) ?: return null
+        val root = Json.tryObject(jsonText) ?: return null
         val action = Json.string(root, "action", "none").lowercase().ifBlank { "none" }
         val inputObject = Json.obj(root, "action_input")
         val input = inputObject ?: when (action) {
@@ -32,6 +34,28 @@ object AgentPolicy {
             input = input,
             importance = Json.int(root, "importance", 2).coerceIn(1, 5),
         )
+    }
+
+    /**
+     * LLM-1: Extract the first balanced JSON object from text that may contain
+     * markdown fences, prose, or other non-JSON content.
+     */
+    fun extractFirstJsonObject(text: String): String? {
+        val start = text.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escape = false
+        for (i in start until text.length) {
+            val c = text[i]
+            if (escape) { escape = false; continue }
+            if (c == '\\\\' && inString) { escape = true; continue }
+            if (c == '"') { inString = !inString; continue }
+            if (inString) continue
+            if (c == '{') depth++
+            if (c == '}') { depth--; if (depth == 0) return text.substring(start, i + 1) }
+        }
+        return null
     }
 
     fun isAutoAllowed(decision: AgentDecision): Boolean {

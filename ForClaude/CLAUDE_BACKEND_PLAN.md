@@ -418,9 +418,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: use a documented search API (Brave/Tavily/SearXNG, optional key) with the scraper as last resort.
 
 ### LLM-1 - JSON protocol robustness
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: `AgentPolicy.parseDecision` accepts only a clean JSON object; otherwise the model text becomes a diary "thought" and nothing happens.
 - Fix: lenient extraction of the first balanced `{...}`; one automatic "return only JSON" retry; per-action schema validation with the error fed back next cycle; use `response_format` where supported (BUG-10).
+- Implemented (2026-11-25): Added `extractFirstJsonObject()` which finds the first balanced `{...}` in text, handling string literals and escapes. `parseDecision` now uses this to extract JSON from markdown/prose. Remaining: automatic retry on parse failure, per-action schema validation, response_format support.
 
 ---
 
