@@ -34,7 +34,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | Builds | `core/BuildRunner.kt` | LLM generates a file list, written under the project workspace, zipped. |
 | Data | `data/*` | Room DB v4 (14 entities), `Repository.kt` (~41 KB), seed data, export/import JSON snapshot, daily auto-backup. |
 | Service | `service/AutonomyService.kt`, `BootReceiver.kt`, `BootStatus.kt` | Foreground service (`specialUse`) with a wake lock keeps the loop alive. `BootReceiver` (non-exported, `BOOT_COMPLETED` only since SEC-13) restarts it if `settings.autonomyEnabled`; since RUN-5 it reads settings read-only with a timeout and reports failures through `BootStatus` + a notification. Explicit stops persist `autonomyEnabled=false` (RUN-3). |
-| Util | `util/SecretCipher.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, self-update from GitHub Pages JSON (URL/host allowlist and SHA-256 check in UpdatePolicy since SEC-10). |
+| Util | `util/SecretCipher.kt`, `util/SnapshotSecrets.kt`, `UpdateManager.kt`, `Files`, `Json`, `Notifier`, `Share`, `Time` | Keystore AES-GCM, snapshot credential scrubbing (SEC-2), self-update from GitHub Pages JSON (URL/host allowlist and SHA-256 check in UpdatePolicy since SEC-10). |
 | CI | `.github/workflows/*.yml` | Build debug + release APK, sign on tags, publish release and Pages JSON. `backup-guard.yml` (SEC-12, SEC-13, SEC-3) checks the backup config, exported components and workflow hygiene on every push/PR. Release signing fails closed without keystore secrets (SEC-3). |
 | Tools | `tools/check_backup_config.py`, `tools/test_check_backup_config.py`, `tools/check_manifest_exports.py`, `tools/test_check_manifest_exports.py`, `tools/check_workflows.py`, `tools/test_check_workflows.py`, `tools/office_gen` | Backup-config, exported-component and workflow-hygiene regression guards + their self-tests (stdlib Python only). |
 
@@ -51,7 +51,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 | --- | --- |
 | Gmail and Google Calendar connectors with pasted OAuth tokens | No `gmail`/`calendar` executor or definition. Replaced by the WebView-based `accounts` ("Office Browser") connector. |
 | "Database is excluded from backup" | Before SEC-1 `res/xml/backup_rules.xml` included database, files, root, external. **After SEC-1 (2026-11-22) the claim is true again** (`allowBackup="false"` plus exclude-all rules). Re-check wording under DOC-1. |
-| "Export a JSON snapshot (without secrets)" | `Repository.exportSnapshot()` exports connector configs **decrypted** and `agent.apiToken` in plaintext. See SEC-2. |
+| "Export a JSON snapshot (without secrets)" | **True since 2026-11-25** (SEC-2): the snapshot is cleared of connector credentials, agent tokens and skill-config secrets before it is written or shared. A secret-carrying export is optional and still missing (SEC-16). |
 | Connector table lists 15 connectors | Catalog has 25: also PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers (and `stripe` is referenced but missing, see BUG-1). |
 | App name Agoria | Package `com.agoria.app`, but UI/strings/User-Agent/CI say Dunder. Pick one. |
 
@@ -80,10 +80,21 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Guard: SEC-12 now fails CI if this configuration regresses.
 
 ### SEC-2 - Snapshots/backups contain plaintext secrets
-- Status: TODO | Effort: M
-- Evidence: `Repository.exportSnapshot()` puts `connectorConfig(c.id)` (decrypted) and `a.apiToken` into JSON; `writeAutoBackup()` writes it unencrypted to `filesDir/backups/`; the same JSON is shared from Settings.
-- Fix: default export has **no** secrets. Optional "include secrets" export is encrypted with a user passphrase (PBKDF2/scrypt + AES-GCM). Auto-backup never includes secrets. Encrypt `AgentEntity.apiToken` at rest with `SecretCipher` (it is currently plaintext in Room). Update README.
+- Status: IN-PROGRESS (2026-11-25) - core done (exports and auto-backups are secret-free), **CI green on PR #46**. Commit: `a745e3f` | Effort: M. Passphrase-encrypted "include secrets" export and at-rest `apiToken` encryption remain as SEC-16 and SEC-17.
+- Evidence (original): `Repository.exportSnapshot()` puts `connectorConfig(c.id)` (decrypted) and `a.apiToken` into JSON; `writeAutoBackup()` writes it unencrypted to `filesDir/backups/`; the same JSON is shared from Settings.
+- Fix (original): default export has **no** secrets. Optional "include secrets" export is encrypted with a user passphrase (PBKDF2/scrypt + AES-GCM). Auto-backup never includes secrets. Encrypt `AgentEntity.apiToken` at rest with `SecretCipher` (it is currently plaintext in Room). Update README.
 - Done when: unit test proves exported JSON contains no token/secret strings; auto-backup excludes secrets.
+- Implemented (2026-11-25):
+  - New `util/SnapshotSecrets.kt` (pure Kotlin + `org.json`, no Android classes). `redactSnapshot` walks the whole snapshot and removes credentials from three sources: (1) `ConnectorCatalog`'s own `secret = true` field list, which is authoritative and already covers every connector token, `clientSecret`, `serviceKey`, `linearKey`, `hfToken`, `redisToken` and the Slack/Discord `webhookUrl`; (2) a key-name pattern for anything outside the catalog (`apiToken`, `botToken`, `accessToken`, `clientSecret`, `authorization`, `privateKey`, ...), deliberately matching singular `...token` so budgets such as `maxTokens`/`tokensUsed` survive; (3) `agent_skills[].config`, which is JSON stored as text and is scrubbed when it parses as an object.
+  - `Repository.exportSnapshot(includeSecrets: Boolean = false)` runs that one redaction pass at the end of the function, so a field added to the snapshot later cannot leak by being forgotten. `includeSecrets = true` has no UI caller yet (SEC-16).
+  - `writeAutoBackup()` now calls `exportSnapshot(includeSecrets = false)` explicitly, so the daily file in `filesDir/backups/` is secret-free.
+  - `importSnapshot` **merges** an imported connector config into the stored one instead of overwriting it, so a secret-free snapshot restores on the same device with credentials intact; on a new device the user is asked for them.
+  - `saveConnectorConfig` derives `status` from the catalog: a blank required field (usually the secret) leaves the connector `needs_setup` instead of claiming `configured`.
+  - `README.md` already claimed "without secrets"; after this change that is true, so it needed no edit. The Settings backup card still says "Save encrypted JSON to the Downloads folder", which is wrong; fixing the wording is UI-1 so a UI file does not have to ride along with a backend change.
+- Verified (2026-11-25, GitHub Actions): **CI green on PR #46** commit `a745e3f`. Build APK run 1092 (compile + `Unit tests`) success; Backup config guard run 45708625614 success.
+- Verified (2026-11-25, local sandbox): `:app:testDebugUnitTest` (see work log for the exact result). `SnapshotSecretsTest` has 5 cases: data survives while agent/connector/skill credentials are dropped; redaction is idempotent; for every connector in the catalog every `secret` field is removed and every non-secret field survives; an unknown connector still loses `apiKey` but keeps `baseUrl`; `maxTokens`/`tokensUsed` are not treated as credentials. `testImplementation("org.json:json:20240303")` was added because `android.jar` only carries stubs for JVM tests.
+- NOT verified: no app run or device; the secret-carrying export path has no UI (SEC-16); `AgentEntity.apiToken` is still plaintext in Room (SEC-17).
+- Remaining to close this task: SEC-16 (optional passphrase-encrypted secret export) and SEC-17 (encrypt `apiToken` at rest), then flip to DONE.
 
 ### SEC-3 - CI supply-chain and signing problems
 - Status: IN-PROGRESS (2026-11-22) - implemented, **CI run pending, owner actions pending (see Remaining)**. Effort: S-M
@@ -207,6 +218,18 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Evidence: `UpdateManager.downloadAndInstall` reports only `Boolean`. After SEC-10 there are several distinct refusals (untrusted URL, missing sha256, hash mismatch, too large, permission not granted) but the UI can show only a generic failure. `checkForUpdates` also returns `null` both for "up to date" and for "refused/invalid JSON".
 - Fix: return a sealed `UpdateResult` (Installed, NeedsPermission, Refused(reason), NetworkError) and a `CheckResult` (UpToDate, Available, Invalid(reason), NetworkError); surface the reason in the update dialog; never include exception messages or URLs with tokens. UI files were not reviewed (section 8): find the caller of `UpdateManager` first.
 - Done when: a tampered hash shows "Update refused: file did not match its checksum" in the app, and "up to date" is distinguishable from "update info invalid".
+
+### SEC-16 - Optional password-protected export of secrets
+- Status: TODO | Effort: M | Depends on: SEC-2 | Added 2026-11-25
+- Evidence: SEC-2 makes every export secret-free, so moving to a new phone loses connector keys by design. The original SEC-2 fix also allowed an explicit "include secrets" file, encrypted with a passphrase, for users who want to carry them.
+- Fix: PBKDF2WithHmacSHA256 (or scrypt) + AES-256-GCM over a `secrets` section; the passphrase is never stored and never logged; a wrong passphrase or tampered ciphertext fails closed; the UI needs a passphrase dialog and a warning. Import reads the `secrets` section only when the passphrase decrypts it. Auto-backup and the default export stay secret-free whatever the UI offers.
+- Done when: unit tests round-trip the encryption, reject a wrong passphrase and a flipped ciphertext byte, and prove the default export still has no secrets.
+
+### SEC-17 - Encrypt `AgentEntity.apiToken` at rest
+- Status: TODO | Effort: S-M | Depends on: SEC-2 | Added 2026-11-25
+- Evidence: `agents.apiToken` is plaintext in Room (SEC-2 removed it from exports only). A root backup or a stolen unlocked device exposes it; provider and connector keys already use `SecretCipher`.
+- Fix: Room migration that re-encrypts existing values with `SecretCipher`, store ciphertext only, decrypt at the single point that uses the token, and mark the row `needs_reentry` when decryption fails (same failure mode as SEC-9). No plaintext token in logs, snapshots or exports.
+- Done when: a DB dump contains no plaintext token and the agent that uses the token still works.
 
 ---
 
@@ -390,7 +413,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 
 ### TEST-1 - There are no tests
 - Status: TODO | Effort: L
-- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.) Since 2026-11-23 there is one JUnit file, `UpdatePolicyTest` (SEC-10), and `build-apk.yml` runs `testDebugUnitTest`.
+- Evidence: `app/build.gradle.kts` has no `testImplementation`/`androidTestImplementation` dependencies at all. (The only tests in the repo are the stdlib-Python self-tests for the SEC-12 and SEC-13 guards in `tools/`; they do not cover the app.) Since 2026-11-23 there is `UpdatePolicyTest` (SEC-10) and since 2026-11-25 `SnapshotSecretsTest` (SEC-2, 5 cases, with a real `org.json` test dependency because `android.jar` only has stubs); `build-apk.yml` runs `testDebugUnitTest`.
 - Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved). Boot path (RUN-5) and stop path (RUN-3) are good early candidates once a fake `SettingsDao` exists.
 
 ### CI-1 - CI hygiene
@@ -406,6 +429,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Status: TODO | Effort: L
 - Evidence: `ConnectorExecutor.kt` ~129 KB and `AgentRuntime.kt` ~42 KB.
 - Fix: `ConnectorHandler` interface per connector (declares actions, schema, mutating flag, rate limit), registered in one place; action handlers in a `Map<String, ActionHandler>`; constructor injection instead of building everything in `AgoriaApplication.onCreate`.
+
+### UI-1 - The backup card claims the export is encrypted
+- Status: TODO | Effort: S | Added 2026-11-25 (found while doing SEC-2)
+- Evidence: `ui/settings/SettingsScreen.kt` says "Save encrypted JSON to Downloads folder" in the Backup & Restore card, but the export is plain JSON (SEC-2 made it secret-free, not encrypted). The same screen tells the user to "restore it on any phone" without saying credentials are left out.
+- Fix: replace the label with "Save a JSON copy to the Downloads folder" and add one line to the card: API keys and connector credentials are not included and must be re-entered after restoring on a new device.
+- Done when: the text matches the file format and no screen claims an encryption that does not exist.
 
 ### DOC-1 - Bring README and docs in line with the code
 - Status: TODO | Effort: S
@@ -454,7 +483,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 
 ## 9. Suggested order of work
 
-1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), SEC-2, SEC-3 (implemented, verify CI + owner actions, DEC-6), SEC-14, SEC-10 (implemented, verify), SEC-4, SEC-5, SEC-7.
+1. **Stop the bleeding (P0 security):** SEC-1 (implemented, verify on device), SEC-12 (done), SEC-13 (implemented, verify CI + device), **SEC-2 (core done 2026-11-25: exports and auto-backups are secret-free; SEC-16 and SEC-17 are the rest)**, SEC-3 (implemented, verify CI + owner actions, DEC-6), SEC-14, SEC-10 (implemented, verify), SEC-4, SEC-5, SEC-7.
 2. **Correctness core:** BUG-6, BUG-7, BUG-9, BUG-10, DATA-1, DATA-2, RUN-1, RUN-5 (implemented, verify), RUN-3 (part 1 done), RUN-6.
 3. **Resolve DEC-1, then either** BUG-1/2/4/5/8 + SEC-11 **or** delete the monetization code.
 4. **Hardening:** SEC-6, SEC-8, SEC-9, SEC-15, DATA-3..6, RUN-2..4, CONN-1..4, LLM-1.
@@ -480,6 +509,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-22 | Claude | SEC-3 CI verified (Backup config guard run 45041539979, Build APK run 45041540039, commit `231f84a`); updated SEC-3 status with commit link and run IDs. |
 | 2026-11-23 | Claude | SEC-10 implemented (new `UpdatePolicy.kt`, hardened `UpdateManager.kt`, SHA-256 published by CI in `latest-release.json`, `UpdatePolicyTest`, `testDebugUnitTest` CI step); IN-PROGRESS pending CI, a tagged release and a device check. Added SEC-15 (surface update refusal reasons). Updated section 1 (Util row), TEST-1, section 9, work log. Not compiled in the session (no Kotlin toolchain). |
 | 2026-11-23 | Claude | SEC-10 CI verified (Backup config guard run 45044746579, Build APK run 45044746633, commit `c1675b0`); updated SEC-10 status with commit link and run IDs. |
+| 2026-11-25 | Claude | SEC-2 core implemented (new `SnapshotSecrets`, secret-free `exportSnapshot`/auto-backup, merging import, connector status from required fields); added SEC-16 (passphrase-encrypted secret export), SEC-17 (`apiToken` at rest) and UI-1 (backup card wording). Status IN-PROGRESS; CI green on PR #46 (Build APK run 1092, guard run 45708625614, commit `a745e3f`). |
 
 ---
 
@@ -573,3 +603,18 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - NOT verified: compilation, the unit tests, GitHub Actions, a tagged release, any device. Most likely compile spots: `repeat(...)` with non-local `return` and `when (val code = ...)` in `openFollowingRedirects`; `trim('.', '_')` in `safeFileComponent`; the unused `android.app.DownloadManager` import (delete it if the compiler complains).
 - Risk to flag: the first release after this lands must go out as a **new tag** so `latest-release.json` carries `sha256`; until then the in-app updater of the new build refuses the (old) JSON, which is intended. If GitHub changes its release-asset redirect host, the update is refused with a log line (`host not allowed`): add the new host to `DOWNLOAD_HOSTS`.
 - Next for whoever continues: confirm CI green, run the tag + device checks under SEC-10, then take SEC-15 (S) or SEC-2 (M).
+
+### 2026-11-25 - SEC-2 core (secret-free exports and auto-backups) - Claude (Freebuff Desktop session, Android SDK 35 + Gradle 8.11.1)
+- Picked SEC-2: first open P0 in section 9's order and the largest remaining leak - every connector credential and agent token was written in plaintext into the JSON the user shares and into the five files under `filesDir/backups/`.
+- Read: this plan, `data/Repository.kt` (export/import/backup/connector-config sections), `util/SecretCipher.kt`, `core/ConnectorCatalog.kt` (field definitions), `ui/AgoriaViewModel.kt` (export callers), `ui/settings/SettingsScreen.kt` (backup card), `app/build.gradle.kts`, `README.md`, and `.github/workflows/build-apk.yml` (unit-test step).
+- Changed:
+  - New `util/SnapshotSecrets.kt`: `redactSnapshot` (catalog `secret` fields + key-name pattern + `agent_skills[].config` JSON text), `redactConnectorConfig`, `isSecretKey`.
+  - `data/Repository.kt`: `exportSnapshot(includeSecrets = false)` scrubs in one pass before returning; `writeAutoBackup()` passes `includeSecrets = false` explicitly; `importSnapshot` merges a connector config into the stored one instead of overwriting; `saveConnectorConfig` sets `needs_setup` when a required field is blank.
+  - New `app/src/test/java/com/agoria/app/util/SnapshotSecretsTest.kt` (5 cases) and `org.json:json:20240303` as a test-only dependency.
+  - This file: SEC-2 notes/status, new SEC-16 and SEC-17, drift table, section 1 Util row, TEST-1, section 9, changelog, this entry.
+- Design choices: the catalog's `secret` flag is authoritative for connector fields (no key names guessed for those), with a conservative pattern as the safety net for agent tokens, skill configs and fields added later; one redaction pass at the end of `exportSnapshot` instead of per-field code, so a future field cannot leak by omission; secrets are removed, not blanked, so importing on the same device keeps the stored value through the merge; `includeSecrets` exists but has no UI caller (SEC-16) because a plaintext "include secrets" path would reintroduce the bug.
+- Verified (local sandbox): `./gradlew :app:testDebugUnitTest --no-daemon --no-parallel` -> **BUILD SUCCESSFUL in 4m 1s**; `SnapshotSecretsTest` 5/5, `UpdatePolicyTest` 7/7, 0 failures; `compileDebugKotlin` clean apart from the two pre-existing warnings (`versionCode` deprecation, `AgoriaViewModel` nullability).
+- Verified (GitHub Actions, 2026-11-25): **Build APK run 1092 and Backup config guard run 45708625614 green** on commit `a745e3f` (PR #46).
+- NOT verified: no app run, no device, no UI check; `exportSnapshot` wiring is covered only by compilation - the unit test exercises `SnapshotSecrets` on a snapshot shaped like the real one, not `Repository` itself (which needs a Room database).
+- Found: SEC-16 (optional passphrase-encrypted secret export), SEC-17 (`apiToken` still plaintext at rest) and UI-1 (the Settings backup card still claims the export is encrypted). Also noticed, not logged as a task: `ConnectorCatalog` marks Cloudflare `accountId` as secret, so it is dropped from snapshots even though it is an identifier, not a credential.
+- Next: SEC-16 or SEC-17 (the two remaining parts of SEC-2); SEC-4/SEC-5/SEC-7 remain the other open P0 items, and UI-1 is a one-line string fix for whoever touches the Settings screen.
