@@ -57,7 +57,7 @@ class AutonomyService : Service() {
             val power = getSystemService(POWER_SERVICE) as? PowerManager
             power?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "agoria:autonomy")?.apply {
                 setReferenceCounted(false)
-                acquire()
+                acquire(30 * 60 * 1000L) // RUN-3: 30-minute timeout instead of indefinite
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not hold the autonomy wake lock: ${e.message}")
