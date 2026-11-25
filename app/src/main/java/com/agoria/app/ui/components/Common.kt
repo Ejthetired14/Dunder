@@ -1,5 +1,6 @@
 package com.agoria.app.ui.components
 
+import android.graphics.Paint
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -62,8 +63,14 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontStyle
@@ -144,29 +151,26 @@ fun AgentAvatar(
                 val badgeSize = (size.value * 0.35).toInt()
                 val badgeX = this.size.width - badgeSize - 2.dp.toPx()
                 val badgeY = 2.dp.toPx()
-                val paint = Paint().apply {
-                    color = Pal.amber.toArgb()
-                    style = Paint.Style.FILL
-                    isAntiAlias = true
-                }
                 drawRect(
                     brush = SolidColor(Pal.amber),
-                    topLeft = Offset(badgeX.toFloat(), badgeY.toFloat()),
+                    topLeft = Offset(badgeX, badgeY),
                     size = Size(badgeSize.toFloat(), badgeSize.toFloat()),
                 )
                 // Draw "B" letter in the badge
-                val textPaint = Paint().apply {
-                    color = Pal.ink.toArgb()
-                    textSize = (badgeSize * 0.6).toFloat()
-                    isAntiAlias = true
-                    textAlign = Paint.Align.CENTER
+                drawIntoCanvas { canvas ->
+                    val textPaint = Paint().apply {
+                        color = Pal.ink.toArgb()
+                        textSize = badgeSize * 0.6f
+                        isAntiAlias = true
+                        textAlign = Paint.Align.CENTER
+                    }
+                    canvas.nativeCanvas.drawText(
+                        "B",
+                        badgeX + badgeSize / 2f,
+                        badgeY + badgeSize / 2f + textPaint.textSize / 3,
+                        textPaint,
+                    )
                 }
-                drawText(
-                    text = "B",
-                    x = badgeX + badgeSize / 2f,
-                    y = badgeY + badgeSize / 2f + textPaint.textSize / 3,
-                    style = textPaint,
-                )
             }
         }
         if (showStatus) {
