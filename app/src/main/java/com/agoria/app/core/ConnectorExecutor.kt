@@ -27,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
@@ -1764,10 +1765,158 @@ class ConnectorExecutor(
                     "Created issue #${root?.optInt("number")} in $repoName: $title\n${root?.optString("html_url") ?: ""}",
                 )
             }
+            "get_file" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val path = args.optString("path").ifBlank { return ConnectorResult(false, "Missing path") }
+                val ref = args.optString("ref", "main")
+                val response = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/contents/$path?ref=${Uri.encode(ref)}",
+                    headers,
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                // File content is base64 encoded
+                val content = root.optString("content").replace("\n", "")
+                val decoded = runCatching { String(Base64.getDecoder().decode(content)) }.getOrNull()
+                ConnectorResult(
+                    true,
+                    "File: $path @ $ref\n---\n${decoded ?: "[binary or empty file]"}\n---\nSHA: ${root.optString("sha")}",
+                )
+            }
+            "create_branch" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val branch = args.optString("branch").ifBlank { return ConnectorResult(false, "Missing branch name") }
+                val from = args.optString("from", "main")
+                // Get the SHA of the base ref
+                val refResponse = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/git/ref/heads/$from",
+                    headers,
+                )
+                if (!refResponse.ok) {
+                    return ConnectorResult(false, "GitHub ${refResponse.code}: base ref '$from' not found")
+                }
+                val refJson = json(refResponse.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                val sha = refJson.optJSONObject("object")?.optString("sha")
+                    ?: return ConnectorResult(false, "Could not resolve base ref SHA")
+                // Create the new branch
+                val payload = JSONObject().put("ref", "refs/heads/$branch").put("sha", sha)
+                val response = http(
+                    "POST",
+                    "https://api.github.com/repos/$repoName/git/refs",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                ConnectorResult(true, "Created branch '$branch' from '$from' (sha: $sha) in $repoName")
+            }
+            "put_file" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val branch = args.optString("branch").ifBlank { return ConnectorResult(false, "Missing branch") }
+                if (branch.lowercase() == "main") {
+                    return ConnectorResult(false, "Refusing to push directly to 'main'. Use a feature branch and open a PR.")
+                }
+                val path = args.optString("path").ifBlank { return ConnectorResult(false, "Missing path") }
+                val content = args.optString("content").ifBlank { return ConnectorResult(false, "Missing content (base64)") }
+                val message = args.optString("message").ifBlank { return ConnectorResult(false, "Missing commit message") }
+                val sha = args.optString("sha") // Optional: required for updates
+                val payload = JSONObject().put("message", message).put("content", content).put("branch", branch)
+                if (sha.isNotBlank()) payload.put("sha", sha)
+                val response = http(
+                    "PUT",
+                    "https://api.github.com/repos/$repoName/contents/$path",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body)
+                ConnectorResult(
+                    true,
+                    "Committed ${if (sha.isBlank()) "new" else "updated"} file '$path' on branch '$branch' in $repoName\n${root?.optJSONObject("commit")?.optString("html_url") ?: ""}",
+                )
+            }
+            "create_pr" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val head = args.optString("head").ifBlank { return ConnectorResult(false, "Missing head branch") }
+                val base = args.optString("base", "main")
+                val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
+                val body = args.optString("body", "")
+                val payload = JSONObject().put("title", title).put("head", head).put("base", base).put("body", body)
+                val response = http(
+                    "POST",
+                    "https://api.github.com/repos/$repoName/pulls",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body)
+                ConnectorResult(
+                    true,
+                    "Opened PR #${root?.optInt("number")}: $title ($head -> $base)\n${root?.optString("html_url") ?: ""}",
+                )
+            }
+            "list_prs" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val state = args.optString("state", "open")
+                val response = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/pulls?state=$state&per_page=20",
+                    headers,
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val array = jsonArray(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                if (array.length() == 0) return ConnectorResult(true, "No $state PRs in $repoName.")
+                val sb = StringBuilder("Pull requests ($state) in $repoName:\n")
+                for (i in 0 until array.length()) {
+                    val pr = array.optJSONObject(i) ?: continue
+                    sb.append("#").append(pr.optInt("number"))
+                        .append(" ").append(pr.optString("title"))
+                        .append(" (").append(pr.optString("head.label")).append(" -> ").append(pr.optString("base.label")).append(")")
+                        .append(" — ").append(pr.optJSONObject("user")?.optString("login") ?: "?")
+                        .append('\n').append("  ").append(pr.optString("html_url")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
             else -> ConnectorResult(
                 false,
                 "Unknown GitHub action '$action'. This connector understands whoami, list_repos, " +
-                    "get_repo, list_issues and create_issue.",
+                    "get_repo, list_issues, create_issue, get_file, create_branch, put_file, create_pr, list_prs.",
             )
         }
     }

@@ -54,7 +54,7 @@ class Repository(
             db.settingsDao().upsert(current)
         }
         val settings = current
-        if (settings.seedVersion >= 1) return@withTransaction
+        if (settings.seedVersion >= 2) return@withTransaction
 
         val now = Time.now()
 
@@ -77,12 +77,48 @@ class Repository(
             SeedData.memories(now).forEach { db.memoryDao().insert(it) }
         }
 
-        db.settingsDao().upsert(settings.copy(seedVersion = 1))
+        db.settingsDao().upsert(settings.copy(seedVersion = 2))
         }
         syncConnectorCatalog()
         syncSkillCatalog()
         seedSkillsIfNeeded()
+        ensureSeedAgents()
         ensureProject()
+    }
+
+    /**
+     * Ensures all seed agents exist. Runs on every launch after syncConnectorCatalog().
+     * - Inserts missing seed agents with their seed diary entries and memories.
+     * - Never overwrites user edits to existing agents.
+     * - Forces seed-platform-engineer to be undeletable and have github connector.
+     */
+    suspend fun ensureSeedAgents() {
+        db.withTransaction {
+            val now = Time.now()
+            val seedAgents = SeedData.agents(now)
+            val seedDiary = SeedData.diary(now).associateBy { it.agentId }
+            val seedMemories = SeedData.memories(now).groupBy { it.agentId }
+
+            for (seedAgent in seedAgents) {
+                val existing = db.agentDao().get(seedAgent.id)
+                if (existing == null) {
+                    // New agent: insert with all seed data
+                    db.agentDao().insert(seedAgent)
+                    seedDiary[seedAgent.id]?.let { db.diaryDao().insert(it) }
+                    seedMemories[seedAgent.id]?.forEach { db.memoryDao().insert(it) }
+                } else {
+                    // Existing agent: enforce undeletable and github connector for Platform Engineer
+                    if (seedAgent.id == "seed-platform-engineer") {
+                        var needsUpdate = false
+                        val updated = existing.copy(
+                            isUndeletable = true,
+                            allowedConnectors = if (existing.allowedConnectors.contains("github")) existing.allowedConnectors else (existing.allowedConnectors + ",github").trim { it == ',' },
+                        ).also { if (it != existing) needsUpdate = true }
+                        if (needsUpdate) db.agentDao().update(updated)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -844,6 +880,7 @@ class Repository(
                             put("createdAt", a.createdAt)
                             put("allowedConnectors", a.allowedConnectors)
                             put("apiToken", a.apiToken)
+                            put("isUndeletable", a.isUndeletable)
                         },
                     )
                 }
@@ -1110,6 +1147,7 @@ class Repository(
                         updatedAt = now,
                         allowedConnectors = a.optString("allowedConnectors", existing?.allowedConnectors ?: ""),
                         apiToken = a.optString("apiToken", existing?.apiToken ?: ""),
+                        isUndeletable = a.optBoolean("isUndeletable", existing?.isUndeletable ?: false),
                     )
                     upsertAgent(agentEntity)
                 }
@@ -1219,6 +1257,9 @@ class Repository(
                     )
                 }
             }
+
+            // Ensure seed agents exist after import (especially Platform Engineer)
+            ensureSeedAgents()
 
             return true
         } catch (e: Exception) {

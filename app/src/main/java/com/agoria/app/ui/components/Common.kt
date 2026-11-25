@@ -120,7 +120,8 @@ fun AgentAvatar(
     showStatus: Boolean = true,
 ) {
     val sprite = ImageBitmap.imageResource(R.drawable.office_sprites)
-    val index = agent.avatarIndex.coerceIn(0, 7)
+    val isPlatformEngineer = agent.id == "seed-platform-engineer"
+    val index = if (isPlatformEngineer) 0 else agent.avatarIndex.coerceIn(0, 7)
     val baseColumn = if (index < 4) index * 3 else (index - 4) * 3
     val baseRow = if (index < 4) 0 else 4
 
@@ -138,6 +139,35 @@ fun AgentAvatar(
                 dstOffset = IntOffset(0, 0),
                 dstSize = IntSize(this.size.width.toInt(), this.size.height.toInt()),
             )
+            // Gold badge for Platform Engineer
+            if (isPlatformEngineer) {
+                val badgeSize = (size.value * 0.35).toInt()
+                val badgeX = this.size.width - badgeSize - 2.dp.toPx()
+                val badgeY = 2.dp.toPx()
+                val paint = Paint().apply {
+                    color = Pal.amber.toArgb()
+                    style = Paint.Style.FILL
+                    isAntiAlias = true
+                }
+                drawRect(
+                    brush = SolidColor(Pal.amber),
+                    topLeft = Offset(badgeX.toFloat(), badgeY.toFloat()),
+                    size = Size(badgeSize.toFloat(), badgeSize.toFloat()),
+                )
+                // Draw "B" letter in the badge
+                val textPaint = Paint().apply {
+                    color = Pal.ink.toArgb()
+                    textSize = (badgeSize * 0.6).toFloat()
+                    isAntiAlias = true
+                    textAlign = Paint.Align.CENTER
+                }
+                drawText(
+                    text = "B",
+                    x = badgeX + badgeSize / 2f,
+                    y = badgeY + badgeSize / 2f + textPaint.textSize / 3,
+                    style = textPaint,
+                )
+            }
         }
         if (showStatus) {
             StatusDot(

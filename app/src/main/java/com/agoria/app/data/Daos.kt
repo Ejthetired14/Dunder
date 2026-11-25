@@ -356,14 +356,11 @@ interface SkillDao {
     @Query("SELECT * FROM skills ORDER BY category ASC, name ASC")
     fun observeAll(): Flow<List<SkillEntity>>
 
-    @Query("SELECT * FROM skills WHERE enabled = 1 ORDER BY category ASC, name ASC")
-    fun observeEnabled(): Flow<List<SkillEntity>>
-
     @Query("SELECT * FROM skills WHERE id = :id")
     suspend fun get(id: String): SkillEntity?
 
-    @Query("SELECT * FROM skills")
-    suspend fun getAll(): List<SkillEntity>
+    @Query("SELECT * FROM skills WHERE category = :category ORDER BY name ASC")
+    suspend fun getByCategory(category: String): List<SkillEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(skill: SkillEntity)
@@ -376,20 +373,28 @@ interface SkillDao {
 
     @Query("DELETE FROM skills")
     suspend fun deleteAll()
+}
 
-    // Agent-Skill join queries
-    @Query("SELECT s.* FROM skills s JOIN agent_skills a ON s.id = a.skillId WHERE a.agentId = :agentId ORDER BY s.category ASC, s.name ASC")
-    suspend fun getForAgent(agentId: String): List<SkillEntity>
-
+@Dao
+interface AgentSkillDao {
     @Query("SELECT * FROM agent_skills WHERE agentId = :agentId")
-    suspend fun getAgentSkills(agentId: String): List<AgentSkillEntity>
+    fun observeForAgent(agentId: String): Flow<List<AgentSkillEntity>>
 
     @Query("SELECT * FROM agent_skills WHERE agentId = :agentId AND skillId = :skillId")
-    suspend fun getAgentSkill(agentId: String, skillId: String): AgentSkillEntity?
+    suspend fun get(agentId: String, skillId: String): AgentSkillEntity?
+
+    @Query("SELECT * FROM agent_skills WHERE agentId = :agentId AND enabled = 1")
+    suspend fun getEnabledForAgent(agentId: String): List<AgentSkillEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun install(agentSkill: AgentSkillEntity)
+    suspend fun insert(agentSkill: AgentSkillEntity)
+
+    @Update
+    suspend fun update(agentSkill: AgentSkillEntity)
 
     @Query("DELETE FROM agent_skills WHERE agentId = :agentId AND skillId = :skillId")
-    suspend fun uninstall(agentId: String, skillId: String)
+    suspend fun delete(agentId: String, skillId: String)
+
+    @Query("DELETE FROM agent_skills WHERE agentId = :agentId")
+    suspend fun deleteAllForAgent(agentId: String)
 }

@@ -248,6 +248,30 @@ jobs:
           path: site
           name: github-pages
 
+      # Wait for artifact to be visible to deploy-pages (intermittent race condition)
+      - name: Wait for artifact propagation
+        run: sleep 15
+
+      # Verify artifact is available via API before deploying
+      - name: Verify artifact availability
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          for i in {1..10}; do
+            echo "Checking artifact availability (attempt $i/10)..."
+            ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts --jq '.artifacts[] | select(.name=="github-pages") | .id' 2>/dev/null || echo "")
+            if [ -n "$ARTIFACTS" ]; then
+              echo "Artifact github-pages found with ID: $ARTIFACTS"
+              exit 0
+            fi
+            echo "Artifact not yet visible, waiting 5s..."
+            sleep 5
+          done
+          echo "::error::Artifact github-pages not found after 10 attempts"
+          exit 1
+
       - name: Deploy Pages
         uses: actions/deploy-pages@v4
         with:

@@ -72,6 +72,7 @@ object OfficeMapData {
         SpotDef("QUEUE", "queue_3", 5, 6, 176f, 218f, 3),
         SpotDef("QUEUE", "queue_4", 6, 6, 208f, 218f, 3),
         SpotDef("QUEUE", "queue_5", 5, 7, 176f, 250f, 3),
+        SpotDef("DESK", "desk_boss", 4, 3, 144f, 122f, 0),
         SpotDef("MEETING", "meet_1", 15, 5, 496f, 204f, 0),
         SpotDef("MEETING", "meet_5", 15, 8, 496f, 282f, 3),
         SpotDef("MEETING", "meet_2", 16, 5, 528f, 204f, 0),

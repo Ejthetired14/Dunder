@@ -116,7 +116,7 @@ class OfficeSim {
         for (ag in agents.sortedWith(compareBy<AgentEntity>({ it.createdAt }, { it.id }))) {
             var a = actors.firstOrNull { it.agentId == ag.id }
             if (a == null) {
-                val desk = pickDesk(ag.name)
+                val desk = pickDesk(ag.name, ag.id)
                 deskOwner[desk.id] = ag.id
                 a = Actor(ag.id, desk)
                 a.timer = 1f + rng.nextFloat() * 4f
@@ -429,12 +429,22 @@ class OfficeSim {
     private fun firstFree(a: Actor, kind: SpotKind): Spot? =
         OfficeLayout.spotsOf(kind).firstOrNull { isFreeFor(a, it) }
 
-    private fun pickDesk(name: String): Spot {
+    private fun pickDesk(name: String, agentId: String): Spot {
         val desks = OfficeLayout.desks
+        val isPlatformEngineer = agentId == "seed-platform-engineer"
+        
+        // Platform Engineer always gets desk_boss
+        if (isPlatformEngineer) {
+            desks.firstOrNull { it.id == "desk_boss" && deskOwner[it.id] == null }?.let { return it }
+        }
+        
+        // Other agents never get desk_boss
+        val availableDesks = desks.filter { !isPlatformEngineer || it.id != "desk_boss" }
+        
         val key = name.trim().lowercase()
-        desks.firstOrNull { it.id == "desk_$key" && deskOwner[it.id] == null }?.let { return it }
-        desks.firstOrNull { deskOwner[it.id] == null }?.let { return it }
-        return desks[actors.size % desks.size]
+        availableDesks.firstOrNull { it.id == "desk_$key" && deskOwner[it.id] == null }?.let { return it }
+        availableDesks.firstOrNull { deskOwner[it.id] == null }?.let { return it }
+        return availableDesks[actors.size % availableDesks.size]
     }
 
     private fun dirOf(dx: Float, dy: Float): Int =
