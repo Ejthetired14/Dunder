@@ -177,30 +177,34 @@ class Repository(
         val now = Time.now()
         SkillCatalog.all.forEach { def ->
             val row = existing[def.id]
+            val manifestJson = JSONObject().put("id", def.id).put("name", def.name).put("category", def.category)
+                .put("description", def.description).put("version", def.version.toString())
+                .put("actions", JSONArray(def.actions.map { it.id })).toString()
             if (row == null) {
                 db.skillDao().insert(
                     SkillEntity(
                         id = def.id,
                         name = def.name,
-                        category = def.category,
                         description = def.description,
-                        actions = JSONArray(def.actions.map { it.id }).toString(),
-                        enabled = true,
-                        version = def.version,
-                        createdAt = now,
+                        category = def.category,
+                        version = def.version.toString(),
+                        author = "Dunder",
+                        manifestJson = manifestJson,
+                        installedAt = now,
                         updatedAt = now,
+                        enabled = true,
                     ),
                 )
                 return@forEach
             }
-            if (row.name != def.name || row.category != def.category || row.description != def.description || row.version != def.version) {
+            if (row.name != def.name || row.category != def.category || row.description != def.description || row.version != def.version.toString()) {
                 db.skillDao().update(
                     row.copy(
                         name = def.name,
                         category = def.category,
                         description = def.description,
-                        actions = JSONArray(def.actions.map { it.id }).toString(),
-                        version = def.version,
+                        version = def.version.toString(),
+                        manifestJson = manifestJson,
                         updatedAt = now,
                     ),
                 )
@@ -693,17 +697,21 @@ class Repository(
         val now = Time.now()
         if (db.skillDao().getAll().isEmpty()) {
             SkillCatalog.all.forEach { def ->
+                val manifestJson = JSONObject().put("id", def.id).put("name", def.name).put("category", def.category)
+                    .put("description", def.description).put("version", def.version.toString())
+                    .put("actions", JSONArray(def.actions.map { it.id })).toString()
                 db.skillDao().insert(
                     SkillEntity(
                         id = def.id,
                         name = def.name,
-                        category = def.category,
                         description = def.description,
-                        actions = org.json.JSONArray(def.actions.map { it.id }).toString(),
-                        enabled = true,
-                        version = def.version,
-                        createdAt = now,
+                        category = def.category,
+                        version = def.version.toString(),
+                        author = "Dunder",
+                        manifestJson = manifestJson,
+                        installedAt = now,
                         updatedAt = now,
+                        enabled = true,
                     ),
                 )
             }
