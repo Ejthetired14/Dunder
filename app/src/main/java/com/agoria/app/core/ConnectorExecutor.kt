@@ -239,6 +239,7 @@ class ConnectorExecutor(
         "vercel" -> vercel(config, action, args)
         "netlify" -> netlify(config, action, args)
         "linear" -> linear(config, action, args)
+        "terminal" -> terminal(config, action, args, agentId)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -2800,6 +2801,60 @@ class ConnectorExecutor(
                 ConnectorResult(true, sb.toString().trim().ifBlank { "No teams." })
             }
             else -> ConnectorResult(false, "Unknown Linear action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // -------------------------------------------------------------------- terminal
+
+    private fun terminal(config: JSONObject?, action: String, args: JSONObject, agentId: String?): ConnectorResult {
+        return when (action) {
+            "run" -> {
+                val command = args.optString("command").ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app")
+                val result = TerminalManager.runSync(command, cwd)
+                if (result.ok) {
+                    ConnectorResult(true, "Exit code: ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}")
+                } else {
+                    ConnectorResult(false, "Exit code: ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}")
+                }
+            }
+            "run_background" -> {
+                val command = args.optString("command").ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app")
+                val pid = TerminalManager.startBackground(command, cwd)
+                ConnectorResult(true, "Started background process with PID: $pid")
+            }
+            "list" -> {
+                val processes = TerminalManager.listProcesses()
+                if (processes.isEmpty()) {
+                    ConnectorResult(true, "No background processes running.")
+                } else {
+                    val sb = StringBuilder("Background processes:\n")
+                    processes.forEach { p ->
+                        sb.append("PID: ${p.pid}, Command: ${p.command}, Status: ${p.status}, Started: ${p.startTime}\n")
+                    }
+                    ConnectorResult(true, sb.toString().trim())
+                }
+            }
+            "stop" -> {
+                val pid = args.optString("pid").ifBlank { return ConnectorResult(false, "Missing pid") }
+                val ok = TerminalManager.stopProcess(pid)
+                if (ok) {
+                    ConnectorResult(true, "Process $pid stopped.")
+                } else {
+                    ConnectorResult(false, "Process $pid not found or already stopped.")
+                }
+            }
+            "logs" -> {
+                val pid = args.optString("pid").ifBlank { return ConnectorResult(false, "Missing pid") }
+                val logs = TerminalManager.getLogs(pid)
+                if (logs == null) {
+                    ConnectorResult(false, "Process $pid not found.")
+                } else {
+                    ConnectorResult(true, "stdout:\n${logs.stdout}\nstderr:\n${logs.stderr}")
+                }
+            }
+            else -> ConnectorResult(false, "Unknown Terminal action '$action'. Use list_actions to see them.")
         }
     }
 
