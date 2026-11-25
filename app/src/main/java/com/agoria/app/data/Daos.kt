@@ -350,3 +350,51 @@ interface RevenueDao {
     @Query("DELETE FROM revenue")
     suspend fun deleteAll()
 }
+
+@Dao
+interface SkillDao {
+    @Query("SELECT * FROM skills ORDER BY category ASC, name ASC")
+    fun observeAll(): Flow<List<SkillEntity>>
+
+    @Query("SELECT * FROM skills WHERE id = :id")
+    suspend fun get(id: String): SkillEntity?
+
+    @Query("SELECT * FROM skills WHERE category = :category ORDER BY name ASC")
+    suspend fun getByCategory(category: String): List<SkillEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(skill: SkillEntity)
+
+    @Update
+    suspend fun update(skill: SkillEntity)
+
+    @Query("DELETE FROM skills WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM skills")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface AgentSkillDao {
+    @Query("SELECT * FROM agent_skills WHERE agentId = :agentId")
+    fun observeForAgent(agentId: String): Flow<List<AgentSkillEntity>>
+
+    @Query("SELECT * FROM agent_skills WHERE agentId = :agentId AND skillId = :skillId")
+    suspend fun get(agentId: String, skillId: String): AgentSkillEntity?
+
+    @Query("SELECT * FROM agent_skills WHERE agentId = :agentId AND enabled = 1")
+    suspend fun getEnabledForAgent(agentId: String): List<AgentSkillEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(agentSkill: AgentSkillEntity)
+
+    @Update
+    suspend fun update(agentSkill: AgentSkillEntity)
+
+    @Query("DELETE FROM agent_skills WHERE agentId = :agentId AND skillId = :skillId")
+    suspend fun delete(agentId: String, skillId: String)
+
+    @Query("DELETE FROM agent_skills WHERE agentId = :agentId")
+    suspend fun deleteAllForAgent(agentId: String)
+}

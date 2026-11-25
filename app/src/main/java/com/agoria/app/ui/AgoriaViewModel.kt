@@ -2,6 +2,8 @@ package com.agoria.app.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -173,6 +175,36 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         startPendingApprovalsPolling()
+        startUpdateCheck()
+    }
+
+    private fun startUpdateCheck() {
+        viewModelScope.launch {
+            // Initial check after a short delay
+            delay(5000)
+            checkForUpdate()
+            
+            // Periodic check every hour (only on WiFi)
+            while (coroutineContext[Job]?.isActive == true) {
+                delay(60 * 60 * 1000L) // 1 hour
+                checkForUpdate()
+            }
+        }
+    }
+
+    private fun checkForUpdate() {
+        // Only check on WiFi to be cheap on low-end devices
+        val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = connectivityManager.activeNetwork
+        if (network == null) return
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        if (capabilities == null || !capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) return
+        
+        app.updateManager.checkForUpdates { release ->
+            if (release != null && app.updateManager.isNewerRelease(release)) {
+                _updateReady.value = release
+            }
+        }
     }
 
     val connectors = repo.connectors.stateIn(
@@ -237,6 +269,10 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
     val pendingCount = combine(pendingApprovals, pendingConnectorRequests) { a, c ->
         a.size + c.size
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    // Update ready banner state
+    private val _updateReady = MutableStateFlow<com.agoria.app.util.UpdateManager.ReleaseInfo?>(null)
+    val updateReady = _updateReady.asStateFlow()
 
     // Combined state flows to reduce individual Flow collections
     val homeScreenState = combine(

@@ -25,8 +25,10 @@ import java.io.File
         MemoryEntity::class,
         ConnectorLogEntity::class,
         RevenueEntity::class,
+        SkillEntity::class,
+        AgentSkillEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,10 +46,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun connectorLogDao(): ConnectorLogDao
     abstract fun revenueDao(): RevenueDao
+    abstract fun skillDao(): SkillDao
+    abstract fun agentSkillDao(): AgentSkillDao
 
     companion object {
         const val NAME = "agoria.db"
-        const val VERSION = 5
+        const val VERSION = 6
 
         fun create(context: Context): AppDatabase {
             val database = build(context)
@@ -71,7 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
                 // older APK over a newer one) falls back, because Room refuses to open a database
                 // written by a newer schema.
@@ -247,5 +251,41 @@ private fun SupportSQLiteDatabase.rebuildMemories() {
 private val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.addColumn("agents", "isUndeletable", "INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** 5 -> 6: add skills and agent_skills tables for the Skills system. */
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `skills` (" +
+                "`id` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`description` TEXT NOT NULL, " +
+                "`category` TEXT NOT NULL, " +
+                "`version` TEXT NOT NULL, " +
+                "`author` TEXT NOT NULL, " +
+                "`manifestJson` TEXT NOT NULL, " +
+                "`installedAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL, " +
+                "`enabled` INTEGER NOT NULL DEFAULT 1, " +
+                "PRIMARY KEY(`id`))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_skills_category` ON `skills` (`category`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_skills_id` ON `skills` (`id`)")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `agent_skills` (" +
+                "`agentId` TEXT NOT NULL, " +
+                "`skillId` TEXT NOT NULL, " +
+                "`enabled` INTEGER NOT NULL DEFAULT 1, " +
+                "`configJson` TEXT NOT NULL DEFAULT '{}', " +
+                "`installedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`agentId`, `skillId`), " +
+                "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                "FOREIGN KEY(`skillId`) REFERENCES `skills`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_agent_skills_agentId` ON `agent_skills` (`agentId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_agent_skills_skillId` ON `agent_skills` (`skillId`)")
     }
 }

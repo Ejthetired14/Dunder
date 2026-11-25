@@ -291,3 +291,47 @@ data class MemoryEntity(
     val importance: Int,
     val createdAt: Long,
 )
+
+@Entity(
+    tableName = "skills",
+    indices = [Index("category"), Index("id")]
+)
+data class SkillEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val category: String,
+    val version: String,
+    val author: String,
+    val manifestJson: String, // JSON string of SkillManifest
+    val installedAt: Long,
+    val updatedAt: Long,
+    val enabled: Boolean = true,
+)
+
+@Entity(
+    tableName = "agent_skills",
+    primaryKeys = ["agentId", "skillId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = SkillEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["skillId"],
+            onDelete = ForeignKey.CASCADE,
+        )
+    ],
+    indices = [Index("agentId"), Index("skillId")]
+)
+data class AgentSkillEntity(
+    val agentId: String,
+    val skillId: String,
+    val enabled: Boolean = true,
+    val configJson: String = "{}", // JSON config for this agent's skill instance
+    val installedAt: Long,
+)

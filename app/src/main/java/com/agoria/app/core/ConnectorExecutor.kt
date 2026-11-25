@@ -26,6 +26,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 data class ConnectorResult(
@@ -239,6 +240,7 @@ class ConnectorExecutor(
         "vercel" -> vercel(config, action, args)
         "netlify" -> netlify(config, action, args)
         "linear" -> linear(config, action, args)
+        "terminal" -> terminal(config, action, args, agentId)
         else -> ConnectorResult(false, "Connector '$connectorId' has no executor.", "no executor")
     }
 
@@ -1691,10 +1693,158 @@ class ConnectorExecutor(
                     "Created issue #${root?.optInt("number")} in $repoName: $title\n${root?.optString("html_url") ?: ""}",
                 )
             }
+            "get_file" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val path = args.optString("path").ifBlank { return ConnectorResult(false, "Missing path") }
+                val ref = args.optString("ref", "main")
+                val response = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/contents/$path?ref=${Uri.encode(ref)}",
+                    headers,
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                // File content is base64 encoded
+                val content = root.optString("content").replace("\n", "")
+                val decoded = runCatching { String(Base64.getDecoder().decode(content)) }.getOrNull()
+                ConnectorResult(
+                    true,
+                    "File: $path @ $ref\n---\n${decoded ?: "[binary or empty file]"}\n---\nSHA: ${root.optString("sha")}",
+                )
+            }
+            "create_branch" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val branch = args.optString("branch").ifBlank { return ConnectorResult(false, "Missing branch name") }
+                val from = args.optString("from", "main")
+                // Get the SHA of the base ref
+                val refResponse = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/git/ref/heads/$from",
+                    headers,
+                )
+                if (!refResponse.ok) {
+                    return ConnectorResult(false, "GitHub ${refResponse.code}: base ref '$from' not found")
+                }
+                val refJson = json(refResponse.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                val sha = refJson.optJSONObject("object")?.optString("sha")
+                    ?: return ConnectorResult(false, "Could not resolve base ref SHA")
+                // Create the new branch
+                val payload = JSONObject().put("ref", "refs/heads/$branch").put("sha", sha)
+                val response = http(
+                    "POST",
+                    "https://api.github.com/repos/$repoName/git/refs",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                ConnectorResult(true, "Created branch '$branch' from '$from' (sha: $sha) in $repoName")
+            }
+            "put_file" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val branch = args.optString("branch").ifBlank { return ConnectorResult(false, "Missing branch") }
+                if (branch.lowercase() == "main") {
+                    return ConnectorResult(false, "Refusing to push directly to 'main'. Use a feature branch and open a PR.")
+                }
+                val path = args.optString("path").ifBlank { return ConnectorResult(false, "Missing path") }
+                val content = args.optString("content").ifBlank { return ConnectorResult(false, "Missing content (base64)") }
+                val message = args.optString("message").ifBlank { return ConnectorResult(false, "Missing commit message") }
+                val sha = args.optString("sha") // Optional: required for updates
+                val payload = JSONObject().put("message", message).put("content", content).put("branch", branch)
+                if (sha.isNotBlank()) payload.put("sha", sha)
+                val response = http(
+                    "PUT",
+                    "https://api.github.com/repos/$repoName/contents/$path",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body)
+                ConnectorResult(
+                    true,
+                    "Committed ${if (sha.isBlank()) "new" else "updated"} file '$path' on branch '$branch' in $repoName\n${root?.optJSONObject("commit")?.optString("html_url") ?: ""}",
+                )
+            }
+            "create_pr" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val head = args.optString("head").ifBlank { return ConnectorResult(false, "Missing head branch") }
+                val base = args.optString("base", "main")
+                val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
+                val body = args.optString("body", "")
+                val payload = JSONObject().put("title", title).put("head", head).put("base", base).put("body", body)
+                val response = http(
+                    "POST",
+                    "https://api.github.com/repos/$repoName/pulls",
+                    headers,
+                    payload.toString(),
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val root = json(response.body)
+                ConnectorResult(
+                    true,
+                    "Opened PR #${root?.optInt("number")}: $title ($head -> $base)\n${root?.optString("html_url") ?: ""}",
+                )
+            }
+            "list_prs" -> {
+                val repoName = repoOf()
+                    ?: return ConnectorResult(
+                        false,
+                        "No repository selected. Save a default repository (owner/name) in this " +
+                            "connector, or pass \"repo\": \"owner/name\" with the action.",
+                    )
+                val state = args.optString("state", "open")
+                val response = http(
+                    "GET",
+                    "https://api.github.com/repos/$repoName/pulls?state=$state&per_page=20",
+                    headers,
+                )
+                if (!response.ok) {
+                    return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 400)}")
+                }
+                val array = jsonArray(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
+                if (array.length() == 0) return ConnectorResult(true, "No $state PRs in $repoName.")
+                val sb = StringBuilder("Pull requests ($state) in $repoName:\n")
+                for (i in 0 until array.length()) {
+                    val pr = array.optJSONObject(i) ?: continue
+                    sb.append("#").append(pr.optInt("number"))
+                        .append(" ").append(pr.optString("title"))
+                        .append(" (").append(pr.optString("head.label")).append(" -> ").append(pr.optString("base.label")).append(")")
+                        .append(" — ").append(pr.optJSONObject("user")?.optString("login") ?: "?")
+                        .append('\n').append("  ").append(pr.optString("html_url")).append('\n')
+                }
+                ConnectorResult(true, sb.toString().trim())
+            }
             else -> ConnectorResult(
                 false,
                 "Unknown GitHub action '$action'. This connector understands whoami, list_repos, " +
-                    "get_repo, list_issues and create_issue.",
+                    "get_repo, list_issues, create_issue, get_file, create_branch, put_file, create_pr, list_prs.",
             )
         }
     }
@@ -2800,6 +2950,60 @@ class ConnectorExecutor(
                 ConnectorResult(true, sb.toString().trim().ifBlank { "No teams." })
             }
             else -> ConnectorResult(false, "Unknown Linear action '$action'. Use list_actions to see them.")
+        }
+    }
+
+    // -------------------------------------------------------------------- terminal
+
+    private fun terminal(config: JSONObject?, action: String, args: JSONObject, agentId: String?): ConnectorResult {
+        return when (action) {
+            "run" -> {
+                val command = args.optString("command").ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app")
+                val result = TerminalManager.runSync(command, cwd)
+                if (result.ok) {
+                    ConnectorResult(true, "Exit code: ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}")
+                } else {
+                    ConnectorResult(false, "Exit code: ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}")
+                }
+            }
+            "run_background" -> {
+                val command = args.optString("command").ifBlank { return ConnectorResult(false, "Missing command") }
+                val cwd = args.optString("cwd", "/workspace/app")
+                val pid = TerminalManager.startBackground(command, cwd)
+                ConnectorResult(true, "Started background process with PID: $pid")
+            }
+            "list" -> {
+                val processes = TerminalManager.listProcesses()
+                if (processes.isEmpty()) {
+                    ConnectorResult(true, "No background processes running.")
+                } else {
+                    val sb = StringBuilder("Background processes:\n")
+                    processes.forEach { p ->
+                        sb.append("PID: ${p.pid}, Command: ${p.command}, Status: ${p.status}, Started: ${p.startTime}\n")
+                    }
+                    ConnectorResult(true, sb.toString().trim())
+                }
+            }
+            "stop" -> {
+                val pid = args.optString("pid").ifBlank { return ConnectorResult(false, "Missing pid") }
+                val ok = TerminalManager.stopProcess(pid)
+                if (ok) {
+                    ConnectorResult(true, "Process $pid stopped.")
+                } else {
+                    ConnectorResult(false, "Process $pid not found or already stopped.")
+                }
+            }
+            "logs" -> {
+                val pid = args.optString("pid").ifBlank { return ConnectorResult(false, "Missing pid") }
+                val logs = TerminalManager.getLogs(pid)
+                if (logs == null) {
+                    ConnectorResult(false, "Process $pid not found.")
+                } else {
+                    ConnectorResult(true, "stdout:\n${logs.stdout}\nstderr:\n${logs.stderr}")
+                }
+            }
+            else -> ConnectorResult(false, "Unknown Terminal action '$action'. Use list_actions to see them.")
         }
     }
 

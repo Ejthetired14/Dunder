@@ -384,6 +384,8 @@ block(1, 9, 4, 11)
 for i, tx in enumerate((3, 4, 5, 6)):
     spot('QUEUE', f'queue_{i + 1}', tx, 6, tx * 32 + 16, 6 * 32 + 26, UP)
 spot('QUEUE', 'queue_5', 5, 7, 5 * 32 + 16, 7 * 32 + 26, UP)
+# Platform Engineer's dedicated desk behind the Boss's desk
+spot('DESK', 'desk_boss', 4, 3, 144, 122, DOWN)
 hot('desk', 'YOUR DESK', 'Approve requests and set auto-approve', 'desk', 3 * 32, 4 * 32, 7 * 32, 6 * 32 + 4,
     5 * 32, 4 * 32 - 4)
 

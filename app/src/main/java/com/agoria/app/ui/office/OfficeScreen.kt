@@ -165,6 +165,7 @@ private fun OfficeWorldScreen(
     val builds by viewModel.builds.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val updateReady by viewModel.updateReady.collectAsStateWithLifecycle()
     val autonomyOn = settings?.autonomyEnabled ?: false
 
     // Day and night: a soft colour wash that follows the phone's clock.
@@ -387,6 +388,28 @@ private fun OfficeWorldScreen(
                                 deskOpen = true
                             },
                         )
+                    }
+                    if (updateReady != null) {
+                        Spacer(Modifier.height(8.dp))
+                        PixelPanel(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(2.dp, Pal.amber)
+                                .background(Pal.amber.copy(alpha = 0.1f)),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = { /* Open settings */ })
+                                    .padding(14.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "New build ready: ${updateReady.versionName} — check Actions",
+                                    style = PixelLabel.copy(color = Pal.amber),
+                                )
+                            }
+                        }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
