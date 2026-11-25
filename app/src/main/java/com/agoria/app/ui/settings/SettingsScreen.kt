@@ -530,7 +530,12 @@ fun SettingsScreen(
                             Column {
                                 Text("Export to Device", style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    text = "Save encrypted JSON to Downloads folder",
+                                    text = "Save a JSON copy to the Downloads folder",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Dim,
+                                )
+                                Text(
+                                    text = "API keys and connector credentials are not included and must be re-entered after restoring on a new device.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Dim,
                                 )

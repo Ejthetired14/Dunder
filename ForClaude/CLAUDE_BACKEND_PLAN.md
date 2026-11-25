@@ -447,10 +447,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: `ConnectorHandler` interface per connector (declares actions, schema, mutating flag, rate limit), registered in one place; action handlers in a `Map<String, ActionHandler>`; constructor injection instead of building everything in `AgoriaApplication.onCreate`.
 
 ### UI-1 - The backup card claims the export is encrypted
-- Status: TODO | Effort: S | Added 2026-11-25 (found while doing SEC-2)
+- Status: DONE (2026-11-25). Effort: S
 - Evidence: `ui/settings/SettingsScreen.kt` says "Save encrypted JSON to Downloads folder" in the Backup & Restore card, but the export is plain JSON (SEC-2 made it secret-free, not encrypted). The same screen tells the user to "restore it on any phone" without saying credentials are left out.
 - Fix: replace the label with "Save a JSON copy to the Downloads folder" and add one line to the card: API keys and connector credentials are not included and must be re-entered after restoring on a new device.
 - Done when: the text matches the file format and no screen claims an encryption that does not exist.
+- Implemented (2026-11-25): Changed "Save encrypted JSON to Downloads folder" to "Save a JSON copy to the Downloads folder". Added line: "API keys and connector credentials are not included and must be re-entered after restoring on a new device."
 
 ### DOC-1 - Bring README and docs in line with the code
 - Status: TODO | Effort: S
