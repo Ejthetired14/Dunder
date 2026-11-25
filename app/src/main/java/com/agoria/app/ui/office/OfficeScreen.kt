@@ -389,7 +389,8 @@ private fun OfficeWorldScreen(
                             },
                         )
                     }
-                    if (updateReady != null) {
+                    val ready = updateReady
+                    if (ready != null) {
                         Spacer(Modifier.height(8.dp))
                         PixelPanel(
                             modifier = Modifier
@@ -405,7 +406,7 @@ private fun OfficeWorldScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "New build ready: ${updateReady.versionName} — check Actions",
+                                    text = "New build ready: ${ready.versionName} — check Actions",
                                     style = PixelLabel.copy(color = Pal.amber),
                                 )
                             }
