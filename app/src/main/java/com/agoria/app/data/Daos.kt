@@ -128,8 +128,8 @@ interface ApprovalDao {
     @Query("SELECT * FROM approvals WHERE agentId = :agentId AND status IN ('pending', 'auto_pending')")
     suspend fun pendingForAgent(agentId: String): List<ApprovalEntity>
 
-    @Query("SELECT * FROM approvals WHERE status IN ('pending', 'auto_pending') ORDER BY createdAt ASC")
-    suspend fun getAllPending(): List<ApprovalEntity>
+    @Query("SELECT * FROM approvals WHERE agentId = :agentId AND type = :type AND status IN ('pending', 'auto_pending')")
+    suspend fun getPendingByAgentAndType(agentId: String, type: String): List<ApprovalEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(approval: ApprovalEntity)

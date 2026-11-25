@@ -479,6 +479,12 @@ class Repository(
     ): ApprovalEntity {
         val s = settings()
         val normalizedType = type.lowercase().trim()
+        // DATA-6: de-duplicate pending approvals by (agentId, type, details hash)
+        val existing = db.approvalDao().getPendingByAgentAndType(agentId, normalizedType)
+            .firstOrNull { it.details.hashCode() == details.hashCode() }
+        if (existing != null) {
+            return existing
+        }
         val autoApproveTypes = s.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         // SEC-5: never auto-approve high-risk actions, even if the type is in autoApproveTypes.
         // Also require an explicit (connectorId, action) allowlist for connector_action types.

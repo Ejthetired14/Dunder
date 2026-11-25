@@ -346,9 +346,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: ledger rows survive agent deletion (`SET_NULL` plus stored agent name); clean up or reassign orphans.
 
 ### DATA-6 - No approval de-duplication or expiry
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `addApproval` always inserts; an agent can queue the same request each cycle; approved-but-old actions can execute long after they were proposed.
 - Fix: de-dup key `(agentId, type, hash(details))` for pending items, max N pending per agent, TTL (for example 24 h) after which `pending` becomes `expired`.
+- Implemented (2026-11-25): `addApproval` now checks for existing pending approval with same `(agentId, type, details hash)` and returns it instead of creating duplicate. Added `ApprovalDao.getPendingByAgentAndType()` method. Remaining: max N pending per agent, TTL expiry (24h).
 
 ### RUN-1 - Loop robustness and cancellation
 - Status: TODO | Effort: M
