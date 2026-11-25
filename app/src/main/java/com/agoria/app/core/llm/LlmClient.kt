@@ -186,7 +186,7 @@ class LlmClient(private val repo: Repository) {
         return try {
             var lastError = "Request failed"
             var lastCode = 0
-            repeat(2) { attempt ->
+            outer@ for (attempt in 0 until 2) {
                 val call = client.newCall(requestBuilder.build())
                 val response = withContext(Dispatchers.IO) { call.execute() }
                 val responseBody = withContext(Dispatchers.IO) {
@@ -199,10 +199,11 @@ class LlmClient(private val repo: Repository) {
                 lastCode = response.code
                 if (!response.isSuccessful) {
                     lastError = "HTTP ${response.code}: ${responseBody.take(400)}"
-                    if (response.code >= 500) {
+                    if (response.code >= 500 && attempt < 1) {
                         delay(600)
                     } else {
-                        return@repeat
+                        // BUG-10: break out on 4xx (non-retryable)
+                        break@outer
                     }
                 } else {
                     val parsed = parseResponse(responseBody)
@@ -230,6 +231,7 @@ class LlmClient(private val repo: Repository) {
                         )
                     } else {
                         lastError = parsed.error ?: "Empty response"
+                        break@outer
                     }
                 }
             }

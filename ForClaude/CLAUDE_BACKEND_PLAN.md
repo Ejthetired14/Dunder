@@ -296,10 +296,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: a failed model call shows a failed build, not a successful one.
 
 ### BUG-10 - LlmClient retry/fallback issues
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: `repeat(2) { ... return@repeat }` does not leave the loop, so a non-retryable 4xx is simply sent a second time; fixed `delay(600)` and no `Retry-After`; no per-provider cooldown or circuit breaker, so a rate-limited or dead provider is tried again every cycle by every agent (anonymous OVH allows 2 requests/minute); `Semaphore(2)` is held across the whole fallback chain; `call.execute()` inside `withContext` is not cancelled when the coroutine is cancelled; `LlmRequest.json` is never mapped to `response_format`.
 - Fix: break out correctly; per-provider cooldown with exponential backoff and `Retry-After`; release the permit between providers; cancel the `Call` on coroutine cancellation (`suspendCancellableCoroutine` + `invokeOnCancellation`); send `response_format: json_object` where the provider supports it.
 - Done when: MockWebServer tests cover 4xx, 429 with `Retry-After`, 500 fallback, cancellation.
+- Implemented (2026-11-25): Changed `repeat(2)` to labeled `for` loop with `break@outer` so 4xx errors break out instead of continuing. Remaining: per-provider cooldown, Retry-After header, cancellable calls, response_format mapping.
 
 ### BUG-11 - Smaller connector defects
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: S each
