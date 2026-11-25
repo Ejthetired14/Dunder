@@ -689,8 +689,8 @@ class Repository(
     }
 
     suspend fun getSkillConfig(agentId: String, skillId: String): JSONObject? {
-        val agentSkill = db.skillDao().getAgentSkill(agentId, skillId) ?: return null
-        return org.json.JSONObject(agentSkill.config)
+        val agentSkill = db.agentSkillDao().get(agentId, skillId) ?: return null
+        return org.json.JSONObject(agentSkill.configJson)
     }
 
     suspend fun seedSkillsIfNeeded() {

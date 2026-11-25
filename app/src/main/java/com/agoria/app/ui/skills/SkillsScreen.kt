@@ -217,7 +217,7 @@ private fun SkillRow(
     val agentSkill = agentSkills[skill.id]
     var showConfig by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
-    var configText by remember { mutableStateOf(agentSkill?.config ?: "{}") }
+    var configText by remember { mutableStateOf(agentSkill?.configJson ?: "{}") }
 
     val isSelectedAgent = agentId != null
 
