@@ -261,7 +261,7 @@ object ConnectorCatalog {
                 ConnectorActionDef("create_pr", "Create PR", "Open a pull request from a branch into base (default: main). Requires approval.", true, "{\"repo\": \"owner/name\", \"head\": \"feature/xyz\", \"base\": \"main\", \"title\": \"...\", \"body\": \"...\"}"),
                 ConnectorActionDef("list_prs", "List PRs", "List pull requests for a repository.", false, "{\"repo\": \"owner/name\", \"state\": \"open\"}"),
             ),
-            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (read/write to code, issues, metadata, administration), and paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed. Invisible/control characters are stripped automatically.",
+            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (read/write to code, issues, metadata) — do NOT grant administration unless you need repo settings changes. Paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed. Invisible/control characters are stripped automatically.",
             docsUrl = "https://docs.github.com/en/rest",
             risk = "high",
             iconKey = "github",

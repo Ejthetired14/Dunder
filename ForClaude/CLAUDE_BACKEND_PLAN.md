@@ -302,13 +302,15 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: MockWebServer tests cover 4xx, 429 with `Retry-After`, 500 fallback, cancellation.
 
 ### BUG-11 - Smaller connector defects
-- Status: TODO | Effort: S each
-- Telegram `get_updates` returns only update ids, not message text.
-- Notion `create_page`: both branches of the `properties` builder are identical, and a database parent needs the database's real title property name (not literal `title`).
-- GitHub `setupHelp` asks for `administration` permission; recommend least privilege (contents + issues).
-- `ConnectorEntity`/catalog fields `zoneId`, `organizationId` are unused.
-- `stripe.verify_key` takes an `apiKey` argument from the agent (puts a secret key into approval details and logs); remove.
-- `huggingface` actions are non-mutating but send agent-controlled text to a third party; review risk level.
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S each
+- BUG-11 sub-items:
+  - Telegram `get_updates` returns only update ids, not message text.
+  - Notion `create_page`: both branches of the `properties` builder are identical, and a database parent needs the database's real title property name (not literal `title`).
+  - GitHub `setupHelp` asks for `administration` permission; recommend least privilege (contents + issues).
+  - `ConnectorEntity`/catalog fields `zoneId`, `organizationId` are unused.
+  - `stripe.verify_key` takes an `apiKey` argument from the agent (puts a secret key into approval details and logs); remove.
+  - `huggingface` actions are non-mutating but send agent-controlled text to a third party; review risk level.
+- Implemented (2026-11-25): `stripe.verify_key` now uses configured apiKey instead of agent-supplied. GitHub setupHelp updated to recommend least privilege (no administration). Remaining: Telegram get_updates, Notion create_page, unused fields, huggingface risk level.
 
 ---
 
