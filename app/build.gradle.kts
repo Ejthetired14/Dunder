@@ -84,10 +84,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     testImplementation("junit:junit:4.13.2")
-    // Test dependencies for Room migration tests
-    testImplementation("androidx.room:room-testing:2.6.1")
-    testImplementation("androidx.test:core:1.5.0")
-    testImplementation("androidx.test:rules:1.5.0")
-    testImplementation("androidx.test.ext:junit:1.1.5")
-    testImplementation("androidx.test:runner:1.5.2")
+    // Test dependencies for Room migration tests (instrumented)
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.test:core:1.5.0")
+    androidTestImplementation("androidx.test:rules:1.5.0")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
 }
