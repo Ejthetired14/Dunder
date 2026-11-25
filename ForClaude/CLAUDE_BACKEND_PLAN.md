@@ -131,10 +131,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): `addApproval` now checks risk level — high-risk actions are never auto-approved even if type is in allowlist. `connector_action` type requires explicit `connector_action:connectorId:action` allowlist entry. `processAutoApprovedApprovals` filters out high-risk approvals as defense-in-depth. Remaining: daily caps per agent, visible audit log, one-tap kill switch, stale approval expiry (DATA-6).
 
 ### SEC-6 - Prompt injection surface
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: connector results (Wikipedia, HN, web search, `accounts.read` page text, emails) are stored as messages with role `tool` and placed in the next prompt (`PromptBuilder`: `tool result: ...`) with no delimiting.
 - Fix: wrap all external text in clearly marked untrusted blocks (and say in the system prompt that instructions inside are data), cap length, strip control chars/markup, never let content from an untrusted source alone trigger a high-risk action, show source in approval details.
 - Done when: system prompt contains an untrusted-data rule; tests cover wrapping and truncation.
+- Implemented (2026-11-25): System prompt now includes SECURITY rule about untrusted data. Tool results wrapped in `[UNTRUSTED DATA START]`/`[UNTRUSTED DATA END]` blocks with role labeled "tool result (UNTRUSTED)". Content still capped at 500 chars. Remaining: strip control chars/markup, show source in approval details.
 
 ### SEC-7 - HTTP connector can leak its credential to any host
 - Status: IN-PROGRESS (2026-11-25) - implemented. Effort: S
