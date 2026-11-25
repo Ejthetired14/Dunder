@@ -256,14 +256,16 @@ class ConnectorExecutor(
         headers: Map<String, String> = emptyMap(),
         body: String? = null,
     ): HttpResult {
-        // Edge APIs answer 429/500/503 under load, and a dropped socket is not a real answer.
-        // Three attempts with 1s, 2s and 4s backoff turn most of those into a normal reply.
+        // BUG-6: only retry idempotent methods (GET, HEAD, PUT, DELETE). POST/PATCH are never
+        // retried to avoid duplicate side effects (emails, issues, payments).
+        val upperMethod = method.uppercase()
+        val idempotent = upperMethod in setOf("GET", "HEAD", "PUT", "DELETE")
         var attempt = 0
         var last = HttpResult(-1, "not attempted", false)
         while (attempt < 3) {
-            last = httpOnce(method, url, headers, body)
+            last = httpOnce(upperMethod, url, headers, body)
             val transient = last.code == -1 || last.code == 429 || last.code >= 500
-            if (!transient) return last
+            if (!transient || !idempotent) return last
             attempt++
             if (attempt < 3) {
                 val waitMs = 1000L shl (attempt - 1)

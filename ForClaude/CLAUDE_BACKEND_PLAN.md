@@ -272,11 +272,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: deploy of a hello-world module Worker returns a working URL.
 
 ### BUG-6 - HTTP retries repeat non-idempotent requests
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `ConnectorExecutor.http()` retries up to 3 times on `-1`, `429`, `>=500` for **all** methods with `Thread.sleep`.
 - Effect: duplicate emails, Slack/Discord posts, GitHub issues, PayPal/Stripe objects.
 - Fix: retry only GET/HEAD (and PUT/DELETE when safe), or POST only with an idempotency key; honor `Retry-After`; use coroutine `delay`, not `Thread.sleep`; make calls cancellable (see RUN-1).
 - Done when: a MockWebServer test shows POST is sent once on 500.
+- Implemented (2026-11-25): `http()` now only retries idempotent methods (GET, HEAD, PUT, DELETE). POST and PATCH are never retried. Remaining: honor `Retry-After` header, use coroutine `delay` instead of `Thread.sleep`, make calls cancellable.
 
 ### BUG-7 - String template mistakes in `AgentRuntime` / `PromptBuilder`
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
