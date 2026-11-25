@@ -260,8 +260,8 @@ interface SettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(settings: SettingsEntity)
 
-    @Query("DELETE FROM settings")
-    suspend fun deleteAll()
+    @Query("UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :deltaCents) WHERE id = 1")
+    suspend fun addInfrastructureFund(deltaCents: Long)
 }
 
 @Dao

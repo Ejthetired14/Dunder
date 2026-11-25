@@ -317,10 +317,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ## 4. P1 - Data model, reliability, scale
 
 ### DATA-1 - Lost updates on settings and fund balance
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: `Repository.updateSettings` reads the whole row then upserts the whole row; `updateInfrastructureFund` is read-modify-write with no transaction; the UI and the runtime both write settings.
 - Fix: atomic SQL (`UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta)`), `@Transaction` DAO methods, or a ledger table (preferred, see BUG-8).
 - Note (2026-11-22): RUN-3's stop path now adds one more `updateSettings` writer (`autonomyEnabled=false`); it is a single-field write and shares this lost-update risk until DATA-1 lands.
+- Implemented (2026-11-25): `SettingsDao.addInfrastructureFund()` now uses atomic SQL `UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :deltaCents)`. `Repository.updateInfrastructureFund()` calls this instead of read-modify-write. Remaining: atomic settings updates for other fields, @Transaction DAO methods.
 
 ### DATA-2 - Unbounded tables and full-table reads on every cycle
 - Status: TODO | Effort: M | Verify first: `Daos.kt` was not reviewed

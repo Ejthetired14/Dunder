@@ -1360,10 +1360,7 @@ class Repository(
     }
 
     suspend fun updateInfrastructureFund(deltaCents: Long) {
-        updateSettings { s ->
-            val newFund = (s.infrastructureFundCents + deltaCents).coerceAtLeast(0L)
-            s.copy(infrastructureFundCents = newFund)
-        }
+        db.settingsDao().addInfrastructureFund(deltaCents)
     }
 
     suspend fun getInfrastructureFund(): Long = settings().infrastructureFundCents
