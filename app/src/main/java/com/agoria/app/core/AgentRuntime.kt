@@ -564,7 +564,7 @@ class AgentRuntime(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to create Stripe product '$productName'",
-                        summary = "Create Stripe product and price for monetization. Amount: \${amountCents/100}/$interval",
+                        summary = "Create Stripe product and price for monetization. Amount: ${amountCents/100}/$interval",
                         details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
                         risk = "high",
                     )
@@ -588,7 +588,7 @@ class AgentRuntime(
                         if (cost <= 0) {
                             repo.addDiary(agentId, "error", "Invalid reinvestment cost calculated.", 2)
                         } else if (cost > fund) {
-                            repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need \${cost/100}, have \${fund/100}.", 2)
+                            repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need ${cost/100}, have ${fund/100}.", 2)
                         } else {
                             // SEC-4: reinvest requires approval (state-changing action)
                             val approval = repo.addApproval(
@@ -639,7 +639,7 @@ class AgentRuntime(
                 }
                 if (recorded > 0) {
                     val fund = repo.getInfrastructureFund()
-                    repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: \${fund/100}", 4)
+                    repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: ${fund/100}", 4)
                 }
                 repo.addMessage(agentId, "tool", result)
             }

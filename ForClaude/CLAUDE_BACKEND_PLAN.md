@@ -279,7 +279,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: a MockWebServer test shows POST is sent once on 500.
 
 ### BUG-7 - String template mistakes in `AgentRuntime` / `PromptBuilder`
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `'$request.connectorId'` (prints the object, not the id) in `approveConnectorRequest`; `"\${amountCents/100}"` style escapes in the `record_revenue`, `reinvest`, `check_revenue` diary strings print literal `${...}` text; `\$${...}` in `PromptBuilder` raw strings prints a backslash.
 - Fix: use `${request.connectorId}` and real `$` handling; add a unit test that renders these messages.
 
