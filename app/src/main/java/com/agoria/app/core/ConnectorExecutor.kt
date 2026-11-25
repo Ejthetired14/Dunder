@@ -299,12 +299,14 @@ class ConnectorExecutor(
                 else -> builder.method(method.uppercase(), (body ?: "").toRequestBody(media)).build()
             }
             val response = client.newCall(request).execute()
-            val responseBody = try {
-                response.body?.string() ?: ""
-            } catch (_: Exception) {
-                ""
+            response.use {
+                val responseBody = try {
+                    it.body?.source()?.readString(Charsets.UTF_8)?.take(1_000_000) ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+                HttpResult(it.code, responseBody, it.isSuccessful)
             }
-            HttpResult(response.code, responseBody, response.isSuccessful)
         } catch (e: Exception) {
             HttpResult(-1, e.message ?: "Network error", false)
         }
@@ -482,7 +484,9 @@ class ConnectorExecutor(
             return ""
         }
         val html = try {
-            response.body?.string().orEmpty()
+            response.use { resp ->
+                resp.body?.source()?.readString(Charsets.UTF_8)?.take(1_000_000).orEmpty()
+            }
         } catch (_: Exception) {
             ""
         }

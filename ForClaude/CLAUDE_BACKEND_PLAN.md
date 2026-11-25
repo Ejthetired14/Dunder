@@ -399,9 +399,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: per-agent subdirectory (read-share via explicit grant), total quota, depth/count limits for walks.
 
 ### CONN-3 - Bounded response bodies, closed responses
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - implemented. Effort: S
 - Evidence: `httpOnce` and `duckDuckGoResults` read whole bodies with `string()`; `duckDuckGoResults` does not close the response on failure paths.
 - Fix: cap body size (for example 1 MB) with a streaming read, always `use {}` the response.
+- Implemented (2026-11-25): `httpOnce` now uses `response.use {}` with streaming read capped at 1 MB. `duckDuckGoResults` now uses `response.use {}` with streaming read capped at 1 MB.
 
 ### CONN-4 - Web search relies on scraping
 - Status: TODO | Effort: M
