@@ -248,6 +248,10 @@ jobs:
           path: site
           name: github-pages
 
+      # Wait for artifact to be visible to deploy-pages (intermittent race condition)
+      - name: Wait for artifact propagation
+        run: sleep 10
+
       - name: Deploy Pages
         uses: actions/deploy-pages@v4
         with:
