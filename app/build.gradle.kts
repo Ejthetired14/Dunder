@@ -84,6 +84,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for JVM unit tests; android.jar only carries stubs of it.
+    testImplementation("org.json:json:20240303")
     // Test dependencies for Room migration tests (instrumented)
     androidTestImplementation("androidx.room:room-testing:2.6.1")
     androidTestImplementation("androidx.test:core:1.5.0")

@@ -13,6 +13,7 @@ import com.agoria.app.data.RevenueEntity
 import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.SecretCipher
+import com.agoria.app.util.SnapshotSecrets
 import com.agoria.app.util.Time
 import org.json.JSONArray
 import org.json.JSONObject
@@ -239,7 +240,9 @@ class Repository(
             if (!force && newest != null && System.currentTimeMillis() - newest.lastModified() < day) {
                 return newest
             }
-            val snapshot = exportSnapshot()
+            // Auto-backups sit in app storage for months, so they never carry credentials
+            // (SEC-2); the stored configs are merged back in on import.
+            val snapshot = exportSnapshot(includeSecrets = false)
             val file = java.io.File(dir, "auto-backup-${System.currentTimeMillis()}.json")
             Files.writeText(file, snapshot.toString(2))
             // Keep the five most recent snapshots; they are small and each one is a full restore.
@@ -594,10 +597,14 @@ class Repository(
 
     suspend fun saveConnectorConfig(id: String, config: JSONObject) {
         val connector = db.connectorDao().get(id) ?: return
+        // Do not mark a connector usable while a required field (usually its secret) is missing:
+        // that is exactly the state after importing a secret-free snapshot (SEC-2).
+        val missingRequired = ConnectorCatalog.get(id)?.fields
+            ?.any { it.required && config.optString(it.key).isBlank() } == true
         db.connectorDao().update(
             connector.copy(
                 configEnc = SecretCipher.encrypt(config.toString()),
-                status = "configured",
+                status = if (missingRequired) "needs_setup" else "configured",
                 lastError = null,
             ),
         )
@@ -851,7 +858,12 @@ class Repository(
 
     // ------------------------------------------------------------------ export
 
-    suspend fun exportSnapshot(): JSONObject {
+    /**
+     * Builds the exportable snapshot. [includeSecrets] is opt-in and is never used for anything
+     * written automatically: the default carries no API key, token or connector credential
+     * (SEC-2), so the file can be shared without leaking the office's accounts.
+     */
+    suspend fun exportSnapshot(includeSecrets: Boolean = false): JSONObject {
         val root = JSONObject()
         root.put("app", "Dunder")
         root.put("version", 2)
@@ -999,17 +1011,19 @@ class Repository(
         )
 
         // Connector settings are exported decrypted: the on-device key that encrypted them does not
-        // exist on the next phone, so an encrypted blob would restore as unreadable garbage.
+        // exist on the next phone, so an encrypted blob would restore as unreadable garbage. The
+        // credentials are stripped by the redaction pass at the end of this function (SEC-2).
         root.put(
             "connectors",
             JSONArray().apply {
                 db.connectorDao().getAll().forEach { c ->
+                    val config = connectorConfig(c.id) ?: JSONObject()
                     put(
                         JSONObject().apply {
                             put("id", c.id)
                             put("status", c.status)
                             put("scopes", c.scopes)
-                            put("config", connectorConfig(c.id) ?: JSONObject())
+                            put("config", config)
                         },
                     )
                 }
@@ -1058,6 +1072,10 @@ class Repository(
             },
         )
 
+        // One pass removes every credential (SEC-2): connector fields the catalog marks secret,
+        // anything named like a token/secret, and secrets inside skill config JSON. Keeping it in
+        // one place means a field added to the snapshot later cannot leak by being forgotten.
+        if (!includeSecrets) SnapshotSecrets.redactSnapshot(root)
         return root
     }
 
@@ -1088,7 +1106,12 @@ class Repository(
                     if (id.isBlank()) continue
                     val config = c.optJSONObject("config") ?: JSONObject()
                     if (config.length() > 0) {
-                        saveConnectorConfig(id, config)
+                        // A snapshot has no secrets (SEC-2), so merge instead of overwriting: the
+                        // same device keeps its stored credentials, a new one asks for them again.
+                        val merged = connectorConfig(id)?.let { existing -> JSONObject(existing.toString()) }
+                            ?: JSONObject()
+                        for (key in config.keys().asSequence().toList()) merged.put(key, config.get(key))
+                        saveConnectorConfig(id, merged)
                     }
                 }
             }
