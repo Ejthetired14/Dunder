@@ -480,7 +480,21 @@ class Repository(
         val s = settings()
         val normalizedType = type.lowercase().trim()
         val autoApproveTypes = s.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
-        val autoApprove = s.autoApproveEnabled && autoApproveTypes.contains(normalizedType)
+        // SEC-5: never auto-approve high-risk actions, even if the type is in autoApproveTypes.
+        // Also require an explicit (connectorId, action) allowlist for connector_action types.
+        val isHighRisk = risk.lowercase().trim() == "high"
+        val isConnectorAction = normalizedType == "connector_action"
+        var autoApprove = s.autoApproveEnabled && autoApproveTypes.contains(normalizedType) && !isHighRisk
+
+        // SEC-5: for connector_action, require explicit (connectorId, action) allowlist entry.
+        // The allowlist is stored in settings.autoApproveTypes as "connector_action:connectorId:action" entries.
+        if (autoApprove && isConnectorAction) {
+            val detailsObj = try { org.json.JSONObject(details) } catch (_: Exception) { null }
+            val connectorId = detailsObj?.optString("connector_id", detailsObj.optString("connector", "")) ?: ""
+            val actionName = detailsObj?.optString("action_name", detailsObj.optString("action", "")) ?: ""
+            val allowlistEntry = "connector_action:${connectorId.lowercase()}:${actionName.lowercase()}"
+            autoApprove = autoApproveTypes.contains(allowlistEntry)
+        }
         
         val approval = ApprovalEntity(
             id = UUID.randomUUID().toString(),

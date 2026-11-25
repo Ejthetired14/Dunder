@@ -270,7 +270,7 @@ class AgentRuntime(
 
         val autoApproveTypes = settings.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val allApprovals = repo.approvals.first()
-        val autoPending = allApprovals.filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
+        val autoPending = allApprovals.filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes && it.risk.lowercase().trim() != "high" }
 
         if (autoPending.isNotEmpty()) {
             Log.i("ApprovalFlow", "Auto-approve processing ${autoPending.size} approvals (autoApproveTypes=$autoApproveTypes)")

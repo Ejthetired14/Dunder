@@ -123,11 +123,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): `record_revenue` case now logs an error and refuses to record revenue. `reinvest` now creates a high-risk approval instead of directly executing. Approval execution added in `executeApproval` for type `reinvest`. Numeric ranges validated (priority coerced 1-100, cost/fund checked).
 
 ### SEC-5 - Auto-approve is type-level and risk-blind
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: `Repository.addApproval` and `AgentRuntime.processAutoApprovedApprovals` auto-approve by `approval.type` only; `autoApproveTypes` may contain `connector_action`.
 - Problem: enabling auto-approve for `connector_action` approves every connector action, including payments, email, deploy, delete.
 - Fix: auto-approve only an explicit `(connectorId, action)` allowlist with `risk <= medium`; never for `risk = high`; daily caps per agent; a visible audit log; one-tap kill switch. Also expire stale approvals (see DATA-6).
 - Done when: unit tests show a high-risk action is never auto-approved.
+- Implemented (2026-11-25): `addApproval` now checks risk level — high-risk actions are never auto-approved even if type is in allowlist. `connector_action` type requires explicit `connector_action:connectorId:action` allowlist entry. `processAutoApprovedApprovals` filters out high-risk approvals as defense-in-depth. Remaining: daily caps per agent, visible audit log, one-tap kill switch, stale approval expiry (DATA-6).
 
 ### SEC-6 - Prompt injection surface
 - Status: TODO | Effort: M
