@@ -396,9 +396,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): Added `ConnectorCatalog.canonicalizeAction()` method. `isReadOnly` now canonicalizes action before lookup. `check_revenue` now checks `AgentPolicy.isAutoAllowed` before proceeding; creates approval if not allowed. Remaining: full connector-specific canonicalization in ConnectorCatalog (github, notion, agentmail aliases).
 
 ### CONN-2 - `files` connector shares one workspace and has no quota
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: all agents write to `Files.workspace(context)`, the same tree as builds; `write` accepts 200,000 chars per call with no total limit; `findByName` walks the whole tree.
 - Fix: per-agent subdirectory (read-share via explicit grant), total quota, depth/count limits for walks.
+- Implemented (2026-11-25): `findByName` now uses `maxDepth(5)` to limit walk depth. `write` action now checks total workspace size against 50 MB quota before writing. Remaining: per-agent subdirectory, read-share via explicit grant.
 
 ### CONN-3 - Bounded response bodies, closed responses
 - Status: IN-PROGRESS (2026-11-25) - implemented. Effort: S

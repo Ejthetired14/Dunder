@@ -758,6 +758,11 @@ class ConnectorExecutor(
             "write" -> {
                 val content = args.optString("content")
                 if (content.isBlank()) return ConnectorResult(false, "Missing content")
+                // CONN-2: enforce total workspace quota (50 MB)
+                val totalSize = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                if (totalSize + content.length > 50 * 1024 * 1024) {
+                    return ConnectorResult(false, "Workspace quota exceeded (50 MB limit). Delete some files first.")
+                }
                 Files.writeText(target, content.take(200_000))
                 ConnectorResult(true, "Wrote ${content.length} characters to $relative.")
             }
@@ -768,6 +773,7 @@ class ConnectorExecutor(
     private fun findByName(root: File, name: String): List<String> {
         if (name.isBlank()) return emptyList()
         return root.walkTopDown()
+            .maxDepth(5) // CONN-2: limit walk depth
             .filter { it.isFile && it.name.equals(name, ignoreCase = true) }
             .take(5)
             .map { root.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
