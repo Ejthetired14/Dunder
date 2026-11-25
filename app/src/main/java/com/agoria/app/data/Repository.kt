@@ -655,35 +655,38 @@ class Repository(
 
     suspend fun enabledSkillsList(): List<SkillEntity> = db.skillDao().getAll().filter { it.enabled }
 
-    suspend fun agentSkills(agentId: String): List<SkillEntity> = db.skillDao().getForAgent(agentId)
+    suspend fun agentSkills(agentId: String): List<SkillEntity> {
+        return db.agentSkillDao().getEnabledForAgent(agentId).map { agentSkill ->
+            db.skillDao().get(agentSkill.skillId)
+        }.filterNotNull()
+    }
 
-    suspend fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> = db.skillDao().getAgentSkills(agentId)
+    suspend fun agentSkillConfigs(agentId: String): List<AgentSkillEntity> = db.agentSkillDao().getEnabledForAgent(agentId)
 
     suspend fun installSkill(agentId: String, skillId: String, config: JSONObject = JSONObject()) {
         val skill = db.skillDao().get(skillId) ?: return
         if (!skill.enabled) return
         val now = Time.now()
-        db.skillDao().install(
+        db.agentSkillDao().insert(
             AgentSkillEntity(
                 agentId = agentId,
                 skillId = skillId,
-                config = config.toString(),
+                enabled = true,
+                configJson = config.toString(),
                 installedAt = now,
-                updatedAt = now,
             ),
         )
     }
 
     suspend fun uninstallSkill(agentId: String, skillId: String) {
-        db.skillDao().uninstall(agentId, skillId)
+        db.agentSkillDao().delete(agentId, skillId)
     }
 
     suspend fun updateSkillConfig(agentId: String, skillId: String, config: JSONObject) {
-        val existing = db.skillDao().getAgentSkill(agentId, skillId) ?: return
-        db.skillDao().install(
+        val existing = db.agentSkillDao().get(agentId, skillId) ?: return
+        db.agentSkillDao().insert(
             existing.copy(
-                config = config.toString(),
-                updatedAt = Time.now(),
+                configJson = config.toString(),
             ),
         )
     }
