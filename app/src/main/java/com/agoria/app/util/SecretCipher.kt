@@ -49,7 +49,12 @@ object SecretCipher {
             System.arraycopy(iv, 0, out, 0, iv.size)
             System.arraycopy(encrypted, 0, out, iv.size, encrypted.size)
             Base64.encodeToString(out, Base64.NO_WRAP)
-        } catch (_: Exception) {
+        } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            // SEC-9: key was invalidated (e.g., new biometric enrolled). Surface the failure.
+            android.util.Log.e("SecretCipher", "Keystore key permanently invalidated; cannot encrypt", e)
+            null
+        } catch (e: Exception) {
+            android.util.Log.e("SecretCipher", "Encrypt failed", e)
             null
         }
     }
@@ -64,7 +69,12 @@ object SecretCipher {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, iv))
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
-        } catch (_: Exception) {
+        } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            // SEC-9: key was invalidated; caller should mark connector/provider as needs_reentry
+            android.util.Log.e("SecretCipher", "Keystore key permanently invalidated; cannot decrypt", e)
+            null
+        } catch (e: Exception) {
+            android.util.Log.e("SecretCipher", "Decrypt failed", e)
             null
         }
     }

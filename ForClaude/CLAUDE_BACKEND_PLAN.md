@@ -115,11 +115,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Remaining to close this task: (1) **owner**: confirm the four signing secrets exist, then push a test tag and confirm the signed release; (2) **owner**: decide DEC-6 (rotate any keystore made by `generate-keystore.yml`; also check the Actions run logs/artifacts of past runs and delete them); (3) pinning actions by SHA, splitting signing into its own job and Dependabot are tracked as SEC-14; (4) flip to `DONE`.
 
 ### SEC-4 - Money and config actions run with no approval
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - implemented. Effort: S
 - Evidence: in `AgentRuntime.runCycle`, `record_revenue` and `reinvest` are handled directly. They are not in `AgentPolicy.autoActions` and never go through `addApproval`.
 - Problem: a model (or injected text) can fabricate revenue, inflate `infrastructureFundCents`, then "reinvest" to rewrite provider `enabled`/`priority`/`model` rows.
 - Fix: remove `record_revenue` as an agent action (revenue should come only from verified payment events, see BUG-8) and require approval for `reinvest`, or delete both. Validate numeric ranges.
 - Done when: no state-changing action in `AgentRuntime` is reachable without passing `AgentPolicy`.
+- Implemented (2026-11-25): `record_revenue` case now logs an error and refuses to record revenue. `reinvest` now creates a high-risk approval instead of directly executing. Approval execution added in `executeApproval` for type `reinvest`. Numeric ranges validated (priority coerced 1-100, cost/fund checked).
 
 ### SEC-5 - Auto-approve is type-level and risk-blind
 - Status: TODO | Effort: M
@@ -135,23 +136,26 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: system prompt contains an untrusted-data rule; tests cover wrapping and truncation.
 
 ### SEC-7 - HTTP connector can leak its credential to any host
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - implemented. Effort: S
 - Evidence: `ConnectorExecutor.http(config, ...)`: if `path` starts with `http://`/`https://` it replaces `baseUrl`, then `Authorization: Bearer <apiKey/agent token>` is still attached; `args.headers` can also override `Authorization`.
 - Fix: pin the final URL host to the configured `baseUrl` host; https only (opt-in for http); block loopback/private/link-local ranges; ignore agent-supplied `Authorization`/`Host`.
 - Done when: unit tests reject cross-host URLs and private IPs.
+- Implemented (2026-11-25): HTTP connector now validates base URL scheme and host, rejects cross-host URLs in path, blocks private/loopback/link-local hosts, ignores agent-supplied Authorization/Host headers, and rejects HTTP downgrade from HTTPS. Added `isPrivateOrLoopbackHost` helper.
 
 ### SEC-8 - Unvalidated values interpolated into URLs and generated code
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: Cloudflare `name` in `"$baseUrl/$name"`; GitHub `repo` in `/repos/$repoName/...`; Stripe `eventType`; GitHub `state`; currency `from`/`to`; `stripeWebhookWorkerCode` pastes `name`, `webhookSecret`, `callbackUrl` into JS source unescaped (a newline in `name` closes the comment and injects code).
 - Fix: validate with strict regexes (`^[A-Za-z0-9._-]+$`, `^[\w.-]+/[\w.-]+$`, ISO currency codes) and `enc()` every query value; embed generated JS values via JSON-escaped literals.
 - Done when: fuzz-style unit tests with `../`, `?`, newlines are rejected.
+- Implemented (2026-11-25): Cloudflare worker names validated with strict regex `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. `stripeWebhookWorkerCode` now uses `org.json.JSONObject.quote()` for JSON-escaping `webhookSecret` and `callbackUrl`. Remaining: GitHub repo name validation, Stripe eventType validation, currency code validation, GitHub state validation.
 
 ### SEC-9 - SecretCipher swallows failures
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `SecretCipher.encrypt` returns `null` on any exception; `Repository.saveProviderKey/saveConnectorConfig` store that `null`; `decrypt` returns `null` on failure.
 - Problem: a failed encrypt silently drops a secret the user thinks was saved; after restore/key invalidation, every secret looks like "Missing API key".
 - Fix: return a result type; surface an error to the UI; mark connector/provider `needs_reentry` when decrypt fails; handle `KeyPermanentlyInvalidatedException`; never persist blank on failure.
 - Done when: tests with a fake cipher cover failure paths and UI state shows "re-enter secret".
+- Implemented (2026-11-25): `KeyPermanentlyInvalidatedException` now caught separately with error logging. All exceptions logged via `android.util.Log.e` instead of silently swallowed. Remaining: return a result type, surface errors to UI, mark connectors/providers as `needs_reentry` on decrypt failure.
 
 ### SEC-10 - Self-updater accepts any URL and does no integrity check
 - Status: IN-PROGRESS (2026-11-23) - implemented, **CI + first tagged release + device check pending** | Effort: M

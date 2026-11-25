@@ -772,6 +772,13 @@ class ConnectorExecutor(
 
     private suspend fun http(config: JSONObject?, action: String, args: JSONObject, agentId: String?): ConnectorResult {
         val baseUrl = cfg(config, "baseUrl") ?: return ConnectorResult(false, "Missing base URL")
+        val baseUri = try { java.net.URI(baseUrl) } catch (_: Exception) { return ConnectorResult(false, "Invalid base URL") }
+        val baseHost = baseUri.host ?: return ConnectorResult(false, "Base URL has no host")
+        val baseScheme = baseUri.scheme?.lowercase() ?: "https"
+        if (baseScheme != "https" && baseScheme != "http") return ConnectorResult(false, "Base URL scheme must be http or https")
+        // SEC-7: block private/loopback/link-local hosts
+        if (isPrivateOrLoopbackHost(baseHost)) return ConnectorResult(false, "Base URL host is not allowed (private/loopback)")
+
         val agentToken = if (cfg(config, "authSource") == "agent") {
             agentId?.let { repo.agent(it)?.apiToken }?.ifBlank { null }
         } else {
@@ -781,14 +788,41 @@ class ConnectorExecutor(
         val defaultHeaders = parseHeaders(cfg(config, "defaultHeaders"))
         val method = args.optString("method", "GET").uppercase()
         val path = args.optString("path", "")
-        val url = if (path.startsWith("http://") || path.startsWith("https://")) {
-            path
+        val url: String
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            // SEC-7: only allow same-host redirects; reject cross-host URLs
+            val pathUri = try { java.net.URI(path) } catch (_: Exception) { return ConnectorResult(false, "Invalid URL in path") }
+            val pathHost = pathUri.host
+            if (pathHost != null && !pathHost.equals(baseHost, ignoreCase = true)) {
+                return ConnectorResult(false, "Cross-host URL rejected (SEC-7): $pathHost != $baseHost")
+            }
+            val pathScheme = pathUri.scheme?.lowercase()
+            if (pathScheme == "http" && baseScheme == "https") {
+                return ConnectorResult(false, "Downgrade from HTTPS to HTTP rejected (SEC-7)")
+            }
+            url = path
         } else {
-            baseUrl.trimEnd('/') + "/" + path.trimStart('/')
+            url = baseUrl.trimEnd('/') + "/" + path.trimStart('/')
         }
+        // SEC-7: final host check
+        val finalUri = try { java.net.URI(url) } catch (_: Exception) { return ConnectorResult(false, "Invalid final URL") }
+        val finalHost = finalUri.host
+        if (finalHost != null && !finalHost.equals(baseHost, ignoreCase = true)) {
+            return ConnectorResult(false, "Final URL host mismatch (SEC-7)")
+        }
+        if (isPrivateOrLoopbackHost(finalHost ?: baseHost)) {
+            return ConnectorResult(false, "Final URL host is not allowed (private/loopback)")
+        }
+
         val headers = defaultHeaders.toMutableMap()
         if (!apiKey.isNullOrBlank()) headers["Authorization"] = "Bearer $apiKey"
-        parseHeaders(args.optString("headers", "").ifBlank { null })?.let { headers.putAll(it) }
+        // SEC-7: ignore agent-supplied Authorization/Host headers
+        parseHeaders(args.optString("headers", "").ifBlank { null })?.let { agentHeaders ->
+            for ((k, v) in agentHeaders) {
+                if (k.equals("Authorization", ignoreCase = true) || k.equals("Host", ignoreCase = true)) continue
+                headers[k] = v
+            }
+        }
         val body = args.optString("body", "").ifBlank { null }
         val response = http(method, url, headers, if (method == "GET" || method == "HEAD") null else body)
         return if (response.ok) {
@@ -796,6 +830,20 @@ class ConnectorExecutor(
         } else {
             ConnectorResult(false, "HTTP $method $url failed (${response.code}): ${text(response.body, 500)}")
         }
+    }
+
+    private fun isPrivateOrLoopbackHost(host: String): Boolean {
+        // SEC-7: block loopback, private, link-local ranges
+        val lower = host.lowercase()
+        if (lower == "localhost" || lower == "127.0.0.1" || lower == "::1") return true
+        // Try to resolve as IP
+        try {
+            val addr = java.net.InetAddress.getByName(host)
+            if (addr.isLoopbackAddress || addr.isSiteLocalAddress || addr.isLinkLocalAddress || addr.isAnyLocalAddress) return true
+        } catch (_: Exception) {
+            // Not an IP; allow (DNS name)
+        }
+        return false
     }
 
     private fun parseHeaders(raw: String?): Map<String, String> {
@@ -2611,6 +2659,9 @@ class ConnectorExecutor(
         return when (action) {
             "deploy" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                if (!name.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9._-]*$"))) {
+                    return ConnectorResult(false, "Invalid worker name (SEC-8): must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
+                }
                 val code = args.optString("code").ifBlank { return ConnectorResult(false, "Missing worker code") }
                 val url = "$baseUrl/$name"
                 val response = http("PUT", url, scriptHeaders, code)
@@ -3054,12 +3105,16 @@ class ConnectorExecutor(
 
     private fun stripeWebhookWorkerCode(name: String, webhookSecret: String, callbackUrl: String): String {
         val dollar = "\$"
+        // SEC-8: JSON-escape values to prevent code injection
+        val safeName = org.json.JSONObject.quote(name)
+        val safeSecret = org.json.JSONObject.quote(webhookSecret)
+        val safeCallback = org.json.JSONObject.quote(callbackUrl)
         return """
             // Stripe Webhook Handler for $name
             // Receives Stripe events, verifies signature, forwards to app
             
-            const WEBHOOK_SECRET = "$webhookSecret";
-            const CALLBACK_URL = "$callbackUrl";
+            const WEBHOOK_SECRET = $safeSecret;
+            const CALLBACK_URL = $safeCallback;
             
             // Minimal crypto for signature verification (Web Crypto API)
             async function verifySignature(payload, signature, secret) {

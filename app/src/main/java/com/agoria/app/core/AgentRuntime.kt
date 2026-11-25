@@ -503,24 +503,11 @@ class AgentRuntime(
             }
 
             "record_revenue" -> {
-                val source = Json.string(input, "source", "api_usage")
-                val amountCents = Json.long(input, "amount_cents", 0L)
-                val currency = Json.string(input, "currency", "USD")
-                val metadata = Json.obj(input, "metadata") ?: JSONObject()
-                if (amountCents > 0) {
-                    val revenue = repo.recordRevenue(agentId, source, amountCents, currency, metadata)
-                    val settings = repo.settings()
-                    val agentShare = settings.agentProfitSharePercent
-                    val userShare = settings.userProfitSharePercent
-                    val agentAmount = (amountCents * agentShare / 100).toLong()
-                    val userAmount = amountCents - agentAmount
-                    repo.updateInfrastructureFund(agentAmount)
-                    val fund = repo.getInfrastructureFund()
-                    log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
-                    repo.addDiary(agentId, "revenue", "Earned \${amountCents/100} USD ($source). Agent fund: \${agentAmount/100}, User: \${userAmount/100}. Infrastructure fund: \${fund/100}", 4)
-                } else {
-                    log("${agent.name} tried to record revenue with zero amount.", "error")
-                }
+                // SEC-4: revenue is no longer an agent action. It must come only from
+                // verified payment events (see BUG-8). Fabricating revenue or inflating
+                // the infrastructure fund is not permitted.
+                log("${agent.name} attempted record_revenue, which is disabled (SEC-4).", "error")
+                repo.addDiary(agentId, "error", "record_revenue is disabled; revenue must come from verified payment events.", 2)
             }
 
             "deploy_service" -> {
@@ -589,7 +576,7 @@ class AgentRuntime(
                 val fund = repo.getInfrastructureFund()
                 val targetProvider = Json.string(input, "provider_id")
                 val targetModel = Json.string(input, "model")
-                val priority = Json.int(input, "priority", 10)
+                val priority = Json.int(input, "priority", 10).coerceIn(1, 100)
                 if (fund <= 0) {
                     repo.addDiary(agentId, "error", "Infrastructure fund is empty. Cannot reinvest.", 2)
                 } else if (targetProvider.isBlank()) {
@@ -598,13 +585,21 @@ class AgentRuntime(
                     val provider = repo.provider(targetProvider)
                     if (provider != null) {
                         val cost = calculateReinvestCost(provider, targetModel, priority)
-                        if (cost <= fund) {
-                            repo.updateProvider(provider.copy(model = targetModel.ifBlank { provider.model }, priority = priority, enabled = true, updatedAt = Time.now()))
-                            repo.updateInfrastructureFund(-cost)
-                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '\${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: \${cost/100}. Fund remaining: \${(fund-cost)/100}", 4)
-                            log("${agent.name} reinvested \${cost/100} to upgrade $targetProvider")
-                        } else {
+                        if (cost <= 0) {
+                            repo.addDiary(agentId, "error", "Invalid reinvestment cost calculated.", 2)
+                        } else if (cost > fund) {
                             repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need \${cost/100}, have \${fund/100}.", 2)
+                        } else {
+                            // SEC-4: reinvest requires approval (state-changing action)
+                            val approval = repo.addApproval(
+                                agentId = agentId,
+                                type = "reinvest",
+                                title = "${agent.name} wants to reinvest ${cost/100} to upgrade $targetProvider",
+                                summary = "Reinvest infrastructure fund to upgrade $targetProvider to model '${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: ${cost/100}. Fund remaining: ${(fund-cost)/100}.",
+                                details = JSONObject().put("provider_id", targetProvider).put("model", targetModel).put("priority", priority).put("cost", cost).put("fund", fund).toString(2),
+                                risk = "high",
+                            )
+                            nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
                         }
                     }
                 }
@@ -771,7 +766,26 @@ class AgentRuntime(
                 "Connector install approved."
             }
 
-            else -> "Approved. There is no automatic executor for '${approval.type}'."
+            "reinvest" -> {
+                val details = Json.tryObject(approval.details) ?: JSONObject()
+                val targetProvider = Json.string(details, "provider_id")
+                val targetModel = Json.string(details, "model")
+                val priority = Json.int(details, "priority", 10)
+                val cost = Json.long(details, "cost", 0L)
+                val fund = Json.long(details, "fund", 0L)
+                val provider = repo.provider(targetProvider)
+                if (provider == null) {
+                    "Failed: provider '$targetProvider' not found."
+                } else if (cost <= 0 || cost > fund) {
+                    "Failed: invalid cost or insufficient fund."
+                } else {
+                    repo.updateProvider(provider.copy(model = targetModel.ifBlank { provider.model }, priority = priority, enabled = true, updatedAt = Time.now()))
+                    repo.updateInfrastructureFund(-cost)
+                    val newFund = repo.getInfrastructureFund()
+                    repo.addDiary(approval.agentId, "reinvestment", "Upgraded $targetProvider to model '${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: ${cost/100}. Fund remaining: ${newFund/100}", 4)
+                    "Reinvested ${cost/100} to upgrade $targetProvider. Fund remaining: ${newFund/100}."
+                }
+            }
         }
 
         val ok = !outcome.startsWith("Failed") && !outcome.startsWith("Build failed") &&
