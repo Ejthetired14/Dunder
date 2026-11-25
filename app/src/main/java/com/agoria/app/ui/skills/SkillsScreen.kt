@@ -412,7 +412,7 @@ private fun InfoDialog(
             Text(skill.description, style = MaterialTheme.typography.bodyMedium, color = Pal.navy)
             Text("Category: ${skill.category}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.75f))
             Text("Version: ${skill.version}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.75f))
-            Text("Actions: ${skill.actions}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.75f))
+            Text("Actions: ${skill.manifestJson}", style = MaterialTheme.typography.bodySmall, color = Pal.navy.copy(alpha = 0.75f))
 
             if (skillDef != null) {
                 Spacer(Modifier.height(8.dp))

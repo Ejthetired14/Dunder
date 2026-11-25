@@ -356,6 +356,12 @@ interface SkillDao {
     @Query("SELECT * FROM skills ORDER BY category ASC, name ASC")
     fun observeAll(): Flow<List<SkillEntity>>
 
+    @Query("SELECT * FROM skills WHERE enabled = 1 ORDER BY category ASC, name ASC")
+    fun observeEnabled(): Flow<List<SkillEntity>>
+
+    @Query("SELECT * FROM skills ORDER BY category ASC, name ASC")
+    suspend fun getAll(): List<SkillEntity>
+
     @Query("SELECT * FROM skills WHERE id = :id")
     suspend fun get(id: String): SkillEntity?
 

@@ -1621,6 +1621,11 @@ class ConnectorExecutor(
             "list_repos", "repos", "repositories", "list_repositories", "my_repos" -> "list_repos"
             "list_issues", "issues", "get_issues", "list_issue", "open_issues", "list_open_issues" -> "list_issues"
             "create_issue", "issue", "new_issue", "open_issue", "file_issue", "create" -> "create_issue"
+            "get_file", "file", "read_file", "cat", "getfile" -> "get_file"
+            "create_branch", "branch", "new_branch", "make_branch" -> "create_branch"
+            "put_file", "write_file", "create_file", "update_file", "commit_file" -> "put_file"
+            "create_pr", "pr", "pull_request", "new_pr", "open_pr" -> "create_pr"
+            "list_prs", "prs", "pull_requests", "list_pull_requests" -> "list_prs"
             else -> action.trim().lowercase()
         }
 
