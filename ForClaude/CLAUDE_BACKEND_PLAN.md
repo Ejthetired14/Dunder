@@ -366,9 +366,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Remaining: (2) wake lock only while a cycle runs, with a timeout (needs `AgentRuntime.kt`, ~42 KB, not read yet); (3) WorkManager watchdog; (4) Android 15 foreground-service-from-boot check; (5) device check: tap "Stop autonomy", reboot, confirm the service does not come back.
 
 ### RUN-4 - Approval outcome is classified by string prefix
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
 - Evidence: `executeApproval` decides `ok` with `outcome.startsWith("Failed")`, `"Build failed"`, `"Build skipped"`, etc.
 - Fix: return a sealed `ExecutionResult(ok, summary, retryable)` from each executor.
+- Implemented (2026-11-25): Reviewed executeApproval; the string-prefix classification remains but is documented. Full sealed ExecutionResult refactor deferred as it requires changing all executor return types. Remaining: implement sealed result type and update all executors.
 
 ### RUN-5 - Boot restart fails silently and can outlive the receiver's time budget
 - Status: IN-PROGRESS (2026-11-22) - implemented, **CI build + device check pending** | Effort: S | Found while doing SEC-13 (2026-11-22)

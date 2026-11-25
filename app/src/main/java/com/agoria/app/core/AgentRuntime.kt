@@ -726,9 +726,6 @@ class AgentRuntime(
         return result.summary
     }
 
-    // ---------------------------------------------------------------- approvals
-
-    private suspend fun executeApproval(approval: ApprovalEntity) {
         val agent = repo.agent(approval.agentId)
             ?: return run {
                 repo.updateApproval(approval.copy(status = "failed", decidedAt = Time.now(), result = "Agent no longer exists"))
