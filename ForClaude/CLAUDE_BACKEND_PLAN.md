@@ -332,9 +332,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: versioned schema, transactional import with validation, include all tables, secrets only in the encrypted export (SEC-2), make `reset()` also delete files.
 
 ### DATA-4 - Migration safety and startup
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
 - Evidence: `exportSchema = false` (no schema JSON, no migration tests); on a failed upgrade `AppDatabase.create` renames the DB and silently starts empty, so the user just sees an empty office; `create()` opens the DB synchronously in `Application.onCreate` (main thread).
 - Fix: `exportSchema = true` + `room.schemaLocation` + `MigrationTestHelper` tests for 1->4; surface "recovered from failed upgrade, restore from backup?" to the user; open the DB off the main thread.
+- Implemented (2026-11-25): Set `exportSchema = true` in `AppDatabase.kt`. Added `ksp { arg("room.schemaLocation", ...) }` to `build.gradle.kts`. Remaining: MigrationTestHelper tests, surface recovery message to user, open DB off main thread.
 
 ### DATA-5 - Foreign keys delete or orphan important data
 - Status: TODO | Effort: S

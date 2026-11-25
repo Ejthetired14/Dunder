@@ -29,7 +29,7 @@ import java.io.File
         AgentSkillEntity::class,
     ],
     version = 6,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun agentDao(): AgentDao
