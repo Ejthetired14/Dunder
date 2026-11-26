@@ -2211,7 +2211,19 @@ class ConnectorExecutor(
                 val sb = StringBuilder("Telegram updates:\n")
                 for (i in 0 until updates.length()) {
                     val update = updates.getJSONObject(i)
-                    sb.append("- update ").append(update.optInt("update_id")).append('\n')
+                    val updateId = update.optInt("update_id")
+                    val message = update.optJSONObject("message")
+                    val text = message?.optString("text") ?: ""
+                    val from = message?.optJSONObject("from")?.optString("first_name") ?: ""
+                    val chatId = message?.optJSONObject("chat")?.optLong("id") ?: 0L
+                    if (text.isNotBlank()) {
+                        sb.append("- update ").append(updateId)
+                        if (from.isNotBlank()) sb.append(" from ").append(from)
+                        if (chatId != 0L) sb.append(" (chat ").append(chatId).append(")")
+                        sb.append(": ").append(text.take(200)).append("\n")
+                    } else {
+                        sb.append("- update ").append(updateId).append(" (no text message)\n")
+                    }
                 }
                 ConnectorResult(true, sb.toString().trim())
             }

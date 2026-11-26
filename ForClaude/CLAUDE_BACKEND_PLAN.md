@@ -313,7 +313,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
   - `ConnectorEntity`/catalog fields `zoneId`, `organizationId` are unused.
   - `stripe.verify_key` takes an `apiKey` argument from the agent (puts a secret key into approval details and logs); remove.
   - `huggingface` actions are non-mutating but send agent-controlled text to a third party; review risk level.
-- Implemented (2026-11-25): `stripe.verify_key` now uses configured apiKey instead of agent-supplied. GitHub setupHelp updated to recommend least privilege (no administration). Remaining: Telegram get_updates, Notion create_page, unused fields, huggingface risk level.
+- Implemented (2026-11-26): `stripe.verify_key` now uses configured apiKey instead of agent-supplied. GitHub setupHelp updated to recommend least privilege (no administration). Telegram `get_updates` now extracts message text, sender, and chat id from each update. Remaining: Notion create_page property name, unused fields, huggingface risk level.
 
 ---
 
