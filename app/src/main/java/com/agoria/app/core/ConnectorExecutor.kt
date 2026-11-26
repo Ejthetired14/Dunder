@@ -347,6 +347,26 @@ class ConnectorExecutor(
 
     private fun ConnectorResult.asOk(): ConnectorResult = this
 
+    // ------------------------------------------------------------------ SEC-8: input validation
+
+    /** Cloudflare worker names: alphanumeric + hyphen only. */
+    private fun validWorkerName(name: String): Boolean = name.matches(Regex("^[a-zA-Z0-9-]+$"))
+
+    /** GitHub full_name: owner/name where each part is alphanumeric + . _ -. */
+    private fun validRepoName(repo: String): Boolean = repo.matches(Regex("^[\\w.-]+/[\\w.-]+$"))
+
+    /** GitHub issue state filter. */
+    private fun validIssueState(state: String): Boolean = state in listOf("open", "closed", "all")
+
+    /** ISO 4217 currency code: 3 uppercase letters. */
+    private fun validCurrencyCode(code: String): Boolean = code.matches(Regex("^[A-Z]{3}$"))
+
+    /** Stripe event type: lowercase alphanumeric + dots/underscores. */
+    private fun validStripeEventType(type: String): Boolean = type.matches(Regex("^[a-z0-9_.]+$"))
+
+    /** JSON-encodes a string for safe embedding in generated JavaScript source. */
+    private fun jsString(s: String): String = org.json.JSONObject().put("x", s).toString().substring(5).dropLast(1)
+
     // ---------------------------------------------------------------- wikipedia
 
     private fun wikipedia(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
@@ -610,6 +630,8 @@ class ConnectorExecutor(
             "convert" -> {
                 val from = args.optString("from", "USD").uppercase()
                 val to = args.optString("to", "EUR").uppercase()
+                if (!validCurrencyCode(from)) return ConnectorResult(false, "Invalid currency '$from': use ISO 4217 3-letter codes (e.g. USD, EUR).")
+                if (!validCurrencyCode(to)) return ConnectorResult(false, "Invalid currency '$to': use ISO 4217 3-letter codes (e.g. USD, EUR).")
                 val amount = args.optDouble("amount", 1.0)
                 val url = "https://api.frankfurter.app/latest?from=$from&to=$to"
                 val response = http("GET", url)
@@ -624,6 +646,7 @@ class ConnectorExecutor(
             }
             "latest" -> {
                 val from = args.optString("from", "USD").uppercase()
+                if (!validCurrencyCode(from)) return ConnectorResult(false, "Invalid currency '$from': use ISO 4217 3-letter codes (e.g. USD, EUR).")
                 val url = "https://api.frankfurter.app/latest?from=$from"
                 val response = http("GET", url)
                 if (!response.ok) return ConnectorResult(false, "Currency error: ${text(response.body, 240)}")
@@ -1674,6 +1697,9 @@ class ConnectorExecutor(
                                 "collaborator on any. Save a default repository (owner/name) in this " +
                                 "connector, then list again.",
                         )
+                    if (!validRepoName(saved)) {
+                        return ConnectorResult(false, "Invalid saved repository '$saved': expected owner/name format.")
+                    }
                     val probe = http("GET", "https://api.github.com/repos/$saved", headers)
                     return if (probe.ok) {
                         ConnectorResult(true, "Repositories this token can reach:\n- $saved")
@@ -1697,6 +1723,7 @@ class ConnectorExecutor(
                         "No repository selected. Save a default repository (owner/name) in this " +
                             "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
+                if (!validRepoName(repoName)) return ConnectorResult(false, "Invalid repository '$repoName': expected owner/name format.")
                 val response = http("GET", "https://api.github.com/repos/$repoName", headers)
                 if (!response.ok) return ConnectorResult(false, "GitHub ${response.code}: ${text(response.body, 300)}")
                 val root = json(response.body) ?: return ConnectorResult(false, "GitHub returned invalid JSON")
@@ -1715,7 +1742,9 @@ class ConnectorExecutor(
                         "No repository selected. Save a default repository (owner/name) in this " +
                             "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
+                if (!validRepoName(repoName)) return ConnectorResult(false, "Invalid repository '$repoName': expected owner/name format.")
                 val state = args.optString("state", "open")
+                if (!validIssueState(state)) return ConnectorResult(false, "Invalid issue state '$state': must be open, closed, or all.")
                 val response = http(
                     "GET",
                     "https://api.github.com/repos/$repoName/issues?state=$state&per_page=5",
@@ -1741,6 +1770,7 @@ class ConnectorExecutor(
                         "No repository selected. Save a default repository (owner/name) in this " +
                             "connector, or pass \"repo\": \"owner/name\" with the action.",
                     )
+                if (!validRepoName(repoName)) return ConnectorResult(false, "Invalid repository '$repoName': expected owner/name format.")
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val body = args.optString("body", "")
                 val payload = JSONObject().put("title", title).put("body", body)
@@ -2122,6 +2152,9 @@ class ConnectorExecutor(
             }
             "list_events" -> {
                 val eventType = args.optString("type", "")
+                if (eventType.isNotBlank() && !validStripeEventType(eventType)) {
+                    return ConnectorResult(false, "Invalid Stripe event type '$eventType': use lowercase alphanumeric with dots/underscores (e.g. invoice.payment_succeeded).")
+                }
                 val limit = args.optInt("limit", 10).coerceIn(1, 50)
                 val typeParam = if (eventType.isNotBlank()) "&type=$eventType" else ""
                 val url = "https://api.stripe.com/v1/events?limit=$limit$typeParam"
@@ -2459,6 +2492,7 @@ class ConnectorExecutor(
         return when (action) {
             "deploy" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                if (!validWorkerName(name)) return ConnectorResult(false, "Invalid worker name '$name': use alphanumeric characters and hyphens only.")
                 val code = args.optString("code").ifBlank { return ConnectorResult(false, "Missing worker code") }
                 val url = "$baseUrl/$name"
                 val response = http("PUT", url, scriptHeaders, code)
@@ -2526,6 +2560,7 @@ class ConnectorExecutor(
             }
             "tail_logs" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                if (!validWorkerName(name)) return ConnectorResult(false, "Invalid worker name '$name': use alphanumeric characters and hyphens only.")
                 // Note: Log streaming requires WebSocket. This just returns the tail URL.
                 val tailUrl = "wss://api.cloudflare.com/client/v4/accounts/$accountId/workers/scripts/$name/tail"
                 ConnectorResult(
@@ -2535,8 +2570,12 @@ class ConnectorExecutor(
             }
             "deploy_webhook_handler" -> {
                 val name = args.optString("name").ifBlank { return ConnectorResult(false, "Missing worker name") }
+                if (!validWorkerName(name)) return ConnectorResult(false, "Invalid worker name '$name': use alphanumeric characters and hyphens only.")
                 val webhookSecret = args.optString("stripeWebhookSecret").ifBlank { return ConnectorResult(false, "Missing stripeWebhookSecret") }
                 val callbackUrl = args.optString("appCallbackUrl").ifBlank { return ConnectorResult(false, "Missing appCallbackUrl") }
+                if (!callbackUrl.startsWith("http://") && !callbackUrl.startsWith("https://")) {
+                    return ConnectorResult(false, "Invalid callback URL '$callbackUrl': must start with http:// or https://.")
+                }
                 val code = stripeWebhookWorkerCode(name, webhookSecret, callbackUrl)
                 val url = "$baseUrl/$name"
                 val response = http("PUT", url, scriptHeaders, code)
@@ -2902,12 +2941,17 @@ class ConnectorExecutor(
 
     private fun stripeWebhookWorkerCode(name: String, webhookSecret: String, callbackUrl: String): String {
         val dollar = "\$"
+        // SEC-8: JSON-escape values embedded in generated JS source to prevent code injection
+        // (a newline or quote in name/secret/callbackUrl could break out of the string literal).
+        val safeName = org.json.JSONObject.quote(name).removeSurrounding('"')
+        val safeSecret = org.json.JSONObject.quote(webhookSecret).removeSurrounding('"')
+        val safeCallback = org.json.JSONObject.quote(callbackUrl).removeSurrounding('"')
         return """
-            // Stripe Webhook Handler for $name
+            // Stripe Webhook Handler for $safeName
             // Receives Stripe events, verifies signature, forwards to app
             
-            const WEBHOOK_SECRET = "$webhookSecret";
-            const CALLBACK_URL = "$callbackUrl";
+            const WEBHOOK_SECRET = "$safeSecret";
+            const CALLBACK_URL = "$safeCallback";
             
             // Minimal crypto for signature verification (Web Crypto API)
             async function verifySignature(payload, signature, secret) {

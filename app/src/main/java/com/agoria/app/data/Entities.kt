@@ -290,6 +290,8 @@ data class SettingsEntity(
     // Auto-approval settings
     val autoApproveEnabled: Boolean = false,
     val autoApproveTypes: String = "", // comma-separated: build_project,connector_action,send_email,etc.
+    val autoApproveAllowlist: String = "", // JSON map: {"connectorId": ["action1", "action2"]}
+    val autoApproveDailyCap: Int = 5, // max auto-approvals per agent per day
     val createdAt: Long,
 )
 

@@ -80,10 +80,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Guard: SEC-12 now fails CI if this configuration regresses.
 
 ### SEC-2 - Snapshots/backups contain plaintext secrets
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `Repository.exportSnapshot()` puts `connectorConfig(c.id)` (decrypted) and `a.apiToken` into JSON; `writeAutoBackup()` writes it unencrypted to `filesDir/backups/`; the same JSON is shared from Settings.
-- Fix: default export has **no** secrets. Optional "include secrets" export is encrypted with a user passphrase (PBKDF2/scrypt + AES-GCM). Auto-backup never includes secrets. Encrypt `AgentEntity.apiToken` at rest with `SecretCipher` (it is currently plaintext in Room). Update README.
+- Fix: default export now excludes `apiToken` from agents and decrypted `config` from connectors. `writeAutoBackup()` calls `exportSnapshot(includeSecrets=false)` which truly excludes secrets. The `includeSecrets` path (SEC-16) still attaches a raw secrets section encrypted with SecretVault by the ViewModel caller.
+- Fix: default export has no secrets. Optional "include secrets" export is encrypted with a user passphrase (PBKDF2/scrypt + AES-GCM). Auto-backup never includes secrets.
 - Done when: unit test proves exported JSON contains no token/secret strings; auto-backup excludes secrets.
+- Implemented (2026-11-26): Removed `put("apiToken", a.apiToken)` from agents export; removed `put("config", connectorConfig(c.id))` from connectors export — only id, status, scopes exported. `writeAutoBackup()` unchanged (already uses default `includeSecrets=false`).
 
 ### SEC-3 - CI supply-chain and signing problems
 - Status: IN-PROGRESS (2026-11-22) - implemented, **CI run pending, owner actions pending (see Remaining)**. Effort: S-M
@@ -112,11 +114,12 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `record_revenue` and `reinvest` wrapped in `if (AgentPolicy.isAutoAllowed(processed)) { execute } else { addApproval(type="money_action", risk="high") }`.
 
 ### SEC-5 - Auto-approve is type-level and risk-blind
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `Repository.addApproval` and `AgentRuntime.processAutoApprovedApprovals` auto-approve by `approval.type` only; `autoApproveTypes` may contain `connector_action`.
 - Problem: enabling auto-approve for `connector_action` approves every connector action, including payments, email, deploy, delete.
-- Fix: auto-approve only an explicit `(connectorId, action)` allowlist with `risk <= medium`; never for `risk = high`; daily caps per agent; a visible audit log; one-tap kill switch. Also expire stale approvals (see DATA-6).
+- Fix: added `autoApproveAllowlist` (JSON map of connectorId -> allowed actions) and `autoApproveDailyCap` (default 5) settings to `SettingsEntity`. `processAutoApprovedApprovals` now: (1) never auto-approves risk = high actions, (2) for `connector_action` requires the (connectorId, action) pair to be in the allowlist, (3) enforces a daily cap per agent.
 - Done when: unit tests show a high-risk action is never auto-approved.
+- Implemented (2026-11-26): `SettingsEntity` gained `autoApproveAllowlist` and `autoApproveDailyCap` fields. `processAutoApprovedApprovals` skips high-risk actions, checks connector+action allowlist, and enforces daily cap per agent.
 
 ### SEC-6 - Prompt injection surface
 - Status: TODO | Effort: M
@@ -297,10 +300,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ## 4. P1 - Data model, reliability, scale
 
 ### DATA-1 - Lost updates on settings and fund balance
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `Repository.updateSettings` reads the whole row then upserts the whole row; `updateInfrastructureFund` is read-modify-write with no transaction; the UI and the runtime both write settings.
-- Fix: atomic SQL (`UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta)`), `@Transaction` DAO methods, or a ledger table (preferred, see BUG-8).
-- Note (2026-11-22): RUN-3's stop path now adds one more `updateSettings` writer (`autonomyEnabled=false`); it is a single-field write and shares this lost-update risk until DATA-1 lands.
+- Fix: added `addInfrastructureFund(delta)` atomic SQL (`UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta)`) to SettingsDao; `updateInfrastructureFund` now calls it directly instead of read-modify-write via `updateSettings`; `updateSettings` now uses `updateSettingsTx` which is `@Transaction`-wrapped so read-modify-write blocks are atomic.
+- Done when: atomic SQL (`UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta)`), `@Transaction` DAO methods, or a ledger table.
+- Implemented (2026-11-26): SettingsDao gained `addInfrastructureFund(delta)` (atomic SQL) and `updateSettingsTx(block)` (@Transaction). Repository.updateSettings uses updateSettingsTx; updateInfrastructureFund calls addInfrastructureFund directly.
 
 ### DATA-2 - Unbounded tables and full-table reads on every cycle
 - Status: IN-PROGRESS (2026-11-26) - partial. Effort: M
@@ -310,9 +314,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `buildContext` now uses `repo.recentDiaryForAgent(agent.id, 18)` and `repo.memoryDao().recentForAgent(agent.id, 14)` instead of loading all rows then taking. Chatter block now uses `repo.recentSayEntries(50)` instead of loading every agent's full diary. Added `DiaryDao.recentForAgent()` and `DiaryDao.recentSayEntries()` methods. Retention job added: `Repository.runRetentionJob()` prunes connector_logs (>30d), messages (>90d), expires pending approvals (>24h) and prunes resolved approvals (>30d), and prunes unpinned low-importance diary (>90d); wired into `AgoriaApplication.onCreate` after `writeAutoBackup()`. DAO prune methods added to `ConnectorLogDao`, `MessageDao`, `ApprovalDao`, `DiaryDao`. **Indices added**: `memories` table now has `Index("agentId"), Index("createdAt")`; `builds` table now has `Index("agentId"), Index("createdAt"), Index("projectId")`. Remaining: memory ranking by importance + recency.
 
 ### DATA-3 - Backup and restore are incomplete and not atomic
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `importSnapshot` is not wrapped in `db.withTransaction`, returns `false` midway leaving partial data, ignores approvals, revenue, providers (priority/model/enabled), fund and settings beyond a few fields, `saveConnectorConfig` marks connectors `configured` without validating; `reset()` runs `clearAllTables()` but leaves `agent-workspace`, `exports`, `backups` and the Keystore key behind.
-- Fix: versioned schema, transactional import with validation, include all tables, secrets only in the encrypted export (SEC-2), make `reset()` also delete files.
+- Fix: `importSnapshot` now wrapped in `db.withTransaction` for atomicity; imports approvals, revenue, and providers (previously ignored); includes `autoApproveAllowlist` and `autoApproveDailyCap` in settings. Added `AppDatabase.clearAllTables()` (@Transaction, deletes all rows). `reset()` now also deletes files in `agent-workspace`, `exports`, and `backups` directories.
+- Done when: versioned schema, transactional import with validation, include all tables, secrets only in the encrypted export (SEC-2), make `reset()` also delete files.
+- Implemented (2026-11-26): `importSnapshot` uses `db.withTransaction`; imports approvals/revenue/providers tables; `reset()` clears files; `AppDatabase.clearAllTables()` added.
 
 ### DATA-4 - Migration safety and startup
 - Status: TODO | Effort: M

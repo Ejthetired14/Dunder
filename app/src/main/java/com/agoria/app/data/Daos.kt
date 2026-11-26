@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -280,6 +281,17 @@ interface SettingsDao {
 
     @Query("DELETE FROM settings")
     suspend fun deleteAll()
+
+    // DATA-1: atomic fund update avoids read-modify-write lost updates between concurrent writers.
+    @Query("UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :delta) WHERE id = 1")
+    suspend fun addInfrastructureFund(delta: Long)
+
+    // DATA-1: transactional settings update so read-modify-write blocks are atomic.
+    @Transaction
+    suspend fun updateSettingsTx(block: (SettingsEntity) -> SettingsEntity) {
+        val current = get() ?: return
+        upsert(block(current))
+    }
 }
 
 @Dao

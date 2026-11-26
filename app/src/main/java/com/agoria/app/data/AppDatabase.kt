@@ -45,6 +45,25 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun connectorLogDao(): ConnectorLogDao
     abstract fun revenueDao(): RevenueDao
 
+    /** Deletes every row from every table. Used by reset(); callers must also delete files. */
+    @Transaction
+    fun clearAllTables() {
+        agentDao().deleteAll()
+        diaryDao().deleteAll()
+        messageDao().deleteAll()
+        taskDao().deleteAll()
+        approvalDao().deleteAll()
+        connectorDao().deleteAll()
+        connectorRequestDao().deleteAll()
+        buildDao().deleteAll()
+        projectDao().deleteAll()
+        providerDao().deleteAll()
+        settingsDao().deleteAll()
+        memoryDao().deleteAll()
+        connectorLogDao().deleteAll()
+        revenueDao().deleteAll()
+    }
+
     companion object {
         const val NAME = "agoria.db"
         const val VERSION = 5

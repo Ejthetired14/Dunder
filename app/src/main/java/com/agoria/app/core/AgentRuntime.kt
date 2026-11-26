@@ -264,13 +264,54 @@ class AgentRuntime(
         if (!settings.autoApproveEnabled || settings.autoApproveTypes.isBlank()) return
 
         val autoApproveTypes = settings.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val allowlist = try {
+            Json.tryObject(settings.autoApproveAllowlist) ?: JSONObject()
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val dailyCap = settings.autoApproveDailyCap.coerceAtLeast(1)
+        val todayStart = Time.now() - (Time.now() % (24 * 60 * 60 * 1000L))
+
         val allApprovals = repo.approvals.first()
         val autoPending = allApprovals.filter { it.status == "auto_pending" && it.type.lowercase().trim() in autoApproveTypes }
 
         if (autoPending.isNotEmpty()) {
             Log.i("ApprovalFlow", "Auto-approve processing ${autoPending.size} approvals (autoApproveTypes=$autoApproveTypes)")
         }
+
+        // Count already-executed approvals per agent today for the daily cap.
+        val todayExecuted = allApprovals
+            .filter { it.status == "executed" && it.decidedAt != null && it.decidedAt >= todayStart }
+            .groupBy { it.agentId }
+            .mapValues { (_, v) -> v.size }
+
         autoPending.forEach { approval ->
+            // SEC-5: never auto-approve high-risk actions.
+            if (approval.risk.equals("high", ignoreCase = true)) {
+                Log.w("ApprovalFlow", "Auto-approve skipped: high-risk approval id=${approval.id} type=${approval.type}")
+                return@forEach
+            }
+
+            // SEC-5: for connector_action, the (connectorId, action) must be in the allowlist.
+            if (approval.type.equals("connector_action", ignoreCase = true)) {
+                val details = Json.tryObject(approval.details) ?: JSONObject()
+                val connectorId = Json.string(details, "connector_id", Json.string(details, "connector"))
+                val actionName = Json.string(details, "action_name", Json.string(details, "action", "request"))
+                val allowedActions = allowlist.optJSONArray(connectorId)
+                val actionAllowed = allowedActions != null && (0 until allowedActions.length()).any { allowedActions.optString(it) == actionName }
+                if (!actionAllowed) {
+                    Log.w("ApprovalFlow", "Auto-approve skipped: connector action not allowlisted id=${approval.id} connector=$connectorId action=$actionName")
+                    return@forEach
+                }
+            }
+
+            // SEC-5: daily cap per agent.
+            val executedToday = todayExecuted[approval.agentId] ?: 0
+            if (executedToday >= dailyCap) {
+                Log.w("ApprovalFlow", "Auto-approve skipped: daily cap reached id=${approval.id} agent=${approval.agentId} cap=$dailyCap")
+                return@forEach
+            }
+
             Log.i("ApprovalFlow", "Auto-approving approval id=${approval.id} type=${approval.type}")
             val decided = approval.copy(
                 status = "approved",
@@ -279,6 +320,7 @@ class AgentRuntime(
             )
             repo.updateApproval(decided)
             executeApproval(decided)
+            todayExecuted[approval.agentId] = (todayExecuted[approval.agentId] ?: 0) + 1
         }
     }
 

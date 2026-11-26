@@ -156,6 +156,10 @@ class Repository(
 
     suspend fun reset() {
         db.clearAllTables()
+        // DATA-3: also delete files so a reset truly starts clean.
+        Files.clear(Files.workspace(context))
+        Files.clear(Files.exports(context))
+        Files.clear(backupDirectory())
         seedIfNeeded()
         ensureProject()
     }
@@ -216,8 +220,7 @@ class Repository(
     }
 
     suspend fun updateSettings(block: (SettingsEntity) -> SettingsEntity) {
-        val current = settings()
-        db.settingsDao().upsert(block(current))
+        db.settingsDao().updateSettingsTx(block)
     }
 
     // ---------------------------------------------------------------- projects
@@ -797,7 +800,8 @@ class Repository(
                             put("memory", a.memory)
                             put("createdAt", a.createdAt)
                             put("allowedConnectors", a.allowedConnectors)
-                            put("apiToken", a.apiToken)
+                            // SEC-2: apiToken is deliberately omitted from the default export.
+                            // Secrets are only exported via includeSecrets + SecretVault encryption.
                         },
                     )
                 }
@@ -904,8 +908,11 @@ class Repository(
             },
         )
 
-        // Connector settings are exported decrypted: the on-device key that encrypted them does not
-        // exist on the next phone, so an encrypted blob would restore as unreadable garbage.
+        // Connector metadata is exported (id, status, scopes) but never the decrypted config:
+        // it may contain API keys and tokens that must not be written to backup files in plaintext.
+        // The on-device encryption key does not exist on the next phone, so an encrypted config blob
+        // would restore as unreadable garbage anyway. Secrets are only exported via includeSecrets +
+        // SecretVault encryption (see SEC-16).
         root.put(
             "connectors",
             JSONArray().apply {
@@ -915,7 +922,8 @@ class Repository(
                             put("id", c.id)
                             put("status", c.status)
                             put("scopes", c.scopes)
-                            put("config", connectorConfig(c.id) ?: JSONObject())
+                            // SEC-2: connector config (potentially containing secrets) is omitted from
+                            // the default export. Connectors must be reconfigured after restore.
                         },
                     )
                 }
@@ -938,7 +946,7 @@ class Repository(
         return root
     }
 
-    suspend fun importSnapshot(json: JSONObject): Boolean {
+    suspend fun importSnapshot(json: JSONObject): Boolean = db.withTransaction {
         try {
             if (json.has("settings")) {
                 val settingsJson = json.getJSONObject("settings")
@@ -951,6 +959,8 @@ class Repository(
                         agentCooldownSeconds = settingsJson.optInt("agentCooldownSeconds", s.agentCooldownSeconds),
                         autoApproveEnabled = settingsJson.optBoolean("autoApproveEnabled", s.autoApproveEnabled),
                         autoApproveTypes = settingsJson.optString("autoApproveTypes", s.autoApproveTypes),
+                        autoApproveAllowlist = settingsJson.optString("autoApproveAllowlist", s.autoApproveAllowlist),
+                        autoApproveDailyCap = settingsJson.optInt("autoApproveDailyCap", s.autoApproveDailyCap),
                         agentProfitSharePercent = settingsJson.optInt("agentProfitSharePercent", s.agentProfitSharePercent),
                         userProfitSharePercent = settingsJson.optInt("userProfitSharePercent", s.userProfitSharePercent),
                     )
@@ -1053,6 +1063,7 @@ class Repository(
                         BuildEntity(
                             id = id,
                             agentId = b.optString("agentId"),
+                            agentName = b.optString("agentName", ""),
                             name = b.optString("name", "build"),
                             description = b.optString("description", ""),
                             fileCount = b.optInt("fileCount", 0),
@@ -1076,6 +1087,7 @@ class Repository(
                         MemoryEntity(
                             id = id,
                             agentId = m.optString("agentId"),
+                            agentName = m.optString("agentName", ""),
                             kind = m.optString("kind", "fact"),
                             content = m.optString("content", ""),
                             importance = m.optInt("importance", 2),
@@ -1105,10 +1117,79 @@ class Repository(
                 }
             }
 
-            return true
+            // DATA-3: import approvals, revenue, providers (previously ignored).
+            if (json.has("approvals")) {
+                val array = json.getJSONArray("approvals")
+                for (i in 0 until array.length()) {
+                    val a = array.optJSONObject(i) ?: continue
+                    val id = a.optString("id")
+                    if (id.isBlank()) continue
+                    db.approvalDao().insert(
+                        ApprovalEntity(
+                            id = id,
+                            agentId = a.optString("agentId", ""),
+                            type = a.optString("type", "other"),
+                            title = a.optString("title", ""),
+                            summary = a.optString("summary", ""),
+                            details = a.optString("details", "{}"),
+                            risk = a.optString("risk", "low"),
+                            status = a.optString("status", "pending"),
+                            createdAt = a.optLong("createdAt", Time.now()),
+                            decidedAt = if (a.has("decidedAt") && !a.isNull("decidedAt")) a.optLong("decidedAt") else null,
+                            result = a.optString("result", null),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("revenue")) {
+                val array = json.getJSONArray("revenue")
+                for (i in 0 until array.length()) {
+                    val r = array.optJSONObject(i) ?: continue
+                    val id = r.optString("id")
+                    if (id.isBlank()) continue
+                    db.revenueDao().insert(
+                        RevenueEntity(
+                            id = id,
+                            agentId = r.optString("agentId", ""),
+                            agentName = r.optString("agentName", ""),
+                            source = r.optString("source", "api_usage"),
+                            amountCents = r.optLong("amountCents", 0L),
+                            currency = r.optString("currency", "USD"),
+                            metadata = r.optString("metadata", "{}"),
+                            createdAt = r.optLong("createdAt", Time.now()),
+                        ),
+                    )
+                }
+            }
+
+            if (json.has("providers")) {
+                val array = json.getJSONArray("providers")
+                for (i in 0 until array.length()) {
+                    val p = array.optJSONObject(i) ?: continue
+                    val id = p.optString("id")
+                    if (id.isBlank()) continue
+                    db.providerDao().insert(
+                        ProviderEntity(
+                            id = id,
+                            enabled = p.optBoolean("enabled", false),
+                            priority = p.optInt("priority", 10),
+                            model = p.optString("model", ""),
+                            apiKeyEnc = p.optString("apiKeyEnc", null),
+                            extra = p.optString("extra", null),
+                            lastStatus = p.optString("lastStatus", null),
+                            lastLatencyMs = if (p.has("lastLatencyMs") && !p.isNull("lastLatencyMs")) p.optLong("lastLatencyMs") else null,
+                            lastError = p.optString("lastError", null),
+                            updatedAt = p.optLong("updatedAt", Time.now()),
+                        ),
+                    )
+                }
+            }
+
+            true
         } catch (e: Exception) {
             e.printStackTrace()
-            return false
+            false
         }
     }
 
@@ -1168,10 +1249,8 @@ class Repository(
     }
 
     suspend fun updateInfrastructureFund(deltaCents: Long) {
-        updateSettings { s ->
-            val newFund = (s.infrastructureFundCents + deltaCents).coerceAtLeast(0L)
-            s.copy(infrastructureFundCents = newFund)
-        }
+        // DATA-1: atomic SQL increment avoids read-modify-write lost updates.
+        db.settingsDao().addInfrastructureFund(deltaCents)
     }
 
     suspend fun getInfrastructureFund(): Long = settings().infrastructureFundCents
