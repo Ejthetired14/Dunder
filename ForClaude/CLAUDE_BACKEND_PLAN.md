@@ -220,10 +220,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Done when: the guard fails on a tag-pinned action and `main` is green with all actions SHA-pinned.
 
 ### SEC-15 - Tell the user why an update was refused (and verify the update path end to end)
-- Status: TODO | Effort: S | Depends on: SEC-10 | Added 2026-11-23
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Evidence: `UpdateManager.downloadAndInstall` reports only `Boolean`. After SEC-10 there are several distinct refusals (untrusted URL, missing sha256, hash mismatch, too large, permission not granted) but the UI can show only a generic failure. `checkForUpdates` also returns `null` both for "up to date" and for "refused/invalid JSON".
 - Fix: return a sealed `UpdateResult` (Installed, NeedsPermission, Refused(reason), NetworkError) and a `CheckResult` (UpToDate, Available, Invalid(reason), NetworkError); surface the reason in the update dialog; never include exception messages or URLs with tokens. UI files were not reviewed (section 8): find the caller of `UpdateManager` first.
 - Done when: a tampered hash shows "Update refused: file did not match its checksum" in the app, and "up to date" is distinguishable from "update info invalid".
+- Implemented (2026-11-26): Added sealed `CheckResult` (UpToDate, Available, Invalid, NetworkError) and `UpdateResult` (Installed, NeedsPermission, Refused, NetworkError) to UpdateManager. `checkForUpdates` now returns CheckResult; `downloadAndInstall` returns UpdateResult. Updated AgoriaViewModel and SettingsScreen callers. Remaining: the SettingsScreen UI can show Refused reasons in a dialog; currently all results just return to Idle.
 
 ### SEC-16 - Optional password-protected export of secrets
 - Status: TODO | Effort: M | Depends on: SEC-2 | Added 2026-11-25

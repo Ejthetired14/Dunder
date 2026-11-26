@@ -202,9 +202,9 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         val capabilities = connectivityManager.getNetworkCapabilities(network)
         if (capabilities == null || !capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) return
         
-        app.updateManager.checkForUpdates { release ->
-            if (release != null && app.updateManager.isNewerRelease(release)) {
-                _updateReady.value = release
+        app.updateManager.checkForUpdates { result ->
+            if (result is com.agoria.app.util.UpdateManager.CheckResult.Available) {
+                _updateReady.value = result.release
             }
         }
     }
@@ -923,18 +923,20 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun checkForUpdates(onResult: (com.agoria.app.util.UpdateManager.ReleaseInfo?) -> Unit) {
-        app.updateManager.checkForUpdates(onResult)
-    }
-
-    fun isNewerRelease(release: com.agoria.app.util.UpdateManager.ReleaseInfo): Boolean {
-        return app.updateManager.isNewerRelease(release)
+    fun checkForUpdates(onResult: (com.agoria.app.util.UpdateManager.CheckResult) -> Unit) {
+        app.updateManager.checkForUpdates { result ->
+            when (result) {
+                is com.agoria.app.util.UpdateManager.CheckResult.Available ->
+                    onResult(result)
+                else -> onResult(result)
+            }
+        }
     }
 
     fun downloadAndInstallUpdate(
         release: com.agoria.app.util.UpdateManager.ReleaseInfo,
         onProgress: (Int) -> Unit,
-        onComplete: (Boolean) -> Unit,
+        onComplete: (com.agoria.app.util.UpdateManager.UpdateResult) -> Unit,
     ) {
         app.updateManager.downloadAndInstall(release, onProgress, onComplete)
     }

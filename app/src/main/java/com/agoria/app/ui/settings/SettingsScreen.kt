@@ -679,9 +679,25 @@ fun SettingsScreen(
                                 text = "Check",
                                 onClick = {
                                     updateState.value = UpdateState.Checking
-                                    viewModel.checkForUpdates { info ->
-                                        releaseInfo.value = info
-                                        updateState.value = if (info != null && viewModel.isNewerRelease(info)) UpdateState.UpdateAvailable else UpdateState.UpToDate
+                                    viewModel.checkForUpdates { result ->
+                                        when (result) {
+                                            is com.agoria.app.util.UpdateManager.CheckResult.Available -> {
+                                                releaseInfo.value = result
+                                                updateState.value = UpdateState.UpdateAvailable
+                                            }
+                                            com.agoria.app.util.UpdateManager.CheckResult.UpToDate -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.UpToDate
+                                            }
+                                            com.agoria.app.util.UpdateManager.CheckResult.Invalid -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.Idle
+                                            }
+                                            com.agoria.app.util.UpdateManager.CheckResult.NetworkError -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.Idle
+                                            }
+                                        }
                                     }
                                 },
                                 small = true,
@@ -774,8 +790,22 @@ fun SettingsScreen(
                                         // Ignore taps while a download is already running (replaces enabled = false).
                                         if (downloadProgress.value == null) {
                                             downloadProgress.value = 0
-                                            viewModel.downloadAndInstallUpdate(info, { pct -> downloadProgress.value = pct }, { _ ->
+                                            viewModel.downloadAndInstallUpdate(info, { pct -> downloadProgress.value = pct }, { result ->
                                                 downloadProgress.value = null
+                                                when (result) {
+                                                    is com.agoria.app.util.UpdateManager.UpdateResult.Installed -> {
+                                                        updateState.value = UpdateState.Idle
+                                                    }
+                                                    com.agoria.app.util.UpdateManager.UpdateResult.NeedsPermission -> {
+                                                        updateState.value = UpdateState.Idle
+                                                    }
+                                                    is com.agoria.app.util.UpdateManager.UpdateResult.Refused -> {
+                                                        updateState.value = UpdateState.Idle
+                                                    }
+                                                    com.agoria.app.util.UpdateManager.UpdateResult.NetworkError -> {
+                                                        updateState.value = UpdateState.Idle
+                                                    }
+                                                }
                                             })
                                         }
                                     },
