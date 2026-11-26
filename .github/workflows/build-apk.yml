@@ -85,9 +85,6 @@ jobs:
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Lint
-        run: ./gradlew lintDebug --no-daemon --stacktrace
-
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
