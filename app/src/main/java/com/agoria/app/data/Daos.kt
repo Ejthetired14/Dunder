@@ -48,6 +48,15 @@ interface DiaryDao {
     @Query("SELECT * FROM diary_entries ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<DiaryEntryEntity>
 
+    @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForAgent(agentId: String, limit: Int): List<DiaryEntryEntity>
+
+    @Query("SELECT * FROM diary_entries WHERE kind = 'say' ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentSayEntries(limit: Int): List<DiaryEntryEntity>
+
+    @Query("DELETE FROM diary_entries WHERE createdAt < :olderThanMillis AND pinned = false AND importance < 3")
+    suspend fun pruneOldEntries(olderThanMillis: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: DiaryEntryEntity)
 
@@ -73,6 +82,9 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForAgent(agentId: String, limit: Int): List<MessageEntity>
+
+    @Query("DELETE FROM messages WHERE createdAt < :olderThanMillis")
+    suspend fun pruneOldMessages(olderThanMillis: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: MessageEntity)
@@ -139,6 +151,12 @@ interface ApprovalDao {
 
     @Query("DELETE FROM approvals")
     suspend fun deleteAll()
+
+    @Query("UPDATE approvals SET status = 'expired' WHERE status IN ('pending', 'auto_pending') AND decidedAt IS NULL AND createdAt < :olderThanMillis")
+    suspend fun expirePendingApprovals(olderThanMillis: Long): Int
+
+    @Query("DELETE FROM approvals WHERE status IN ('approved', 'rejected', 'expired') AND decidedAt IS NOT NULL AND createdAt < :olderThanMillis")
+    suspend fun pruneResolvedApprovals(olderThanMillis: Long): Int
 
     @Query("SELECT * FROM approvals ORDER BY createdAt ASC")
     suspend fun getAll(): List<ApprovalEntity>
@@ -319,6 +337,9 @@ interface ConnectorLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: ConnectorLogEntity)
+
+    @Query("DELETE FROM connector_logs WHERE createdAt < :olderThanMillis")
+    suspend fun pruneOldLogs(olderThanMillis: Long): Int
 
     @Query("DELETE FROM connector_logs")
     suspend fun deleteAll()

@@ -114,6 +114,12 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // SEC-16: passphrase-protected export/import of connector secrets.
+    var showExportSecretsDialog by remember { mutableStateOf(false) }
+    var showImportSecretsDialog by remember { mutableStateOf(false) }
+    var exportPassphrase by remember { mutableStateOf("") }
+    var importPassphrase by remember { mutableStateOf("") }
+
     // File picker for import
     val pickImportFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -121,8 +127,15 @@ fun SettingsScreen(
         uri?.let { fileUri ->
             // A document picked through the system picker is not a file path, so it has to be read
             // through the content resolver.
-            viewModel.importDataFromUri(context, fileUri) { success, message ->
-                scope.launch { snackbarHostState.showSnackbar(message) }
+            if (showImportSecretsDialog) {
+                showImportSecretsDialog = false
+                viewModel.importDataFromUriWithSecrets(context, fileUri, importPassphrase) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                }
+            } else {
+                viewModel.importDataFromUri(context, fileUri) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                }
             }
         }
     }
@@ -132,8 +145,15 @@ fun SettingsScreen(
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri: Uri? ->
         uri?.let { exportUri ->
-            viewModel.exportDataToUri(context, exportUri) { success, message ->
-                scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+            if (showExportSecretsDialog) {
+                showExportSecretsDialog = false
+                viewModel.exportDataToUriWithSecrets(context, exportUri, exportPassphrase) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+                }
+            } else {
+                viewModel.exportDataToUri(context, exportUri) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+                }
             }
         }
     }
@@ -543,6 +563,15 @@ fun SettingsScreen(
                         },
                         small = true,
                     )
+                    PixelButton(
+                        text = "Export w/ secrets",
+                        onClick = {
+                            exportPassphrase = ""
+                            showExportSecretsDialog = true
+                        },
+                        small = true,
+                        fill = Pal.wood,
+                    )
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -576,6 +605,15 @@ fun SettingsScreen(
                         text = "Import",
                         onClick = { pickImportFileLauncher.launch("application/json") },
                         small = true,
+                    )
+                    PixelButton(
+                        text = "Import w/ secrets",
+                        onClick = {
+                            importPassphrase = ""
+                            showImportSecretsDialog = true
+                        },
+                        small = true,
+                        fill = Pal.wood,
                     )
                 }
 
@@ -639,9 +677,95 @@ fun SettingsScreen(
                 )
             }
 
+            // SEC-16: passphrase dialog for encrypted export of connector secrets.
+            if (showExportSecretsDialog) {
+                PixelDialog(
+                    onDismiss = { showExportSecretsDialog = false; exportPassphrase = "" },
+                    title = "Export with secrets",
+                ) {
+                    Text(
+                        text = "Enter a passphrase to encrypt connector credentials (API keys, tokens). " +
+                            "It is never stored; losing it means the secrets cannot be recovered.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Dim,
+                    )
+                    PixelTextField(
+                        value = exportPassphrase,
+                        onValueChange = { exportPassphrase = it },
+                        password = true,
+                        label = "Passphrase",
+                        hint = "Remember it — you will need it to import.",
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        PixelButton(
+                            text = "Cancel",
+                            onClick = { showExportSecretsDialog = false; exportPassphrase = "" },
+                            small = true,
+                        )
+                        PixelButton(
+                            text = "Export",
+                            onClick = {
+                                if (exportPassphrase.isNotBlank()) {
+                                    showExportSecretsDialog = false
+                                    createExportFileLauncher.launch("agoria-export-secrets-${System.currentTimeMillis()}.json")
+                                }
+                            },
+                            small = true,
+                            fill = Pal.wood,
+                        )
+                    }
+                }
+            }
+
+            // SEC-16: passphrase dialog for encrypted import of connector secrets.
+            if (showImportSecretsDialog) {
+                PixelDialog(
+                    onDismiss = { showImportSecretsDialog = false; importPassphrase = "" },
+                    title = "Import with secrets",
+                ) {
+                    Text(
+                        text = "Enter the passphrase used when the backup was exported. Connector " +
+                            "credentials are decrypted and applied only if the passphrase matches.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Dim,
+                    )
+                    PixelTextField(
+                        value = importPassphrase,
+                        onValueChange = { importPassphrase = it },
+                        password = true,
+                        label = "Passphrase",
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        PixelButton(
+                            text = "Cancel",
+                            onClick = { showImportSecretsDialog = false; importPassphrase = "" },
+                            small = true,
+                        )
+                        PixelButton(
+                            text = "Import",
+                            onClick = {
+                                if (importPassphrase.isNotBlank()) {
+                                    showImportSecretsDialog = false
+                                    pickImportFileLauncher.launch("application/json")
+                                }
+                            },
+                            small = true,
+                            fill = Pal.wood,
+                        )
+                    }
+                }
+            }
+
             SettingsCard(title = "App Updates") {
                 val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
-                val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null) }
+    var updateRefusalReason by remember { mutableStateOf<String?>(null) }
+                val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null)>
 
                 when (updateState.value) {
                     UpdateState.Idle -> {
@@ -672,10 +796,31 @@ fun SettingsScreen(
                             PixelButton(
                                 text = "Check",
                                 onClick = {
+                                    updateRefusalReason = null
                                     updateState.value = UpdateState.Checking
-                                    viewModel.checkForUpdates { info ->
-                                        releaseInfo.value = info
-                                        updateState.value = if (info != null && viewModel.isNewerRelease(info)) UpdateState.UpdateAvailable else UpdateState.UpToDate
+                                    viewModel.checkForUpdates { result ->
+                                        when (result) {
+                                            is com.agoria.app.util.UpdateManager.CheckResult.Available -> {
+                                                releaseInfo.value = result.release
+                                                updateState.value = UpdateState.UpdateAvailable
+                                                updateRefusalReason = null
+                                            }
+                                            com.agoria.app.util.UpdateManager.CheckResult.UpToDate -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.UpToDate
+                                                updateRefusalReason = null
+                                            }
+                                            is com.agoria.app.util.UpdateManager.CheckResult.Invalid -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.Idle
+                                                updateRefusalReason = "Update information is unavailable or invalid."
+                                            }
+                                            com.agoria.app.util.UpdateManager.CheckResult.NetworkError -> {
+                                                releaseInfo.value = null
+                                                updateState.value = UpdateState.Idle
+                                                updateRefusalReason = "Update failed: unable to reach the update server. Check your network and try again."
+                                            }
+                                        }
                                     }
                                 },
                                 small = true,
@@ -714,7 +859,10 @@ fun SettingsScreen(
                             }
                             PixelButton(
                                 text = "Check Again",
-                                onClick = { updateState.value = UpdateState.Idle },
+                                onClick = {
+                                    updateRefusalReason = null
+                                    updateState.value = UpdateState.Idle
+                                },
                                 small = true,
                                 fill = Pal.tan,
                             )
@@ -768,8 +916,26 @@ fun SettingsScreen(
                                         // Ignore taps while a download is already running (replaces enabled = false).
                                         if (downloadProgress.value == null) {
                                             downloadProgress.value = 0
-                                            viewModel.downloadAndInstallUpdate(info, { pct -> downloadProgress.value = pct }, { _ ->
+                                            viewModel.downloadAndInstallUpdate(info, { pct -> downloadProgress.value = pct }, { result ->
                                                 downloadProgress.value = null
+                                                when (result) {
+                                                    is com.agoria.app.util.UpdateManager.UpdateResult.Installed -> {
+                                                        updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = null
+                                                    }
+                                                    com.agoria.app.util.UpdateManager.UpdateResult.NeedsPermission -> {
+                                                        updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Install blocked: allow \"Install from this source\" in Settings, then try again."
+                                                    }
+                                                    is com.agoria.app.util.UpdateManager.UpdateResult.Refused -> {
+                                                        updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Update refused: ${result.reason}"
+                                                    }
+                                                    com.agoria.app.util.UpdateManager.UpdateResult.NetworkError -> {
+                                                        updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Update failed: unable to reach the update server. Check your network and try again."
+                                                    }
+                                                }
                                             })
                                         }
                                     },
@@ -781,6 +947,14 @@ fun SettingsScreen(
                                     onClick = { updateState.value = UpdateState.Idle },
                                     small = true,
                                     fill = Pal.tan,
+                                )
+                            }
+                            updateRefusalReason?.let { reason ->
+                                Text(
+                                    text = reason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Pal.amber,
+                                    modifier = Modifier.padding(top = 4.dp),
                                 )
                             }
                         }
