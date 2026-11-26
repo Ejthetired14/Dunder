@@ -5,6 +5,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+ksp {
+    argument("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.agoria.app"
     compileSdk = 35
