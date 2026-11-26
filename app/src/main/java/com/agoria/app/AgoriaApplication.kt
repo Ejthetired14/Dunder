@@ -46,6 +46,7 @@ class AgoriaApplication : Application() {
         this@AgoriaApplication.llm = llm
         val buildRunner = BuildRunner(repository, llm, this@AgoriaApplication)
         val connectorExecutor = ConnectorExecutor(repository, this@AgoriaApplication)
+        connectorExecutor.initHandlers()
         runtime = AgentRuntime(
             repo = repository,
             llm = llm,

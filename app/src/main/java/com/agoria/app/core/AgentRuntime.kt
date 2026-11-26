@@ -48,6 +48,17 @@ class AgentRuntime(
     // Expose connector executor for direct connector calls (e.g., backup/restore)
     val connectorExecutor: ConnectorExecutor = connectorExecutorInstance
 
+    // ARCH-1: extracted collaborators
+    private val approvalExecutor = ApprovalExecutor(
+        repo = repo,
+        buildRunner = buildRunner,
+        connectorExecutor = connectorExecutor,
+        context = context,
+        mutexFor = ::mutexFor,
+        log = ::log,
+    )
+    private val contextBuilder = CycleContextBuilder(repo = repo)
+
     private var loopJob: Job? = null
 
     @Volatile
@@ -848,176 +859,15 @@ class AgentRuntime(
 
     // ---------------------------------------------------------------- approvals
 
-    /** The outcome of executing an approval, replacing fragile string-prefix matching. */
-    private data class ApprovalOutcome(val ok: Boolean, val summary: String, val retryable: Boolean = false)
-
+    /** Delegate to extracted ApprovalExecutor (ARCH-1). */
     private suspend fun executeApproval(approval: ApprovalEntity) {
-        val agent = repo.agent(approval.agentId)
-            ?: return run {
-                repo.updateApproval(approval.copy(status = "failed", decidedAt = Time.now(), result = "Agent no longer exists"))
-            }
-
-        val outcome = when (approval.type) {
-            "build_project" -> {
-                // The shared project folder has one owner. Other agents can still plan, write tasks
-                // and report progress; only the lead agent writes into the project.
-                val project = repo.ensureProject()
-                val lead = project.leadAgentId
-                if (lead.isNotBlank() && lead != agent.id) {
-                    val leadName = repo.agent(lead)?.name ?: "the lead agent"
-                    ApprovalOutcome(false, "Build skipped: only $leadName can build in ${project.name}. Ask $leadName to run it.")
-                } else {
-                    val build = buildRunner.build(agent, approval)
-                    if (build != null) {
-                        ApprovalOutcome(true, "Build complete: ${build.name} (${build.fileCount} files)")
-                    } else {
-                        ApprovalOutcome(false, "Build failed: no files were generated.", retryable = true)
-                    }
-                }
-            }
-
-            "connector_action" -> {
-                val details = Json.tryObject(approval.details) ?: JSONObject()
-                val connectorId = Json.string(
-                    details,
-                    "connector_id",
-                    Json.string(details, "connector"),
-                )
-                val actionName = Json.string(
-                    details,
-                    "action_name",
-                    Json.string(details, "action", "request"),
-                )
-                val args = Json.obj(details, "args") ?: JSONObject()
-                if (connectorId.isBlank() || actionName.isBlank()) {
-                    ApprovalOutcome(false, "Approval data did not include a connector action.")
-                } else {
-                    val result = connectorExecutor.execute(connectorId, approval.agentId, actionName, args)
-                    if (result.ok) ApprovalOutcome(true, result.summary)
-                    else ApprovalOutcome(false, "Failed: ${result.summary}", retryable = true)
-                }
-            }
-
-            "connector_install" -> {
-                val connectorId = Json.string(Json.tryObject(approval.details), "connector_id")
-                if (connectorId.isNotBlank()) {
-                    val connector = repo.connector(connectorId)
-                    if (connector != null) {
-                        repo.updateConnector(connector.copy(status = "configured"))
-                    }
-                }
-                ApprovalOutcome(true, "Connector install approved.")
-            }
-
-            else -> ApprovalOutcome(true, "Approved. There is no automatic executor for '${approval.type}'.")
-        }
-
-        repo.updateApproval(
-            approval.copy(
-                status = if (outcome.ok) "executed" else "failed",
-                decidedAt = Time.now(),
-                result = outcome.summary.take(2000),
-            ),
-        )
-
-        if (approval.type != "build_project") {
-            repo.addDiary(
-                approval.agentId,
-                if (outcome.ok) "decision" else "error",
-                "Approval ${if (outcome.ok) "executed" else "failed"}: ${approval.title} — ${outcome.summary}",
-                if (outcome.ok) 3 else 2,
-            )
-            repo.addMessage(
-                approval.agentId,
-                "system",
-                "Approval ${if (outcome.ok) "executed" else "failed"}: ${approval.title}. ${outcome.summary}",
-            )
-        }
-        repo.setAgentStatus(approval.agentId, "idle")
-        log("${approval.title}: ${if (outcome.ok) "executed" else "failed"}")
+        approvalExecutor.execute(approval)
     }
 
     // ------------------------------------------------------------------ context
 
     private suspend fun buildContext(agent: AgentEntity): AgentContext {
-        val settings = repo.settings()
-        val diary = repo.recentDiaryForAgent(agent.id, 18)
-        val memories = repo.memoriesFor(agent.id).first().take(14)
-        val messages = repo.messagesFor(agent.id).first().takeLast(14)
-        val tasks = repo.tasksFor(agent.id).first()
-        val approvals = repo.approvalsFor(agent.id).first()
-        val builds = repo.buildsFor(agent.id).first()
-        val allowed = agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }
-        val connectors = repo.connectors.first()
-            .filter { it.status != "disabled" && (allowed.isEmpty() || it.id in allowed) }
-            .map { connector ->
-            val def = ConnectorCatalog.get(connector.id)
-            ConnectorBrief(
-                id = connector.id,
-                name = connector.name,
-                status = connector.status,
-                summary = def?.description ?: "Custom connector.",
-                ready = connector.status == "ready" || connector.status == "configured",
-            )
-        }
-
-        val providers = repo.providers.first().map { provider ->
-            val spec = ProviderCatalog.byId[provider.id]
-            ProviderBrief(
-                id = provider.id,
-                name = spec?.name ?: provider.id,
-                enabled = provider.enabled,
-                hasKey = !provider.apiKeyEnc.isNullOrBlank(),
-                keyless = spec?.keyRequired == false,
-                model = provider.model.ifBlank { spec?.defaultModel ?: "" },
-                lastStatus = provider.lastStatus,
-            )
-        }
-
-        val peers = repo.agents.first().filter { it.id != agent.id }.map {
-            PeerInfo(
-                name = it.name,
-                role = it.role,
-                status = it.status,
-                goal = it.goal,
-            )
-        }
-
-        // Recent talk between agents (diary kind "say") - use limited query instead of loading all diaries
-        val chatter = repo.recentSayEntries(50)
-            .filter { it.kind == "say" }
-            .mapNotNull { e ->
-                val a = repo.agent(e.agentId) ?: return@mapNotNull null
-                val m = AgentPolicy.SAY_REGEX.find(e.content.trim()) ?: return@mapNotNull null
-                ChatterLine(a.name, m.groupValues[1].trim(), m.groupValues[2].trim(), e.createdAt)
-            }
-            .filter { it.fromName == agent.name || it.toName.equals(agent.name, ignoreCase = true) }
-            .sortedByDescending { it.at }
-            .take(8)
-            .reversed()
-        val agentRevenue = repo.totalRevenueForAgent(agent.id)
-        val infraFund = repo.getInfrastructureFund()
-
-        return AgentContext(
-            agent = agent,
-            officeName = settings.officeName,
-            userName = settings.userName,
-            now = Time.now(),
-            diary = diary,
-            memories = memories,
-            messages = messages,
-            tasks = tasks,
-            approvals = approvals,
-            builds = builds,
-            connectors = connectors,
-            providers = providers,
-            peers = peers,
-            agentTotalRevenueCents = agentRevenue,
-            infrastructureFundCents = infraFund,
-            agentProfitSharePercent = settings.agentProfitSharePercent,
-            userProfitSharePercent = settings.userProfitSharePercent,
-            chatter = chatter,
-        )
+        return contextBuilder.build(agent)
     }
 
     private fun log(message: String, level: String = "info") {

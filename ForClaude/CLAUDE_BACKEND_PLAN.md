@@ -446,9 +446,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `redactSecrets()` applied in `AgentRuntime.log()` and `Repository.addConnectorLog()`. Full persistence to Room deferred (needs new entity/migration).
 
 ### ARCH-1 - Split the two giant classes
-- Status: TODO | Effort: L
-- Evidence: `ConnectorExecutor.kt` ~129 KB and `AgentRuntime.kt` ~42 KB.
-- Fix: `ConnectorHandler` interface per connector (declares actions, schema, mutating flag, rate limit), registered in one place; action handlers in a `Map<String, ActionHandler>`; constructor injection instead of building everything in `AgoriaApplication.onCreate`.
+- Status: IN-PROGRESS (2026-11-26) | Effort: L
+- Evidence: `ConnectorExecutor.kt` (3041 lines) refactored into `ConnectorExecutor.kt` (~70 lines, thin delegate) + `core/connectors/` package with 23 files (interface, HTTP utils, registry, 20 per-connector handlers). `AgentRuntime.kt` (1109 lines) refactored: extracted `ApprovalExecutor.kt` (approval execution logic) and `CycleContextBuilder.kt` (agent context building). `AgoriaApplication.onCreate()` calls `connectorExecutor.initHandlers()`.
+- Fix: `ConnectorHandler` interface per connector, registered in `ConnectorHandlerRegistry`; action handlers in per-connector classes; constructor injection via `initHandlers(repo, context)`.
+- Done when: CI build passes (cannot verify locally — no Android toolchain). ConnectorExecutor public `execute()` API unchanged; all callers (AgentRuntime, AgoriaViewModel) unaffected.
+- Remaining: CI build verification (push + wait for GitHub Actions). No device needed for compilation check.
 
 ### DOC-1 - Bring README and docs in line with the code
 - Status: DONE (2026-11-26) | Effort: S
@@ -531,6 +533,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-26 | Claude | BUG-9: `Repository.addBuild` gained a `status` parameter; `BuildRunner.build` emits `Failed` for model failures, writes fallback stubs with status "fallback", checks cancellation, logs truncation, stores `nextSteps`. BUG-10: `LlmClient.callProvider` breaks on 4xx, retries 5xx once with `Retry-After`, uses `cancellableExecute`; sends `response_format` when `request.json`; releases semaphore between providers; per-provider cooldown. BUG-11: `stripe.verify_key` uses connector's `secretKey`; GitHub setupHelp recommends least privilege; huggingface risk = "medium". DATA-4: `exportSchema = true`; recovery flag on failed migration; `AgoriaApplication` opens DB on `Dispatchers.IO`. LLM-1: `runCycle` retries once with JSON-only instruction when `parseDecision` returns null. RUN-1: concurrent agent ticking, per-cycle timeout, exponential backoff via `failureCount`, mutex around all `executeApproval` calls. RUN-2: hourly request/token budget with skip when exhausted. OBS-1: `redactSecrets()` in `AgentRuntime.log()` and `Repository.addConnectorLog()`. DOC-1: README workflow filename, artifact name, export wording, safety model updated. SEC-5: `autoApproveAllowlist` and `autoApproveDailyCap` settings; `processAutoApprovedApprovals` skips high-risk, checks allowlist, enforces daily cap. SEC-2: default export excludes `apiToken` from agents and decrypted `config` from connectors. DATA-1: atomic `addInfrastructureFund(delta)` SQL; `@Transaction` `updateSettingsTx`; `updateInfrastructureFund` uses `addInfrastructureFund` directly. SEC-8: validate Cloudflare worker names, GitHub repo names and issue states, ISO currency codes, Stripe event types; JSON-escape values in `stripeWebhookWorkerCode`; validate callback URL scheme. DATA-3: `importSnapshot` wrapped in `db.withTransaction`; imports approvals/revenue/providers; `reset()` clears files; `AppDatabase.clearAllTables()` added. |
 | 2026-11-26 | Claude | Release v1.0.242 (versionCode 242): tag `v1.0.242` created at commit `bd85c28` (force-pushed) and pushed to `kilo/pearly-relay-7or`. Fixed compilation errors (BuildRunner coroutineContext removal, LlmClient break/continue + IOException import + resumeWith(Result), AppDatabase clearAllData override/rename) across commits `69de8b8`→`bd85c28`. CI green: Build APK run 45806079092, Lint run 45804671918, Backup config guard run 45804671723. Pages deploy green: `Deploy to GitHub Pages` job succeeded in rerun of run 45806079092. Release asset: `app-release-signed.apk` (3.9 MB). Release URL: https://github.com/Ejthetired14/Dunder/releases/tag/v1.0.242 |
 | 2026-11-26 | Claude | Crash fix: reverted `AgoriaApplication.onCreate()` database initialization from asynchronous (`GlobalScope.launch(Dispatchers.IO)`) back to synchronous. The async change (DATA-4) left `database`, `repository`, `runtime`, `llm`, `appScope` as `lateinit` properties set asynchronously, causing `UninitializedPropertyAccessException` crashes on app open when any component accessed them before the coroutine completed. Bumped version to 1.0.243 (versionCode 243). Tag `v1.0.243` created at commit `43be63e` and pushed to `kilo/pearly-relay-7or`. CI green: Build APK run 45810711716, Lint run 45810696645, Backup config guard run 45810696639. Pages deploy green: `latest-release.json` served with versionCode 243 / versionName "1.0.243". Release asset: `app-release-signed.apk` (3.9 MB). Release URL: https://github.com/Ejthetired14/Dunder/releases/tag/v1.0.243 |
+| 2026-11-26 | Claude | ARCH-1 started: `ConnectorExecutor.kt` (3041 lines) split into `ConnectorExecutor.kt` (~70 lines delegate) + 22 handler files under `core/connectors/` (interface, HTTP utils, registry, per-connector handlers for wikipedia/hn/search/weather/currency/device/files/http/accounts/github/slack/discord/notion/telegram/paypal/polar/agentmail/stripe/cloudflare_workers/supabase/resend/upstash/huggingface/vercel/netlify/linear). `AgentRuntime.kt` (1109 lines) split: extracted `ApprovalExecutor.kt` and `CycleContextBuilder.kt`. `AgoriaApplication.onCreate()` calls `connectorExecutor.initHandlers()`. Public `ConnectorExecutor.execute()` API unchanged. Not compiled locally — pending CI verification. |
 
 ---
 
@@ -696,3 +699,18 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - Release: https://github.com/Ejthetired14/Dunder/releases/tag/v1.0.243 with `app-release-signed.apk` (3.9 MB).
 - NOT verified: device/emulator checks (SEC-1, SEC-13, SEC-10, RUN-5), ARCH-1 refactor.
 - Next for whoever continues: ARCH-1 (large refactor, can't verify without compilation), SEC-1/SEC-13/SEC-10/RUN-5 device checks, DEC-1 monetization decision.
+
+### 2026-11-26 - ARCH-1 refactor (ConnectorExecutor + AgentRuntime) - Claude
+- Split `ConnectorExecutor.kt` (3041 lines) into:
+  - `ConnectorExecutor.kt` (~70 lines): thin delegate that does connector lookup, permission checks, action validation, then delegates to registry handler. Public `execute()` API unchanged.
+  - `core/connectors/ConnectorHandler.kt`: interface + `HandlerResult` data class.
+  - `core/connectors/ConnectorHttp.kt`: shared HTTP client, bounded reads, retry-only-idempotent, URL/header helpers.
+  - `core/connectors/ConnectorHandlerRegistry.kt`: maps connector IDs to handlers, `init(repo, context)`.
+  - 20 per-connector handler files: GenericKnowledge (wikipedia), GenericNews (hn), WebSearch (search), Weather, Currency, Device, File, Http, Accounts, GitHub, Slack, Discord, Notion, Telegram, AgentMail, PayPal, Polar, Stripe, CloudflareWorkers, Supabase, Resend, Upstash, HuggingFace, Vercel, Netlify, Linear.
+- Split `AgentRuntime.kt` (1109 lines) into:
+  - `AgentRuntime.kt`: kept ticking loop, cycle execution, chat, approve/deny, connector requests. Added `approvalExecutor` and `contextBuilder` properties. `executeApproval()` and `buildContext()` delegate to extracted classes.
+  - `core/ApprovalExecutor.kt`: approval execution logic (build_project, connector_action, connector_install), `ApprovalOutcome` data class.
+  - `core/CycleContextBuilder.kt`: agent context building (diary, messages, tasks, connectors, providers, peers, revenue, chatter).
+- Updated `AgoriaApplication.onCreate()` to call `connectorExecutor.initHandlers()`.
+- NOT verified: CI build (no Android toolchain locally). Pending GitHub Actions verification.
+- Next: push and wait for CI build; if green, mark ARCH-1 DONE.
