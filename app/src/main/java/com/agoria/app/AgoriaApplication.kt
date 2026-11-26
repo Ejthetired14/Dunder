@@ -38,34 +38,31 @@ class AgoriaApplication : Application() {
         super.onCreate()
         Notifier.ensureChannels(this)
         com.agoria.app.browser.BrowserHub.init(this)
-        // DATA-4: open the database off the main thread so migration work doesn't block startup.
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            database = AppDatabase.create(this@AgoriaApplication)
-            repository = Repository(database, this@AgoriaApplication)
-            appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        database = AppDatabase.create(this@AgoriaApplication)
+        repository = Repository(database, this@AgoriaApplication)
+        appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-            val llm = LlmClient(repository)
-            this@AgoriaApplication.llm = llm
-            val buildRunner = BuildRunner(repository, llm, this@AgoriaApplication)
-            val connectorExecutor = ConnectorExecutor(repository, this@AgoriaApplication)
-            runtime = AgentRuntime(
-                repo = repository,
-                llm = llm,
-                buildRunner = buildRunner,
-                connectorExecutorInstance = connectorExecutor,
-                context = this@AgoriaApplication,
-                scope = appScope,
-            )
+        val llm = LlmClient(repository)
+        this@AgoriaApplication.llm = llm
+        val buildRunner = BuildRunner(repository, llm, this@AgoriaApplication)
+        val connectorExecutor = ConnectorExecutor(repository, this@AgoriaApplication)
+        runtime = AgentRuntime(
+            repo = repository,
+            llm = llm,
+            buildRunner = buildRunner,
+            connectorExecutorInstance = connectorExecutor,
+            context = this@AgoriaApplication,
+            scope = appScope,
+        )
 
-            appScope.launch {
-                repository.seedIfNeeded()
-                // One full snapshot a day, so no upgrade can ever leave the office with nothing.
-                repository.writeAutoBackup()
-                // DATA-2: prune stale logs, messages, approvals and diary on startup.
-                repository.runRetentionJob()
-            }
-
-            updateManager = UpdateManager(this@AgoriaApplication, appScope)
+        appScope.launch {
+            repository.seedIfNeeded()
+            // One full snapshot a day, so no upgrade can ever leave the office with nothing.
+            repository.writeAutoBackup()
+            // DATA-2: prune stale logs, messages, approvals and diary on startup.
+            repository.runRetentionJob()
         }
+
+        updateManager = UpdateManager(this@AgoriaApplication, appScope)
     }
 }
