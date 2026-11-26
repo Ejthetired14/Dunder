@@ -420,7 +420,28 @@ class Repository(
         val normalizedType = type.lowercase().trim()
         val autoApproveTypes = s.autoApproveTypes.lowercase().split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val autoApprove = s.autoApproveEnabled && autoApproveTypes.contains(normalizedType)
-        
+
+        // DATA-6: expiry — mark stale pending approvals as expired (older than 24 h).
+        val cutoff = Time.now() - 24 * 60 * 60 * 1000L
+        val pending = db.approvalDao().pendingForAgent(agentId)
+        pending.filter { it.createdAt < cutoff && it.status == "pending" }.forEach {
+            db.approvalDao().update(it.copy(status = "expired"))
+        }
+
+        // DATA-6: de-dup — don't create a duplicate pending approval for the same (agent, type, details).
+        val duplicate = pending.firstOrNull { it.type == type && it.details == details }
+        if (duplicate != null) {
+            Log.i("ApprovalFlow", "Duplicate approval suppressed id=${duplicate.id} agent=$agentId type=$type")
+            return duplicate
+        }
+
+        // DATA-6: max pending per agent — keep only the 10 most recent, expire the rest.
+        val maxPending = 10
+        val stillPending = pending.filter { it.status == "pending" }.sortedByDescending { it.createdAt }
+        stillPending.drop(maxPending - 1).forEach {
+            db.approvalDao().update(it.copy(status = "expired"))
+        }
+
         val approval = ApprovalEntity(
             id = UUID.randomUUID().toString(),
             agentId = agentId,
@@ -530,15 +551,23 @@ class Repository(
 
     suspend fun connectorConfig(id: String): JSONObject? {
         val connector = db.connectorDao().get(id) ?: return null
-        val decrypted = SecretCipher.decrypt(connector.configEnc) ?: return null
+        val decrypted = runCatching { SecretCipher.decrypt(connector.configEnc) }.getOrNull() ?: return null
+        if (decrypted == null && connector.configEnc != null) {
+            Log.w("Repository", "Connector $id has encrypted config but decryption failed; treating as unconfigured")
+        }
         return Json.tryObject(decrypted)
     }
 
     suspend fun saveConnectorConfig(id: String, config: JSONObject) {
         val connector = db.connectorDao().get(id) ?: return
+        val encrypted = runCatching { SecretCipher.encrypt(config.toString()) }.getOrNull()
+        if (encrypted == null) {
+            Log.w("Repository", "Connector $id config encryption failed; not saving config")
+            return
+        }
         db.connectorDao().update(
             connector.copy(
-                configEnc = SecretCipher.encrypt(config.toString()),
+                configEnc = encrypted,
                 status = "configured",
                 lastError = null,
             ),
@@ -609,9 +638,14 @@ class Repository(
 
     suspend fun saveProviderKey(id: String, key: String) {
         val provider = db.providerDao().get(id) ?: return
+        val encrypted = runCatching { SecretCipher.encrypt(key) }.getOrNull()
+        if (encrypted == null) {
+            Log.w("Repository", "Provider $id key encryption failed; key not saved")
+            return
+        }
         db.providerDao().update(
             provider.copy(
-                apiKeyEnc = SecretCipher.encrypt(key),
+                apiKeyEnc = encrypted,
                 updatedAt = Time.now(),
             ),
         )
@@ -619,14 +653,19 @@ class Repository(
 
     suspend fun providerKey(id: String): String? {
         val provider = db.providerDao().get(id) ?: return null
-        return SecretCipher.decrypt(provider.apiKeyEnc)?.ifBlank { null }
+        return runCatching { SecretCipher.decrypt(provider.apiKeyEnc) }.getOrNull()?.ifBlank { null }
     }
 
     suspend fun saveProviderExtra(id: String, extra: String) {
         val provider = db.providerDao().get(id) ?: return
+        val encrypted = runCatching { SecretCipher.encrypt(extra) }.getOrNull()
+        if (encrypted == null) {
+            Log.w("Repository", "Provider $id extra encryption failed; extra not saved")
+            return
+        }
         db.providerDao().update(
             provider.copy(
-                extra = SecretCipher.encrypt(extra),
+                extra = encrypted,
                 updatedAt = Time.now(),
             ),
         )
@@ -634,7 +673,7 @@ class Repository(
 
     suspend fun providerExtra(id: String): String? {
         val provider = db.providerDao().get(id) ?: return null
-        return SecretCipher.decrypt(provider.extra)?.ifBlank { null }
+        return runCatching { SecretCipher.decrypt(provider.extra) }.getOrNull()?.ifBlank { null }
     }
 
     suspend fun recordProviderResult(id: String, status: String, latency: Long?, error: String?) {

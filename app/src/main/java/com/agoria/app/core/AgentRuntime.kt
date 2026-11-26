@@ -503,16 +503,33 @@ class AgentRuntime(
                 val currency = Json.string(input, "currency", "USD")
                 val metadata = Json.obj(input, "metadata") ?: JSONObject()
                 if (amountCents > 0) {
-                    val revenue = repo.recordRevenue(agentId, source, amountCents, currency, metadata)
-                    val settings = repo.settings()
-                    val agentShare = settings.agentProfitSharePercent
-                    val userShare = settings.userProfitSharePercent
-                    val agentAmount = (amountCents * agentShare / 100).toLong()
-                    val userAmount = amountCents - agentAmount
-                    repo.updateInfrastructureFund(agentAmount)
-                    val fund = repo.getInfrastructureFund()
-                    log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
-                    repo.addDiary(agentId, "revenue", "Earned ${amountCents / 100} USD ($source). Agent fund: ${agentAmount / 100}, User: ${userAmount / 100}. Infrastructure fund: ${fund / 100}", 4)
+                    if (AgentPolicy.isAutoAllowed(processed)) {
+                        val revenue = repo.recordRevenue(agentId, source, amountCents, currency, metadata)
+                        val settings = repo.settings()
+                        val agentShare = settings.agentProfitSharePercent
+                        val userShare = settings.userProfitSharePercent
+                        val agentAmount = (amountCents * agentShare / 100).toLong()
+                        val userAmount = amountCents - agentAmount
+                        repo.updateInfrastructureFund(agentAmount)
+                        val fund = repo.getInfrastructureFund()
+                        log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
+                        repo.addDiary(agentId, "revenue", "Earned ${amountCents / 100} USD ($source). Agent fund: ${agentAmount / 100}, User: ${userAmount / 100}. Infrastructure fund: ${fund / 100}", 4)
+                    } else {
+                        val settings = repo.settings()
+                        val agentShare = settings.agentProfitSharePercent
+                        val userShare = settings.userProfitSharePercent
+                        val agentAmount = (amountCents * agentShare / 100).toLong()
+                        val userAmount = amountCents - agentAmount
+                        val approval = repo.addApproval(
+                            agentId = agentId,
+                            type = "money_action",
+                            title = "${agent.name} wants to record revenue",
+                            summary = "Record ${amountCents / 100} $currency from $source. Agent keeps ${agentAmount / 100}, user gets ${userAmount / 100}.",
+                            details = JSONObject().put("source", source).put("amountCents", amountCents).put("currency", currency).put("metadata", metadata).toString(2),
+                            risk = "high",
+                        )
+                        nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
+                    }
                 } else {
                     log("${agent.name} tried to record revenue with zero amount.", "error")
                 }
@@ -589,7 +606,7 @@ class AgentRuntime(
                     repo.addDiary(agentId, "error", "Infrastructure fund is empty. Cannot reinvest.", 2)
                 } else if (targetProvider.isBlank()) {
                     repo.addDiary(agentId, "error", "No provider specified for reinvestment.", 2)
-                } else {
+                } else if (AgentPolicy.isAutoAllowed(processed)) {
                     val provider = repo.provider(targetProvider)
                     if (provider != null) {
                         val cost = calculateReinvestCost(provider, targetModel, priority)
@@ -601,6 +618,22 @@ class AgentRuntime(
                         } else {
                             repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need ${cost / 100}, have ${fund / 100}.", 2)
                         }
+                    }
+                } else {
+                    val provider = repo.provider(targetProvider)
+                    if (provider != null) {
+                        val cost = calculateReinvestCost(provider, targetModel, priority)
+                        val approval = repo.addApproval(
+                            agentId = agentId,
+                            type = "money_action",
+                            title = "${agent.name} wants to reinvest in $targetProvider",
+                            summary = "Upgrade $targetProvider to ${targetModel.ifBlank { provider.model }} with priority $priority. Cost: ${cost / 100}. Fund remaining: ${(fund - cost) / 100}.",
+                            details = JSONObject().put("provider_id", targetProvider).put("model", targetModel).put("priority", priority).put("cost", cost).put("fund", fund).toString(2),
+                            risk = "high",
+                        )
+                        nextStatus = if (approval.status == "auto_pending") "idle" else "waiting_approval"
+                    } else {
+                        repo.addDiary(agentId, "error", "Provider '$targetProvider' not found.", 2)
                     }
                 }
             }
@@ -709,6 +742,9 @@ class AgentRuntime(
 
     // ---------------------------------------------------------------- approvals
 
+    /** The outcome of executing an approval, replacing fragile string-prefix matching. */
+    private data class ApprovalOutcome(val ok: Boolean, val summary: String, val retryable: Boolean = false)
+
     private suspend fun executeApproval(approval: ApprovalEntity) {
         val agent = repo.agent(approval.agentId)
             ?: return run {
@@ -723,13 +759,13 @@ class AgentRuntime(
                 val lead = project.leadAgentId
                 if (lead.isNotBlank() && lead != agent.id) {
                     val leadName = repo.agent(lead)?.name ?: "the lead agent"
-                    "Build skipped: only $leadName can build in ${project.name}. Ask $leadName to run it."
+                    ApprovalOutcome(false, "Build skipped: only $leadName can build in ${project.name}. Ask $leadName to run it.")
                 } else {
                     val build = buildRunner.build(agent, approval)
                     if (build != null) {
-                        "Build complete: ${build.name} (${build.fileCount} files)"
+                        ApprovalOutcome(true, "Build complete: ${build.name} (${build.fileCount} files)")
                     } else {
-                        "Build failed: no files were generated."
+                        ApprovalOutcome(false, "Build failed: no files were generated.", retryable = true)
                     }
                 }
             }
@@ -748,10 +784,11 @@ class AgentRuntime(
                 )
                 val args = Json.obj(details, "args") ?: JSONObject()
                 if (connectorId.isBlank() || actionName.isBlank()) {
-                    "Approval data did not include a connector action."
+                    ApprovalOutcome(false, "Approval data did not include a connector action.")
                 } else {
                     val result = connectorExecutor.execute(connectorId, approval.agentId, actionName, args)
-                    if (result.ok) result.summary else "Failed: ${result.summary}"
+                    if (result.ok) ApprovalOutcome(true, result.summary)
+                    else ApprovalOutcome(false, "Failed: ${result.summary}", retryable = true)
                 }
             }
 
@@ -763,38 +800,35 @@ class AgentRuntime(
                         repo.updateConnector(connector.copy(status = "configured"))
                     }
                 }
-                "Connector install approved."
+                ApprovalOutcome(true, "Connector install approved.")
             }
 
-            else -> "Approved. There is no automatic executor for '${approval.type}'."
+            else -> ApprovalOutcome(true, "Approved. There is no automatic executor for '${approval.type}'.")
         }
 
-        val ok = !outcome.startsWith("Failed") && !outcome.startsWith("Build failed") &&
-            !outcome.startsWith("Build skipped") &&
-            !outcome.contains("no longer exists") && !outcome.startsWith("Approval data")
         repo.updateApproval(
             approval.copy(
-                status = if (ok) "executed" else "failed",
+                status = if (outcome.ok) "executed" else "failed",
                 decidedAt = Time.now(),
-                result = outcome.take(2000),
+                result = outcome.summary.take(2000),
             ),
         )
 
         if (approval.type != "build_project") {
             repo.addDiary(
                 approval.agentId,
-                if (ok) "decision" else "error",
-                "Approval ${if (ok) "executed" else "failed"}: ${approval.title} — $outcome",
-                if (ok) 3 else 2,
+                if (outcome.ok) "decision" else "error",
+                "Approval ${if (outcome.ok) "executed" else "failed"}: ${approval.title} — ${outcome.summary}",
+                if (outcome.ok) 3 else 2,
             )
             repo.addMessage(
                 approval.agentId,
                 "system",
-                "Approval ${if (ok) "executed" else "failed"}: ${approval.title}. $outcome",
+                "Approval ${if (outcome.ok) "executed" else "failed"}: ${approval.title}. ${outcome.summary}",
             )
         }
         repo.setAgentStatus(approval.agentId, "idle")
-        log("${approval.title}: ${if (ok) "executed" else "failed"}")
+        log("${approval.title}: ${if (outcome.ok) "executed" else "failed"}")
     }
 
     // ------------------------------------------------------------------ context

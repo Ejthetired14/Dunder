@@ -160,11 +160,20 @@ data class ConnectorRequestEntity(
 
 @Entity(
     tableName = "builds",
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.CASCADE,
+        )
+    ],
     indices = [Index("agentId"), Index("createdAt"), Index("projectId")],
 )
 data class BuildEntity(
     @PrimaryKey val id: String,
     val agentId: String,
+    val agentName: String = "",          // Denormalized: build history keeps the agent name.
     val name: String,
     val description: String,
     val fileCount: Int,
@@ -251,6 +260,8 @@ data class ConnectorLogEntity(
 data class RevenueEntity(
     @PrimaryKey val id: String,
     val agentId: String,
+    val agentName: String = "",          // Denormalized: survives agent deletion so financial
+                                          // history keeps a name even if the agent row is gone.
     val source: String,           // "api_usage", "subscription", "one_time", "deployment_fee"
     val amountCents: Long,
     val currency: String = "USD",
@@ -284,11 +295,20 @@ data class SettingsEntity(
 
 @Entity(
     tableName = "memories",
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.CASCADE,
+        )
+    ],
     indices = [Index("agentId"), Index("createdAt")]
 )
 data class MemoryEntity(
     @PrimaryKey val id: String,
     val agentId: String,
+    val agentName: String = "",          // Denormalized: memory keeps the agent name.
     val kind: String,
     val content: String,
     val importance: Int,

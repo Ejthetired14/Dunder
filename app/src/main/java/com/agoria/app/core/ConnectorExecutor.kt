@@ -18,6 +18,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -40,6 +41,9 @@ class ConnectorExecutor(
 ) {
 
     private val media = "application/json; charset=utf-8".toMediaType()
+
+    /** Per-agent total workspace byte quota (5 MiB). Prevents one agent filling the disk. */
+    private const val MAX_AGENT_WORKSPACE_BYTES = 5L * 1024 * 1024
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -246,6 +250,18 @@ class ConnectorExecutor(
 
     private data class HttpResult(val code: Int, val body: String, val ok: Boolean)
 
+    /** Max body bytes read per response. Larger bodies are truncated to avoid memory pressure. */
+    private const val MAX_BODY = 1_048_576 // 1 MiB
+
+    /** Reads at most `maxBytes` from a response body, always closing the stream. */
+    private fun readBoundedBody(body: ResponseBody?, maxBytes: Int): String {
+        return body?.byteStream()?.use { input ->
+            val buffer = ByteArray(maxBytes + 1)
+            val read = input.read(buffer, 0, maxBytes + 1)
+            String(buffer, 0, minOf(read, maxBytes))
+        } ?: ""
+    }
+
     private fun http(
         method: String,
         url: String,
@@ -299,12 +315,10 @@ class ConnectorExecutor(
                 else -> builder.method(method.uppercase(), (body ?: "").toRequestBody(media)).build()
             }
             val response = client.newCall(request).execute()
-            val responseBody = try {
-                response.body?.string() ?: ""
-            } catch (_: Exception) {
-                ""
+            return response.use {
+                val responseBody = readBoundedBody(it.body, MAX_BODY)
+                HttpResult(response.code, responseBody, response.isSuccessful)
             }
-            HttpResult(response.code, responseBody, response.isSuccessful)
         } catch (e: Exception) {
             HttpResult(-1, e.message ?: "Network error", false)
         }
@@ -515,30 +529,28 @@ class ConnectorExecutor(
         } catch (_: Exception) {
             return ""
         }
-        val html = try {
-            response.body?.string().orEmpty()
-        } catch (_: Exception) {
-            ""
-        }
-        if (html.isBlank()) return ""
-        val titleRegex = Regex("""result__a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val snippetRegex = Regex("""result__snippet[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val snippets = snippetRegex.findAll(html).map { text(it.groupValues[1], 160) }.toList()
-        val sb = StringBuilder()
-        titleRegex.findAll(html).take(5).forEachIndexed { index, match ->
-            val raw = match.groupValues[1].replace("&amp;", "&")
-            val link = if (raw.contains("uddg=")) {
-                java.net.URLDecoder.decode(raw.substringAfter("uddg=").substringBefore("&"), "UTF-8")
-            } else {
-                raw
+        return response.use {
+            val html = readBoundedBody(it.body, MAX_BODY)
+            if (html.isBlank()) return@use ""
+            val titleRegex = Regex("""result__a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            val snippetRegex = Regex("""result__snippet[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            val snippets = snippetRegex.findAll(html).map { text(it.groupValues[1], 160) }.toList()
+            val sb = StringBuilder()
+            titleRegex.findAll(html).take(5).forEachIndexed { index, match ->
+                val raw = match.groupValues[1].replace("&amp;", "&")
+                val link = if (raw.contains("uddg=")) {
+                    java.net.URLDecoder.decode(raw.substringAfter("uddg=").substringBefore("&"), "UTF-8")
+                } else {
+                    raw
+                }
+                sb.append("- ").append(text(match.groupValues[2], 120))
+                if (link.isNotBlank()) sb.append(" — ").append(link)
+                sb.append('\n')
+                val snippet = snippets.getOrNull(index)
+                if (!snippet.isNullOrBlank()) sb.append("  ").append(snippet).append('\n')
             }
-            sb.append("- ").append(text(match.groupValues[2], 120))
-            if (link.isNotBlank()) sb.append(" — ").append(link)
-            sb.append('\n')
-            val snippet = snippets.getOrNull(index)
-            if (!snippet.isNullOrBlank()) sb.append("  ").append(snippet).append('\n')
+            sb.toString().trim()
         }
-        return sb.toString().trim()
     }
 
     // ------------------------------------------------------------------- weather
@@ -663,10 +675,14 @@ class ConnectorExecutor(
         args: JSONObject,
         agentId: String?,
     ): ConnectorResult {
-        // Each agent used to get its own root, so a file `list` had just shown was "not found"
-        // for any other agent and the answer flipped between "empty" and a listing. Everything
-        // now resolves against the shared workspace, which is where builds are written too.
-        val root = Files.workspace(context).canonicalFile
+        // Each agent gets its own subdirectory under the shared workspace so agents cannot
+        // read or overwrite each other's files. When no agentId is available (should not happen
+        // in normal operation) fall back to the shared root.
+        val root = if (agentId != null) {
+            Files.agentWorkspace(context, agentId).canonicalFile
+        } else {
+            Files.workspace(context).canonicalFile
+        }
         // Models answer with "/notes.txt" or "./notes.txt" for the same file, so treat both as
         // relative to the workspace instead of rejecting them as an escape attempt.
         val relative = args.optString("path", "")
@@ -716,6 +732,12 @@ class ConnectorExecutor(
             "write" -> {
                 val content = args.optString("content")
                 if (content.isBlank()) return ConnectorResult(false, "Missing content")
+                // Per-agent quota: cap the total workspace size so one agent cannot fill the disk.
+                val currentSize = Files.directorySize(root)
+                val newBytes = content.take(200_000).toByteArray().size.toLong()
+                if (currentSize + newBytes > MAX_AGENT_WORKSPACE_BYTES) {
+                    return ConnectorResult(false, "Workspace quota exceeded (${Files.prettySize(MAX_AGENT_WORKSPACE_BYTES)}).")
+                }
                 Files.writeText(target, content.take(200_000))
                 ConnectorResult(true, "Wrote ${content.length} characters to $relative.")
             }
@@ -726,6 +748,8 @@ class ConnectorExecutor(
     private fun findByName(root: File, name: String): List<String> {
         if (name.isBlank()) return emptyList()
         return root.walkTopDown()
+            // Bounded walk so a deep or very large workspace cannot hang the connector.
+            .take(500)
             .filter { it.isFile && it.name.equals(name, ignoreCase = true) }
             .take(5)
             .map { root.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
@@ -752,13 +776,19 @@ class ConnectorExecutor(
         }
         val headers = defaultHeaders.toMutableMap()
         if (!apiKey.isNullOrBlank()) headers["Authorization"] = "Bearer $apiKey"
-        parseHeaders(args.optString("headers", "").ifBlank { null })?.let { headers.putAll(it) }
+        // Agent-supplied headers are merged, but they may not override Authorization: the connector's
+        // own credentials must always win so an agent cannot exfiltrate or redirect them.
+        parseHeaders(args.optString("headers", "").ifBlank { null })?.let { agentHeaders ->
+            agentHeaders.entries.filter { it.key.lowercase() != "authorization" }.forEach { (k, v) -> headers[k] = v }
+        }
         val body = args.optString("body", "").ifBlank { null }
         val response = http(method, url, headers, if (method == "GET" || method == "HEAD") null else body)
         return if (response.ok) {
-            ConnectorResult(true, "HTTP $method $url -> ${response.code}\n${text(response.body, 900)}")
+            // Never echo the response body back to the agent: an arbitrary HTTP endpoint may return
+            // secrets (keys, tokens, PII) that must not reach the LLM context or logs.
+            ConnectorResult(true, "HTTP $method $url -> ${response.code}")
         } else {
-            ConnectorResult(false, "HTTP $method $url failed (${response.code}): ${text(response.body, 500)}")
+            ConnectorResult(false, "HTTP $method $url failed (${response.code})")
         }
     }
 

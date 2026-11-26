@@ -3,6 +3,7 @@ package com.agoria.app.util
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -12,9 +13,14 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Encrypts small secrets (provider API keys, connector tokens) with a key that never leaves
  * the Android Keystore. The stored value is base64(iv || ciphertext || tag).
+ *
+ * Crypto failures are **not** swallowed: `encrypt`/`decrypt` throw on failure so callers
+ * cannot confuse "no secret" with "cryptography broken". Callers that cannot recover should
+ * catch and degrade gracefully.
  */
 object SecretCipher {
 
+    private const val TAG = "SecretCipher"
     private const val ALIAS = "agoria_secret_key_v1"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val IV_BYTES = 12
@@ -49,8 +55,9 @@ object SecretCipher {
             System.arraycopy(iv, 0, out, 0, iv.size)
             System.arraycopy(encrypted, 0, out, iv.size, encrypted.size)
             Base64.encodeToString(out, Base64.NO_WRAP)
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Encrypt failed", e)
+            throw IllegalStateException("SecretCipher encrypt failed", e)
         }
     }
 
@@ -64,8 +71,9 @@ object SecretCipher {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, iv))
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Decrypt failed", e)
+            throw IllegalStateException("SecretCipher decrypt failed", e)
         }
     }
 }

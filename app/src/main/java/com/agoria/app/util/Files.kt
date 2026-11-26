@@ -73,6 +73,14 @@ object Files {
         directory.delete()
     }
 
+    /** Total byte size of all files under `dir`, recursively. Returns 0 if the dir does not exist. */
+    fun directorySize(dir: File): Long {
+        if (!dir.exists()) return 0L
+        return dir.listFiles()?.fold(0L) { acc, child ->
+            acc + (if (child.isDirectory) directorySize(child) else child.length())
+        } ?: 0L
+    }
+
     fun zipDirectory(source: File, zipFile: File): Int {
         zipFile.parentFile?.mkdirs()
         var count = 0
