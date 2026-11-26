@@ -27,7 +27,7 @@ import java.io.File
         RevenueEntity::class,
     ],
     version = 5,
-    exportSchema = true,
+    exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun agentDao(): AgentDao
