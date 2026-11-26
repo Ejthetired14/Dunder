@@ -2102,9 +2102,9 @@ class ConnectorExecutor(
                 )
             }
             "verify_key" -> {
-                val apiKey = args.optString("apiKey").ifBlank { return ConnectorResult(false, "Missing apiKey") }
-                // Check if it's a valid Stripe secret key by trying to list products (limited)
-                val testAuth = mapOf("Authorization" to "Bearer $apiKey")
+                // BUG-11: verify the connector's own secret key, never an agent-supplied apiKey
+                // (which would leak a secret into approval details and logs).
+                val testAuth = mapOf("Authorization" to "Bearer $secretKey")
                 val response = http("GET", "https://api.stripe.com/v1/products?limit=1", testAuth)
                 if (!response.ok) {
                     return ConnectorResult(false, "Invalid API key or key has no access: ${text(response.body, 300)}")

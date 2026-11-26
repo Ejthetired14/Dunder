@@ -13,6 +13,7 @@ import com.agoria.app.util.Json
 import com.agoria.app.util.Notifier
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -50,6 +52,13 @@ class AgentRuntime(
 
     @Volatile
     private var running = false
+
+    // RUN-2: global request and token budget (per hour), resets every hour.
+    private var requestCount = 0
+    private var tokenCount = 0
+    private var budgetResetTime = 0L
+    private val maxRequestsPerHour = 200
+    private val maxTokensPerHour = 50_000
 
     fun isRunning(): Boolean = running
 
@@ -231,21 +240,34 @@ class AgentRuntime(
         processAutoApprovedApprovals()
 
         val agents = repo.allAgents()
-        for (agent in agents) {
-            if (!agent.autonomy || agent.status == "paused") continue
-            if (agent.status == "waiting_approval") {
-                val pendingApprovals = repo.pendingApprovalsFor(agent.id)
-                val pendingConnectors = repo.pendingConnectorRequestsFor(agent.id)
-                if (pendingApprovals.isEmpty() && pendingConnectors.isEmpty()) {
-                    repo.setAgentStatus(agent.id, "idle")
+        // RUN-1: run agents concurrently so one slow model call does not stall the office.
+        coroutineScope {
+            for (agent in agents) {
+                if (!agent.autonomy || agent.status == "paused") continue
+                if (agent.status == "waiting_approval") {
+                    val pendingApprovals = repo.pendingApprovalsFor(agent.id)
+                    val pendingConnectors = repo.pendingConnectorRequestsFor(agent.id)
+                    if (pendingApprovals.isEmpty() && pendingConnectors.isEmpty()) {
+                        repo.setAgentStatus(agent.id, "idle")
+                    }
+                    continue
                 }
-                continue
-            }
-            val jitter = Random.nextLong(0, 12_000L)
-            if (now - agent.lastTickAt < cooldown + jitter) continue
-
-            mutexFor(agent.id).withLock {
-                runCycle(agent.id, null)
+                launch {
+                    val agentNow = Time.now()
+                    val jitter = Random.nextLong(0, 12_000L)
+                    if (agentNow - agent.lastTickAt < cooldown + jitter) return@launch
+                    // RUN-1: per-cycle timeout so a hung model call cannot block the agent forever.
+                    val cycleTimeout = settings.tickIntervalSeconds.coerceIn(30, 600) * 1000L
+                    withTimeoutOrNull(cycleTimeout) {
+                        // RUN-1: exponential backoff using failureCount.
+                        val agentEntity = repo.agent(agent.id) ?: return@withTimeoutOrNull
+                        val backoffMs = (1L shl agentEntity.failureCount.coerceIn(0, 10)) * 1000L
+                        if (agentEntity.lastTickAt + backoffMs > agentNow) return@withTimeoutOrNull
+                        mutexFor(agent.id).withLock {
+                            runCycle(agent.id, null)
+                        }
+                    }
+                }
             }
         }
 
@@ -319,7 +341,9 @@ class AgentRuntime(
                 result = "Auto-approved",
             )
             repo.updateApproval(decided)
-            executeApproval(decided)
+            mutexFor(approval.agentId).withLock {
+                executeApproval(decided)
+            }
             todayExecuted[approval.agentId] = (todayExecuted[approval.agentId] ?: 0) + 1
         }
     }
@@ -353,6 +377,21 @@ class AgentRuntime(
         val system = PromptBuilder.system(agent, agentContext)
         val user = PromptBuilder.userPrompt(agentContext, userMessage)
 
+        // RUN-2: global request/token budget — skip the cycle when the hourly budget is exhausted.
+        val now = Time.now()
+        if (now >= budgetResetTime + 3_600_000L) {
+            requestCount = 0
+            tokenCount = 0
+            budgetResetTime = now
+        }
+        val systemTokens = system.length / 4 + user.length / 4  // rough estimate
+        if (requestCount >= maxRequestsPerHour || tokenCount + systemTokens > maxTokensPerHour) {
+            log("${agent.name} cycle skipped: hourly budget exhausted ($requestCount/$maxRequestsPerHour requests, ${tokenCount + systemTokens}/$maxTokensPerHour tokens).", "warn")
+            repo.noteAgentTick(agentId, "idle")
+            _state.update { it.copy(currentAgentId = null, currentAgentName = null) }
+            return
+        }
+
         val result = llm.complete(
             LlmRequest(
                 system = system,
@@ -361,6 +400,8 @@ class AgentRuntime(
                 maxTokens = repo.settings().maxTokens.coerceIn(400, 4000),
             ),
         )
+        requestCount++
+        tokenCount += systemTokens + (result.text.length / 4)
 
         if (!result.ok) {
             val message = "Model call failed: ${result.error ?: "unknown error"}"
@@ -378,7 +419,27 @@ class AgentRuntime(
             return
         }
 
-        val decision = AgentPolicy.parseDecision(result.text)
+        // LLM-1: lenient JSON extraction with one automatic "return only JSON" retry when the
+        // model emits prose instead of a decision object.
+        var decision = AgentPolicy.parseDecision(result.text)
+        if (decision == null) {
+            log("${agent.name} returned non-JSON text; retrying once with JSON-only instruction.", "warn")
+            val retryResult = llm.complete(
+                LlmRequest(
+                    system = system + "\n\nReturn only a single valid JSON object. No prose, no markdown fences, no explanation.",
+                    messages = listOf(
+                        LlmMessage("user", user),
+                        LlmMessage("assistant", result.text.trim()),
+                        LlmMessage("user", "Your previous reply was not valid JSON. Return only the JSON decision object."),
+                    ),
+                    temperature = 0.35,
+                    maxTokens = repo.settings().maxTokens.coerceIn(400, 4000),
+                ),
+            )
+            if (retryResult.ok) {
+                decision = AgentPolicy.parseDecision(retryResult.text)
+            }
+        }
         if (decision == null) {
             val fallback = result.text.trim()
             repo.addDiary(agentId, "thought", fallback.take(1200), 2)
@@ -741,7 +802,9 @@ class AgentRuntime(
                     result = "Auto-approved",
                 )
                 repo.updateApproval(decided)
-                executeApproval(decided)
+                mutexFor(agentId).withLock {
+                    executeApproval(decided)
+                }
                 nextStatus = "idle"
                 log("Auto-approved: ${auto.title}")
             }
@@ -957,13 +1020,27 @@ class AgentRuntime(
     }
 
     private fun log(message: String, level: String = "info") {
-        val entry = RuntimeLogEntry(Time.now(), message.take(500), level)
+        // OBS-1: redact tokens/secrets before writing to the in-memory log.
+        val safe = redactSecrets(message.take(500))
+        val entry = RuntimeLogEntry(Time.now(), safe, level)
         _state.update {
             it.copy(
                 log = (it.log + entry).takeLast(80),
-                error = if (level == "error") message else it.error,
+                error = if (level == "error") safe else it.error,
             )
         }
+    }
+
+    /** OBS-1: strip common secret patterns (Bearer tokens, API keys in URLs, authorization headers). */
+    private fun redactSecrets(text: String): String {
+        var result = text
+        // Bearer tokens in Authorization headers or URLs.
+        result = result.replace(Regex("(?i)Bearer\\s+[A-Za-z0-9._\\-+/=]{8,}"), "Bearer [REDACTED]")
+        result = result.replace(Regex("(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*[^\\s&\"']{8,}"), "$1=[REDACTED]")
+        // URLs containing credentials (user:pass@host or ?token= or ?api_key=).
+        result = result.replace(Regex("https?://[^:]+:[^@]+@"), "https://[REDACTED]:[REDACTED]@")
+        result = result.replace(Regex("(?i)[?&](token|api[_-]?key|secret|password)=[^&\"']+"), "$1=[REDACTED]")
+        return result
     }
 
     private fun extractProductId(summary: String): String? {

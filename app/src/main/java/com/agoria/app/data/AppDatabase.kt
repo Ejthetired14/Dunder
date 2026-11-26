@@ -27,7 +27,7 @@ import java.io.File
         RevenueEntity::class,
     ],
     version = 5,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun agentDao(): AgentDao
@@ -77,6 +77,13 @@ abstract class AppDatabase : RoomDatabase() {
                 database
             } catch (t: Throwable) {
                 Log.e(TAG, "Database upgrade failed, keeping the old file and starting fresh", t)
+                // DATA-4: record that we recovered from a failed upgrade so the UI can offer
+                // "restore from backup". SharedPreferences works before Room is open.
+                context.getSharedPreferences("db_recovery", Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("recovered_from_failed_upgrade", true)
+                    .putLong("recovered_at", System.currentTimeMillis())
+                    .apply()
                 runCatching { database.close() }
                 val file = context.getDatabasePath(NAME)
                 if (file.exists()) {
@@ -84,6 +91,19 @@ abstract class AppDatabase : RoomDatabase() {
                 }
                 build(context).also { it.openHelper.writableDatabase }
             }
+        }
+
+        /** Returns true if the database recovered from a failed upgrade on a previous start. */
+        fun recoveredFromFailedUpgrade(context: Context): Boolean =
+            context.getSharedPreferences("db_recovery", Context.MODE_PRIVATE)
+                .getBoolean("recovered_from_failed_upgrade", false)
+
+        /** Clears the recovery flag after the user has acknowledged or restored. */
+        fun clearRecoveryFlag(context: Context) {
+            context.getSharedPreferences("db_recovery", Context.MODE_PRIVATE)
+                .edit()
+                .remove("recovered_from_failed_upgrade")
+                .apply()
         }
 
         private const val TAG = "AppDatabase"

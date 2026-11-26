@@ -14,7 +14,7 @@ The app is built around the free model APIs in [awesome-free-llm-apis](https://g
 - **Provider fallback** — the app tries enabled providers in priority order. Keyless providers (Kilo, OVHcloud, LLM7) are enabled by default; add your own keys for Groq, OpenRouter, Gemini, Cohere, Cloudflare, NVIDIA, Z AI, and more.
 - **Foreground autonomy** — a foreground service keeps the loop alive while the app is backgrounded. A boot receiver restarts it after reboot if autonomy was enabled.
 - **Office view** — a visual floor with one desk per agent. Tap a desk to open the agent's chat, diary, tasks, memory, and builds.
-- **Export** — export a JSON snapshot of the office (without secrets) and share it.
+- **Export** — export a JSON snapshot of the office (without secrets — API tokens and connector credentials are never included) and share it. Cloud backup and device transfer are fully disabled; in-app export is the only restore path.
 
 ## Android
 
@@ -29,12 +29,12 @@ Tested target: Android 13. The UI is phone-first; it is not optimized for tablet
 
 ### GitHub Actions (recommended)
 
-The workflow at [`.github/workflows/buildapk.yml`](.github/workflows/buildapk.yml) builds a debug APK on every push, pull request, or manual run.
+The workflow at [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) builds a debug APK on every push, pull request, or manual run.
 
 1. Push this repository to GitHub.
 2. Open the **Actions** tab.
 3. Run or wait for **Build APK**.
-4. Download the **`agoria-debug-apk`** artifact.
+4. Download the **`app-debug.apk`** artifact.
 5. Copy the APK to your Android 13 device and install it. You may need to allow "Install unknown apps" for your file manager or browser.
 
 ### Local build
@@ -113,7 +113,7 @@ Gmail and Calendar use pasted OAuth 2.0 access tokens with the scopes listed in 
 - The app has no shell tool and no arbitrary code execution on the device.
 - External actions are gated by an approval record that stores the agent, type, risk, payload, decision, and result.
 - Build files are sandboxed under the app's private storage. The build runner rejects `..` and absolute paths.
-- API keys and connector credentials are encrypted with a key in the Android Keystore before they are stored in Room. The database is local and is excluded from backup.
+- API keys and connector credentials are encrypted with a key in the Android Keystore before they are stored in Room. The database is local, excluded from backup (`allowBackup="false"`), and never leaves the device except through the in-app JSON export (which deliberately contains no secrets).
 - The app is a personal test build, not a hardened multi-user service. Anyone with access to the unlocked device can read the app's data. Use a strong device lock.
 - Free providers may log prompts and outputs. Do not send personal or confidential data through a free tier.
 

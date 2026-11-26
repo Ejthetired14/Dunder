@@ -608,6 +608,8 @@ class Repository(
         summary: String,
     ) {
         if (db.connectorDao().get(connectorId) == null) return
+        // OBS-1: redact tokens/secrets before writing to connector_logs.
+        val safe = redactSecrets(summary.take(1000))
         db.connectorLogDao().insert(
             ConnectorLogEntity(
                 id = UUID.randomUUID().toString(),
@@ -615,10 +617,20 @@ class Repository(
                 agentId = agentId,
                 action = action,
                 status = status,
-                summary = summary.take(1000),
+                summary = safe,
                 createdAt = Time.now(),
             ),
         )
+    }
+
+    /** OBS-1: strip common secret patterns (Bearer tokens, API keys in URLs, authorization headers). */
+    private fun redactSecrets(text: String): String {
+        var result = text
+        result = result.replace(Regex("(?i)Bearer\\s+[A-Za-z0-9._\\-+/=]{8,}"), "Bearer [REDACTED]")
+        result = result.replace(Regex("(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*[^\\s&\"']{8,}"), "$1=[REDACTED]")
+        result = result.replace(Regex("https?://[^:]+:[^@]+@"), "https://[REDACTED]:[REDACTED]@")
+        result = result.replace(Regex("(?i)[?&](token|api[_-]?key|secret|password)=[^&\"']+"), "$1=[REDACTED]")
+        return result
     }
 
     // ---------------------------------------------------------------- providers
@@ -717,6 +729,7 @@ class Repository(
         description: String,
         zipPath: String,
         fileCount: Int,
+        status: String = "building",
         projectId: String = "",
     ): BuildEntity {
         val project = if (projectId.isBlank()) ensureProject().id else projectId
@@ -727,9 +740,9 @@ class Repository(
             description = description,
             fileCount = fileCount,
             zipPath = zipPath,
-            status = "building",
+            status = status,
             createdAt = Time.now(),
-            completedAt = null,
+            completedAt = if (status == "ready" || status == "failed") Time.now() else null,
             projectId = project,
         )
         db.buildDao().insert(build)

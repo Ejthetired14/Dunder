@@ -11,8 +11,10 @@ import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.Notifier
 import com.agoria.app.util.Time
+import kotlinx.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -36,6 +38,7 @@ class BuildRunner(
     val buildProgress = _buildProgress.asStateFlow()
 
     suspend fun build(agent: AgentEntity, approval: ApprovalEntity): BuildEntity? {
+        if (!coroutineContext.isActive) return null
         _buildProgress.value = BuildProgress.Started(approval.id)
 
         val details = Json.tryObject(approval.details) ?: JSONObject()
@@ -57,21 +60,45 @@ class BuildRunner(
         val finalName = generated.name.ifBlank { requestedName }
         val finalDescription = generated.description.ifBlank { description }
 
+        // BUG-9: if the model failed or returned invalid JSON, do not pretend stub files are a
+        // successful build. Emit Failed and record the build with status "failed".
+        val isFallback = files.isEmpty()
+        if (isFallback) {
+            _buildProgress.value = BuildProgress.Failed(
+                approval.id,
+                "Model did not return usable files; generated fallback stubs only.",
+            )
+        }
+
         var written = 0
         val manifestFiles = JSONArray()
         _buildProgress.value = BuildProgress.WritingFiles(approval.id, 0, files.size)
         for ((index, file) in files.withIndex()) {
+            if (!coroutineContext.isActive) {
+                _buildProgress.value = BuildProgress.Failed(approval.id, "Build cancelled.")
+                return null
+            }
             val path = file.path.replace('\\', '/').trimStart('/')
             if (path.isBlank() || path.contains("..") || path.startsWith("/")) continue
             val target = File(root, path)
             if (!target.canonicalPath.startsWith(root.canonicalPath)) continue
-            Files.writeText(target, file.content.take(30_000))
+            val content = file.content.take(30_000)
+            if (file.content.length > 30_000) {
+                android.util.Log.w("BuildRunner", "Truncated file '$path' from ${file.content.length} to 30000 chars")
+            }
+            Files.writeText(target, content)
             written++
             manifestFiles.put(path)
             _buildProgress.value = BuildProgress.WritingFiles(approval.id, written, files.size)
         }
 
-        if (written == 0) {
+        if (written == 0 && !isFallback) {
+            // Model returned JSON but no usable files — treat as failure, not silent success.
+            _buildProgress.value = BuildProgress.Failed(approval.id, "Model returned no writable files.")
+            return null
+        }
+
+        if (isFallback) {
             writeFallback(root, finalName, finalDescription, plan, approval)
             written = 4
             manifestFiles.put("README.md")
@@ -80,6 +107,7 @@ class BuildRunner(
             manifestFiles.put("src/main.kt")
         }
 
+        // BUG-9: keep next_steps in the manifest so they are not discarded.
         val manifest = JSONObject()
             .put("name", finalName)
             .put("description", finalDescription)
@@ -90,6 +118,8 @@ class BuildRunner(
             .put("goal", agent.goal)
             .put("plan", plan)
             .put("files", manifestFiles)
+            .put("nextSteps", generated.nextSteps)
+            .put("fallback", isFallback)
         Files.writeText(File(root, "manifest.json"), manifest.toString(2))
 
         _buildProgress.value = BuildProgress.Zipping(approval.id)
@@ -99,25 +129,29 @@ class BuildRunner(
         )
         Files.zipDirectory(root, zipFile)
 
+        val buildStatus = if (isFallback) "fallback" else "ready"
         val build = repo.addBuild(
             agentId = agent.id,
             name = finalName,
             description = finalDescription,
             zipPath = zipFile.absolutePath,
             fileCount = written,
+            status = buildStatus,
             projectId = project.id,
         )
 
         repo.addDiary(
             agent.id,
             "build",
-            "Built '$finalName': $finalDescription $written files are ready in a downloadable ZIP.",
+            "Built '$finalName': $finalDescription $written files are ready in a downloadable ZIP." +
+                (if (isFallback) " (fallback stubs — model did not produce real files)" else ""),
             5,
         )
         repo.addMessage(
             agent.id,
             "system",
-            "Build complete: $finalName ($written files). Open Projects to inspect the files or save the ZIP.",
+            "Build complete: $finalName ($written files). Open Projects to inspect the files or save the ZIP." +
+                (if (isFallback) " These are fallback stubs because the model did not return usable files." else ""),
         )
         Notifier.notifyBuild(context, "Build ready: $finalName", "$written files packaged. Open Dunder to download the ZIP.")
 

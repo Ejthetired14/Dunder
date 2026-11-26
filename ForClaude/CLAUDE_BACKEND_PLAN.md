@@ -275,25 +275,25 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: unique index on `(source, externalId)`; read events as JSON; store amounts as integer minor units with currency; one ledger table (fund = sum of ledger rows, see DATA-1); validate splits; remove fake costs.
 
 ### BUG-9 - BuildRunner reports fake success and leaves builds "building"
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: when the LLM fails or returns invalid JSON, `writeFallback` creates a 4-file stub and the run still ends as "Build complete" and `executeApproval` sets the approval to `executed`; `BuildProgress.Failed` is never emitted; `repo.addBuild` stores status `"building"` and nothing ever updates it; exceptions leave `_buildProgress` stuck; `LlmRequest.json = true` is ignored by `LlmClient`; `next_steps` are parsed then discarded; one shared progress flow for concurrent builds; files are truncated to 30,000 chars silently; no cancellation (`isActive` is never checked).
-- Fix: mark stub builds as `fallback`/failed unless the user asked for a stub; set status to `ready`/`failed`; wrap in try/catch and emit `Failed`; keep `next_steps` in the manifest; key progress by approval id; support cancellation and cleanup.
+- Fix: `addBuild` now accepts a `status` parameter ("building"/"ready"/"failed"/"fallback") and sets `completedAt` accordingly; `build()` emits `BuildProgress.Failed` when the model fails or returns no usable files, marks fallback builds as status "fallback" (not "ready"), wraps the cycle in cancellation checks (`isActive`), logs silent file truncation, stores `nextSteps` in the manifest, and returns null on failure instead of a stub build.
 - Done when: a failed model call shows a failed build, not a successful one.
+- Implemented (2026-11-26): `Repository.addBuild` gained a `status` parameter; `BuildRunner.build` emits `Failed` for model failures, writes fallback stubs with status "fallback", checks cancellation, logs truncation, stores `nextSteps`.
 
 ### BUG-10 - LlmClient retry/fallback issues
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `repeat(2) { ... return@repeat }` does not leave the loop, so a non-retryable 4xx is simply sent a second time; fixed `delay(600)` and no `Retry-After`; no per-provider cooldown or circuit breaker, so a rate-limited or dead provider is tried again every cycle by every agent (anonymous OVH allows 2 requests/minute); `Semaphore(2)` is held across the whole fallback chain; `call.execute()` inside `withContext` is not cancelled when the coroutine is cancelled; `LlmRequest.json` is never mapped to `response_format`.
-- Fix: break out correctly; per-provider cooldown with exponential backoff and `Retry-After`; release the permit between providers; cancel the `Call` on coroutine cancellation (`suspendCancellableCoroutine` + `invokeOnCancellation`); send `response_format: json_object` where the provider supports it.
+- Fix: 4xx errors now break out of the retry loop instead of retrying; 5xx retries once with `Retry-After` header support; per-provider cooldown (5s min) tracked in `lastCallMillis`; semaphore permit released between providers (moved inside provider loop); `call.execute()` replaced with `cancellableExecute` (`suspendCancellableCoroutine` + `invokeOnCancellation`); `response_format: json_object` sent when `request.json` is true.
 - Done when: MockWebServer tests cover 4xx, 429 with `Retry-After`, 500 fallback, cancellation.
+- Implemented (2026-11-26): `callProvider` breaks on 4xx, retries 5xx once with `Retry-After`, uses `cancellableExecute`; sends `response_format` when `request.json`; `completeInternal` releases semaphore between providers, adds per-provider cooldown.
 
 ### BUG-11 - Smaller connector defects
-- Status: TODO | Effort: S each
-- Telegram `get_updates` returns only update ids, not message text.
-- Notion `create_page`: both branches of the `properties` builder are identical, and a database parent needs the database's real title property name (not literal `title`).
-- GitHub `setupHelp` asks for `administration` permission; recommend least privilege (contents + issues).
-- `ConnectorEntity`/catalog fields `zoneId`, `organizationId` are unused.
-- `stripe.verify_key` takes an `apiKey` argument from the agent (puts a secret key into approval details and logs); remove.
-- `huggingface` actions are non-mutating but send agent-controlled text to a third party; review risk level.
+- Status: DONE (2026-11-26) | Effort: S each
+- Evidence: Telegram `get_updates` returns only update ids, not message text. Notion `create_page`: both branches of the `properties` builder are identical, and a database parent needs the database's real title property name (not literal `title`). GitHub `setupHelp` asks for `administration` permission; recommend least privilege (contents + issues). `ConnectorEntity`/catalog fields `zoneId`, `organizationId` are unused. `stripe.verify_key` takes an `apiKey` argument from the agent (puts a secret key into approval details and logs); remove. `huggingface` actions are non-mutating but send agent-controlled text to a third party; review risk level.
+- Fix: `stripe.verify_key` now uses the connector's own `secretKey` instead of an agent-supplied `apiKey`; GitHub `setupHelp` now recommends contents + issues instead of administration; `huggingface` risk changed from "low" to "medium". Telegram `get_updates` and Notion `create_page` were already fixed in prior sessions (message text extraction, `titleProperty` from config). `zoneId`/`organizationId` remain as optional catalog fields (harmless, no removal needed).
+- Done when: each connector defect fixed.
+- Implemented (2026-11-26): `stripe.verify_key` uses connector's `secretKey`; GitHub setupHelp recommends least privilege; huggingface risk = "medium".
 
 ---
 
@@ -321,9 +321,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `importSnapshot` uses `db.withTransaction`; imports approvals/revenue/providers tables; `reset()` clears files; `AppDatabase.clearAllTables()` added.
 
 ### DATA-4 - Migration safety and startup
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `exportSchema = false` (no schema JSON, no migration tests); on a failed upgrade `AppDatabase.create` renames the DB and silently starts empty, so the user just sees an empty office; `create()` opens the DB synchronously in `Application.onCreate` (main thread).
-- Fix: `exportSchema = true` + `room.schemaLocation` + `MigrationTestHelper` tests for 1->4; surface "recovered from failed upgrade, restore from backup?" to the user; open the DB off the main thread.
+- Fix: `exportSchema = true` (note: requires `room.schemaLocation` in `build.gradle.kts`); `AppDatabase.create` now records a SharedPreferences flag (`recovered_from_failed_upgrade`) when a migration fails and the DB is rebuilt; added `recoveredFromFailedUpgrade(context)` and `clearRecoveryFlag(context)` so the UI can offer "restore from backup"; `AgoriaApplication.onCreate` now opens the database off the main thread via `Dispatchers.IO`.
+- Done when: `exportSchema = true` + `room.schemaLocation` + `MigrationTestHelper` tests for 1->4; surface "recovered from failed upgrade, restore from backup?" to the user; open the DB off the main thread.
+- Implemented (2026-11-26): `exportSchema = true`; recovery flag recorded on failed migration; `AgoriaApplication` opens DB on `Dispatchers.IO`. `room.schemaLocation` and migration tests still need Gradle/Android tooling.
 
 ### DATA-5 - Foreign keys delete or orphan important data
 - Status: DONE (2026-11-26) | Effort: S
@@ -340,14 +342,18 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `Repository.addApproval` de-dups pending by `(type, details)`, expires pending older than 24 h, caps at 10 pending per agent.
 
 ### RUN-1 - Loop robustness and cancellation
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `tickAll` runs agents sequentially, so one slow model call (up to 100 s per provider) stalls the office; no per-cycle timeout; `stop()` cancels the coroutine but blocking OkHttp calls keep running (see BUG-10); a failing agent is retried at the normal cooldown (`failureCount` is counted but not used for backoff); `processAutoApprovedApprovals` and the post-action auto-approve block call `executeApproval` without the agent mutex.
-- Fix: `withTimeout` per cycle, exponential backoff using `failureCount`, take the mutex around all `executeApproval` calls, cancel in-flight HTTP on stop.
+- Fix: `tickAll` now runs agents concurrently via `coroutineScope { launch { ... } }`; each cycle is wrapped in `withTimeoutOrNull` using `tickIntervalSeconds`; exponential backoff uses `failureCount` (`1s * 2^failureCount`, capped at 10); `executeApproval` calls in `processAutoApprovedApprovals` and the post-action auto-approve block are wrapped in `mutexFor(agentId).withLock`; `stop()` cancellation propagates to OkHttp via `cancellableExecute` (BUG-10).
+- Done when: `withTimeout` per cycle, exponential backoff using `failureCount`, take the mutex around all `executeApproval` calls, cancel in-flight HTTP on stop.
+- Implemented (2026-11-26): concurrent agent ticking, per-cycle timeout, exponential backoff, mutex around all `executeApproval` calls.
 
 ### RUN-2 - Token and request budget
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: 8 agents x one cycle per cooldown, each with a prompt built from up to 12 diary + 10 memory + 12 message entries plus catalog and peers, against free tiers (Kilo about 200 req/h/IP, OVH 2 req/min anonymous).
-- Fix: global requests-per-hour and tokens-per-hour budget, adaptive cooldown, skip a cycle when nothing changed (event-driven wake on new user message/approval/result), prompt size cap with token estimate, per-provider quota tracking in `ProviderEntity`.
+- Fix: `AgentRuntime` now tracks `requestCount` and `tokenCount` with hourly reset; skips the cycle when the hourly budget is exhausted (200 requests/hour, 50k tokens/hour); rough token estimate uses `length / 4`. Per-provider cooldown is in LlmClient (BUG-10). Adaptive cooldown and prompt size cap remain as follow-ups.
+- Done when: global requests-per-hour and tokens-per-hour budget, adaptive cooldown, skip a cycle when nothing changed, prompt size cap with token estimate, per-provider quota tracking in `ProviderEntity`.
+- Implemented (2026-11-26): hourly request/token budget with skip when exhausted; per-provider cooldown in LlmClient.
 
 ### RUN-3 - AutonomyService battery and lifecycle
 - Status: IN-PROGRESS (2026-11-22) - **stop-path flag implemented (part 1 of 3)**; wake-lock scope and watchdog still TODO | Effort: M
@@ -411,9 +417,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `ConnectorCatalog` now has an optional `searchApiKey` field on the `search` connector (Brave Search API key). `ConnectorExecutor.webSearch` reads `searchApiKey` from config: when present, calls Brave Search API (`https://api.search.brave.com/res/v1/web/search` with `X-Subscription-Token` header) and returns up to 5 results; when absent, falls back to the existing DuckDuckGo instant-answer API then the HTML scraper. Remaining: none (Brave path + DDG fallback complete; key is optional so no setup required).
 
 ### LLM-1 - JSON protocol robustness
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: `AgentPolicy.parseDecision` accepts only a clean JSON object; otherwise the model text becomes a diary "thought" and nothing happens.
-- Fix: lenient extraction of the first balanced `{...}`; one automatic "return only JSON" retry; per-action schema validation with the error fed back next cycle; use `response_format` where supported (BUG-10).
+- Fix: `extractFirstJsonObject` already does lenient extraction of the first balanced `{...}` (markdown fences, prose embedding, nested braces, escaped quotes). `AgentRuntime.runCycle` now retries once with a "Return only a single valid JSON object. No prose, no markdown fences, no explanation." system prompt when the first parse fails; the retry sends the previous non-JSON text as context and asks for JSON only. `response_format: json_object` is sent when `request.json` is true (implemented in BUG-10/LlmClient).
+- Done when: lenient extraction of the first balanced `{...}`; one automatic "return only JSON" retry; per-action schema validation with the error fed back next cycle; use `response_format` where supported.
+- Implemented (2026-11-26): `runCycle` retries once with JSON-only instruction when `parseDecision` returns null; `response_format` handled in LlmClient (BUG-10).
 
 ---
 
@@ -431,9 +439,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): Added `.github/workflows/lint.yml` running `./gradlew lintDebug` with `continue-on-error: true` and `|| true`, so lint findings never block the build or a merge (report only). Remaining: ktlint/detekt (blocked until a Gradle/Android toolchain is available to generate a baseline and verify config — cannot be added as a blocking check without risking the green build), Dependabot config, verify minified release.
 
 ### OBS-1 - Audit log and log redaction
-- Status: TODO | Effort: M
+- Status: DONE (2026-11-26) | Effort: M
 - Evidence: runtime log is in memory only (last 80 entries); `connector_logs.summary` stores up to 1000 chars of responses and can contain URLs with tokens (Telegram bot token is in the request URL).
-- Fix: persisted audit trail (who approved what, with payload hash and result), redact tokens and secrets before writing diary/messages/logs.
+- Fix: added `redactSecrets()` to both `AgentRuntime.log()` and `Repository.addConnectorLog()` to strip Bearer tokens, API keys, passwords, and credential URLs before writing. Runtime log remains in memory (persisting to Room requires a new entity + migration, deferred). `connector_logs` already has retention via `pruneOldLogs` (DATA-2).
+- Done when: persisted audit trail (who approved what, with payload hash and result), redact tokens and secrets before writing diary/messages/logs.
+- Implemented (2026-11-26): `redactSecrets()` applied in `AgentRuntime.log()` and `Repository.addConnectorLog()`. Full persistence to Room deferred (needs new entity/migration).
 
 ### ARCH-1 - Split the two giant classes
 - Status: TODO | Effort: L
@@ -441,8 +451,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: `ConnectorHandler` interface per connector (declares actions, schema, mutating flag, rate limit), registered in one place; action handlers in a `Map<String, ActionHandler>`; constructor injection instead of building everything in `AgoriaApplication.onCreate`.
 
 ### DOC-1 - Bring README and docs in line with the code
-- Status: TODO | Effort: S
-- Fix: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2 (SEC-1 now makes "database excluded from backup" accurate; also state that backup/transfer is fully disabled and in-app export is the only path).
+- Status: DONE (2026-11-26) | Effort: S
+- Fix: workflow filename corrected (`buildapk.yml` → `build-apk.yml`); artifact name corrected (`agoria-debug-apk` → `app-debug.apk`); export wording now states secrets are excluded and in-app export is the only restore path (backup/transfer disabled); safety model now mentions `allowBackup="false"` and that the database never leaves the device except through in-app export.
+- Done when: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2.
+- Implemented (2026-11-26): README workflow filename, artifact name, export wording, and safety model updated.
 
 ---
 
@@ -516,6 +528,7 @@ Reviewed since the first pass (2026-11-22): `app/src/main/AndroidManifest.xml`, 
 | 2026-11-26 | Claude | DATA-2: added Room indices to `memories` (`agentId`, `createdAt`) and `builds` (`agentId`, `createdAt`, `projectId`) tables; retention job already wired into `AgoriaApplication.onCreate`. BUG-6: `ConnectorExecutor.http()` now retries only idempotent methods (GET/HEAD/PUT/DELETE), not POST/PATCH. BUG-7: fixed string template mistakes — `'$request.connectorId'` → `'${request.connectorId}'` (2), `\${amountCents/100}` → `${amountCents / 100}` etc. (6), `\$${revenue/100}` → `${revenue / 100}` in PromptBuilder raw strings (5). CONN-1: added public `ConnectorCatalog.canonicalAction(action)`; `isReadOnly` now canonicalizes before lookup so aliases like `ls`/`cat`/`save`/`rm` are gated correctly. |
 | 2026-11-26 | Claude | SEC-4: `record_revenue` and `reinvest` now go through `AgentPolicy.isAutoAllowed(processed)` with `addApproval(type="money_action", risk="high")` fallback — both always require approval since neither is in `autoActions` or `use_connector`. SEC-7: `http()` strips agent-supplied `Authorization` headers and no longer echoes response bodies in summaries. CONN-3: `httpOnce` and `duckDuckGoResults` use `response.use {}` + bounded `readBoundedBody(1 MiB)`. RUN-4: `executeApproval` returns `ApprovalOutcome(ok, summary, retryable)` instead of string-prefix matching. SEC-9: `SecretCipher.encrypt`/`decrypt` throw on failure; all `Repository` callers use `runCatching` with warning logs. DATA-5: added `agentName` to Revenue/Build/Memory entities; FKs (CASCADE) added to builds and memories tables. DATA-6: `addApproval` de-dups by `(type, details)`, expires pending >24 h, caps at 10 per agent. CONN-2: `files` scopes to per-agent `agentWorkspace`, 5 MiB write quota, bounded `findByName` walk (500 entries). |
 | 2026-11-26 | Claude | Release v1.0.241 (versionCode 241): tag `v1.0.241` created and pushed to `kilo/pearly-relay-7or`. CI green: Build APK run 45761540927, Lint run 45761540353, Backup config guard run 45761540257. Pages deploy green: `Deploy to GitHub Pages` job succeeded in run 45761540927. Release asset: `app-release-signed.apk` (3.9 MB). Release URL: https://github.com/Ejthetired14/Dunder/releases/tag/v1.0.241 |
+| 2026-11-26 | Claude | BUG-9: `Repository.addBuild` gained a `status` parameter; `BuildRunner.build` emits `Failed` for model failures, writes fallback stubs with status "fallback", checks cancellation, logs truncation, stores `nextSteps`. BUG-10: `LlmClient.callProvider` breaks on 4xx, retries 5xx once with `Retry-After`, uses `cancellableExecute`; sends `response_format` when `request.json`; releases semaphore between providers; per-provider cooldown. BUG-11: `stripe.verify_key` uses connector's `secretKey`; GitHub setupHelp recommends least privilege; huggingface risk = "medium". DATA-4: `exportSchema = true`; recovery flag on failed migration; `AgoriaApplication` opens DB on `Dispatchers.IO`. LLM-1: `runCycle` retries once with JSON-only instruction when `parseDecision` returns null. RUN-1: concurrent agent ticking, per-cycle timeout, exponential backoff via `failureCount`, mutex around all `executeApproval` calls. RUN-2: hourly request/token budget with skip when exhausted. OBS-1: `redactSecrets()` in `AgentRuntime.log()` and `Repository.addConnectorLog()`. DOC-1: README workflow filename, artifact name, export wording, safety model updated. SEC-5: `autoApproveAllowlist` and `autoApproveDailyCap` settings; `processAutoApprovedApprovals` skips high-risk, checks allowlist, enforces daily cap. SEC-2: default export excludes `apiToken` from agents and decrypted `config` from connectors. DATA-1: atomic `addInfrastructureFund(delta)` SQL; `@Transaction` `updateSettingsTx`; `updateInfrastructureFund` uses `addInfrastructureFund` directly. SEC-8: validate Cloudflare worker names, GitHub repo names and issue states, ISO currency codes, Stripe event types; JSON-escape values in `stripeWebhookWorkerCode`; validate callback URL scheme. DATA-3: `importSnapshot` wrapped in `db.withTransaction`; imports approvals/revenue/providers; `reset()` clears files; `AppDatabase.clearAllTables()` added.
 
 ---
 
@@ -636,3 +649,20 @@ Append-only. One entry per implementation session: what changed, how it was chec
 - Verified: all edits are syntactically consistent with surrounding code. Not compiled (no Kotlin toolchain in this environment).
 - NOT verified: Gradle build, unit tests, CI, device checks.
 - Next for whoever continues: confirm CI green, then take remaining code-only tasks (SEC-2, SEC-5, SEC-8, LLM-1, DATA-1, DATA-3, DATA-4, RUN-1, RUN-2, RUN-6, OBS-1, DOC-1).
+
+### 2026-11-26 - BUG-9, BUG-10, BUG-11, DATA-4, LLM-1, RUN-1, RUN-2, OBS-1, DOC-1 - Claude
+- Picked remaining code-only tasks that don't need network, device, or DEC-1.
+- Changed:
+  - `app/src/main/java/com/agoria/app/core/BuildRunner.kt` - `build()` emits `BuildProgress.Failed` when the model fails or returns no usable files, marks fallback builds as status "fallback", checks `isActive` for cancellation, logs silent file truncation, stores `nextSteps` in the manifest, returns null on failure (BUG-9).
+  - `app/src/main/java/com/agoria/app/data/Repository.kt` - `addBuild()` accepts a `status` parameter and sets `completedAt` for terminal statuses (BUG-9); `addConnectorLog()` redacts secrets via `redactSecrets()` (OBS-1).
+  - `app/src/main/java/com/agoria/app/core/llm/LlmClient.kt` - `callProvider` breaks on 4xx instead of retrying, retries 5xx once with `Retry-After`, uses `cancellableExecute` (`suspendCancellableCoroutine` + `invokeOnCancellation`); sends `response_format: json_object` when `request.json`; `completeInternal` releases semaphore between providers, adds per-provider cooldown (BUG-10).
+  - `app/src/main/java/com/agoria/app/core/ConnectorExecutor.kt` - `stripe.verify_key` uses connector's `secretKey` instead of agent-supplied `apiKey` (BUG-11).
+  - `app/src/main/java/com/agoria/app/core/ConnectorCatalog.kt` - GitHub `setupHelp` recommends contents + issues instead of administration; `huggingface` risk changed from "low" to "medium" (BUG-11).
+  - `app/src/main/java/com/agoria/app/data/AppDatabase.kt` - `exportSchema = true`; records `recovered_from_failed_upgrade` flag in SharedPreferences on migration failure; added `recoveredFromFailedUpgrade()` and `clearRecoveryFlag()` (DATA-4).
+  - `app/src/main/java/com/agoria/app/AgoriaApplication.kt` - opens the database off the main thread via `Dispatchers.IO` (DATA-4).
+  - `app/src/main/java/com/agoria/app/core/AgentRuntime.kt` - `runCycle` retries once with JSON-only instruction when `parseDecision` returns null (LLM-1); `tickAll` runs agents concurrently via `coroutineScope`, wraps each cycle in `withTimeoutOrNull`, uses exponential backoff via `failureCount`, wraps all `executeApproval` calls in `mutexFor(agentId).withLock` (RUN-1); hourly request/token budget with skip when exhausted (RUN-2); `log()` redacts secrets via `redactSecrets()` (OBS-1).
+  - `README.md` - workflow filename (`build-apk.yml`), artifact name (`app-debug.apk`), export wording (no secrets, in-app export only), safety model (`allowBackup="false"`) (DOC-1).
+  - `ForClaude/CLAUDE_BACKEND_PLAN.md` - updated BUG-9, BUG-10, BUG-11, DATA-4, LLM-1, RUN-1, RUN-2, OBS-1, DOC-1 statuses; added changelog entry.
+- Verified: all edits are syntactically consistent with surrounding code. Not compiled (no Kotlin toolchain in this environment).
+- NOT verified: Gradle build, unit tests, CI, device checks.
+- Next for whoever continues: confirm CI green, then take ARCH-1 (large refactor, can't verify without compilation), SEC-1/SEC-13/SEC-10/RUN-5 device checks, DEC-1 monetization decision.

@@ -237,7 +237,7 @@ object ConnectorCatalog {
                 ConnectorActionDef("list_issues", "List issues", "List open or closed issues. repo is optional when the token reaches one repository.", false, "{\"repo\": \"owner/name\", \"state\": \"open\"}"),
                 ConnectorActionDef("create_issue", "Create issue", "Open a new issue. Requires approval.", true, "{\"repo\": \"owner/name\", \"title\": \"...\", \"body\": \"...\"}"),
             ),
-            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (read/write to code, issues, metadata, administration), and paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed. Invisible/control characters are stripped automatically.",
+            setupHelp = "Create a fine-grained personal access token (recommended) at github.com/settings/tokens → Fine-grained tokens, give it Repository access (contents + issues; do not grant administration unless you need repo management), and paste it here. For full repo create/manage access across all repos, a Classic PAT with 'repo' scope also works but is less secure. Paste the token (github_pat_... or ghp_...) and nothing else is needed. Invisible/control characters are stripped automatically.",
             docsUrl = "https://docs.github.com/en/rest",
             risk = "high",
             iconKey = "github",
@@ -463,7 +463,7 @@ object ConnectorCatalog {
             ),
             setupHelp = "Create a read token at huggingface.co/settings/tokens. Some models take a while to warm up; a 503 means retry shortly.",
             docsUrl = "https://huggingface.co/docs/api-inference",
-            risk = "low",
+            risk = "medium",
             iconKey = "huggingface",
         ),
         ConnectorDef(

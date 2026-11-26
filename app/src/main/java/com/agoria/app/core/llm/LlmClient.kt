@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -50,6 +51,11 @@ class LlmClient(private val repo: Repository) {
 
     private val gate = Semaphore(2)
 
+    // BUG-10: per-provider cooldown (milliseconds since last call), so a rate-limited or dead
+    // provider is not hammered every cycle by every agent.
+    private val lastCallMillis = mutableMapOf<String, Long>()
+    private val minCooldownMillis = 5_000L
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(70, TimeUnit.SECONDS)
@@ -58,16 +64,12 @@ class LlmClient(private val repo: Repository) {
         .retryOnConnectionFailure(true)
         .build()
 
-    suspend fun complete(request: LlmRequest): LlmResult = gate.withPermit {
-        completeInternal(request)
-    }
+    suspend fun complete(request: LlmRequest): LlmResult = completeInternal(request)
 
     suspend fun completeWithProvider(
         providerId: String,
         request: LlmRequest,
-    ): LlmResult = gate.withPermit {
-        completeInternal(request, forceProviderId = providerId)
-    }
+    ): LlmResult = completeInternal(request, forceProviderId = providerId)
 
     private suspend fun completeInternal(
         request: LlmRequest,
@@ -116,13 +118,52 @@ class LlmClient(private val repo: Repository) {
                 continue
             }
 
+            // BUG-10: per-provider cooldown — skip if called too recently.
+            val now = System.currentTimeMillis()
+            val last = lastCallMillis[provider.id] ?: 0L
+            if (now - last < minCooldownMillis) {
+                attempts += ProviderAttempt(
+                    providerId = provider.id,
+                    providerName = spec.name,
+                    model = provider.model.ifBlank { spec.defaultModel },
+                    ok = false,
+                    error = "Provider on cooldown (${minCooldownMillis - (now - last)}ms remaining)",
+                    latencyMs = 0,
+                )
+                continue
+            }
+
             // Build model fallback list: user's configured model first, then all other models from the provider
             val configuredModel = provider.model.ifBlank { spec.defaultModel }
             val modelFallbacks = buildModelFallbacks(spec, configuredModel)
-            
-            val (fallbackResult, fallbackAttempts) = callProviderWithFallbacks(
-                spec = spec,
-                provider = provider,
+
+            // BUG-10: release the semaphore permit between providers instead of holding it across
+            // the whole fallback chain.
+            val (fallbackResult, fallbackAttempts) = gate.withPermit {
+                lastCallMillis[provider.id] = System.currentTimeMillis()
+                callProviderWithFallbacks(
+                    spec = spec,
+                    provider = provider,
+                    models = modelFallbacks,
+                    key = key,
+                    extra = extra,
+                    request = request,
+                )
+            }
+            attempts.addAll(fallbackAttempts)
+
+            if (fallbackResult.ok) {
+                return fallbackResult.copy(attempts = attempts)
+            }
+            lastError = fallbackAttempts.lastOrNull()?.error ?: "Unknown provider error"
+        }
+
+        return LlmResult(
+            ok = false,
+            error = lastError,
+            attempts = attempts,
+        )
+    }
                 models = modelFallbacks,
                 key = key,
                 extra = extra,
@@ -181,14 +222,20 @@ class LlmClient(private val repo: Repository) {
         spec.staticHeaders.forEach { (name, value) ->
             requestBuilder.addHeader(name, value)
         }
+        if (request.json) {
+            // BUG-10: tell the provider we want JSON back when the caller asked for it.
+            body.put("response_format", JSONObject().put("type", "json_object"))
+        }
         requestBuilder.post(body.toString().toRequestBody("application/json".toMediaType()))
 
         return try {
             var lastError = "Request failed"
             var lastCode = 0
+            var retried = false
             repeat(2) { attempt ->
                 val call = client.newCall(requestBuilder.build())
-                val response = withContext(Dispatchers.IO) { call.execute() }
+                // BUG-10: cancel the underlying OkHttp call when the coroutine is cancelled.
+                val response = cancellableExecute(call)
                 val responseBody = withContext(Dispatchers.IO) {
                     try {
                         response.body?.string() ?: ""
@@ -199,11 +246,14 @@ class LlmClient(private val repo: Repository) {
                 lastCode = response.code
                 if (!response.isSuccessful) {
                     lastError = "HTTP ${response.code}: ${responseBody.take(400)}"
-                    if (response.code >= 500) {
-                        delay(600)
-                    } else {
-                        return@repeat
+                    if (response.code >= 500 && !retried) {
+                        retried = true
+                        val retryAfter = retryAfterMillis(response)
+                        delay(retryAfter ?: 600)
+                        continue@repeat
                     }
+                    // 4xx errors (and a second 5xx) are not retried — break out of the loop.
+                    break
                 } else {
                     val parsed = parseResponse(responseBody)
                     if (parsed.isSuccess) {
@@ -230,6 +280,7 @@ class LlmClient(private val repo: Repository) {
                         )
                     } else {
                         lastError = parsed.error ?: "Empty response"
+                        break
                     }
                 }
             }
@@ -277,6 +328,30 @@ class LlmClient(private val repo: Repository) {
                 ),
                 attempt = attempt,
             )
+        }
+    }
+
+    /** Executes an OkHttp call cancellably: cancels the underlying call when the coroutine is cancelled. */
+    private suspend fun cancellableExecute(call: okhttp3.Call): okhttp3.Response =
+        suspendCancellableCoroutine { cont ->
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    cont.resumeWithException(e)
+                }
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    cont.resume(response)
+                }
+            })
+        }
+
+    /** Reads Retry-After (seconds) from a response; null when absent or unparsable. */
+    private fun retryAfterMillis(response: okhttp3.Response): Long? {
+        val header = response.header("Retry-After") ?: return null
+        return try {
+            header.toLong() * 1000
+        } catch (_: NumberFormatException) {
+            null
         }
     }
 
