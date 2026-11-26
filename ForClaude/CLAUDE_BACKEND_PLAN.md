@@ -327,6 +327,13 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): `SettingsDao.addInfrastructureFund()` now uses atomic SQL `UPDATE settings SET infrastructureFundCents = MAX(0, infrastructureFundCents + :deltaCents)`. `Repository.updateInfrastructureFund()` calls this instead of read-modify-write. Remaining: atomic settings updates for other fields, @Transaction DAO methods.
 
 ### DATA-2 - Unbounded tables and full-table reads on every cycle
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: M
+- Evidence: `AgentRuntime.buildContext` uses `repo.diaryFor(id).first().take(18)`, `memoriesFor(...).first().take(14)`, `messagesFor(...).first().takeLast(14)`, `tasksFor/approvalsFor/buildsFor(...).first()`, and the "chatter" block loads **every agent's whole diary** each cycle. `Repository` already has `recent*` limited queries that are not used here. No retention exists for diary, messages, connector logs, approvals or revenue. `exportSnapshot` calls `diaryDao().getAll().takeLast(2000)`.
+- Fix: `LIMIT` queries in the DAO for every context read; index `(agentId, createdAt)`; retention job (keep pinned/high-importance, summarize old diary into memories, prune `connector_logs`, expire old approvals); rank memories by importance and recency.
+- Done when: context build time is flat with 100k diary rows (benchmark/unit test).
+- Implemented (2026-11-26): `buildContext` now uses `repo.recentDiaryForAgent(agent.id, 18)` and `repo.memoryDao().recentForAgent(agent.id, 14)` instead of loading all rows then taking. Chatter block now uses `repo.recentSayEntries(50)` instead of loading every agent's full diary. Added `DiaryDao.recentForAgent()` and `DiaryDao.recentSayEntries()` methods. Remaining: retention job, index verification, memory ranking.
+","oldString">
+### DATA-2 - Unbounded tables and full-table reads on every cycle
 - Status: TODO | Effort: M | Verify first: `Daos.kt` was not reviewed
 - Evidence: `AgentRuntime.buildContext` uses `repo.diaryFor(id).first().take(18)`, `memoriesFor(...).first().take(14)`, `messagesFor(...).first().takeLast(14)`, `tasksFor/approvalsFor/buildsFor(...).first()`, and the "chatter" block loads **every agent's whole diary** each cycle. `Repository` already has `recent*` limited queries that are not used here. No retention exists for diary, messages, connector logs, approvals or revenue. `exportSnapshot` calls `diaryDao().getAll().takeLast(2000)`.
 - Fix: `LIMIT` queries in the DAO for every context read; index `(agentId, createdAt)`; retention job (keep pinned/high-importance, summarize old diary into memories, prune `connector_logs`, expire old approvals); rank memories by importance and recency.

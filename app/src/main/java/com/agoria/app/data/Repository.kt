@@ -41,7 +41,11 @@ class Repository(
     val connectorLogs = db.connectorLogDao().observeRecent(50)
 
     fun diaryFor(agentId: String) = db.diaryDao().observeForAgent(agentId)
-    fun messagesFor(agentId: String) = db.messageDao().observeForAgent(agentId)
+    suspend fun recentDiaryForAgent(agentId: String, limit: Int) = db.diaryDao().recentForAgent(agentId, limit)
+    suspend fun recentSayEntries(limit: Int) = db.diaryDao().recentSayEntries(limit)
+","oldString">
+    fun diaryFor(agentId: String) = db.diaryDao().observeForAgent(agentId)
+","path":"/workspace/app/app/src/main/java/com/agoria/app/data/Repository.kt    fun messagesFor(agentId: String) = db.messageDao().observeForAgent(agentId)
     fun tasksFor(agentId: String) = db.taskDao().observeForAgent(agentId)
     fun approvalsFor(agentId: String) = db.approvalDao().observeForAgent(agentId)
     fun buildsFor(agentId: String) = db.buildDao().observeForAgent(agentId)
