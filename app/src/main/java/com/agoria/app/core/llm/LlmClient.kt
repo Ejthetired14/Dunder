@@ -164,25 +164,6 @@ class LlmClient(private val repo: Repository) {
             attempts = attempts,
         )
     }
-                models = modelFallbacks,
-                key = key,
-                extra = extra,
-                request = request,
-            )
-            attempts.addAll(fallbackAttempts)
-
-            if (fallbackResult.ok) {
-                return fallbackResult.copy(attempts = attempts)
-            }
-            lastError = fallbackAttempts.lastOrNull()?.error ?: "Unknown provider error"
-        }
-
-        return LlmResult(
-            ok = false,
-            error = lastError,
-            attempts = attempts,
-        )
-    }
 
     private data class ProviderCall(
         val result: LlmResult,
