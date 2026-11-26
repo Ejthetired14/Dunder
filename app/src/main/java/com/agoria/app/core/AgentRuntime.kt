@@ -306,6 +306,7 @@ class AgentRuntime(
             .filter { it.status == "executed" && it.decidedAt != null && it.decidedAt >= todayStart }
             .groupBy { it.agentId }
             .mapValues { (_, v) -> v.size }
+            .toMutableMap()
 
         autoPending.forEach { approval ->
             // SEC-5: never auto-approve high-risk actions.

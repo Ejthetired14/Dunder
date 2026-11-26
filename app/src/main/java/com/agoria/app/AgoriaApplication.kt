@@ -45,7 +45,7 @@ class AgoriaApplication : Application() {
             appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
             val llm = LlmClient(repository)
-            this.llm = llm
+            this@AgoriaApplication.llm = llm
             val buildRunner = BuildRunner(repository, llm, this@AgoriaApplication)
             val connectorExecutor = ConnectorExecutor(repository, this@AgoriaApplication)
             runtime = AgentRuntime(

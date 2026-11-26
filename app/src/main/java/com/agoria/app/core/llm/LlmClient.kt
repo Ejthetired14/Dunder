@@ -231,10 +231,10 @@ class LlmClient(private val repo: Repository) {
                         retried = true
                         val retryAfter = retryAfterMillis(response)
                         delay(retryAfter ?: 600)
-                        continue@repeat
+                    } else {
+                        // 4xx errors (and a second 5xx) are not retried — break out of the loop.
+                        break@repeat
                     }
-                    // 4xx errors (and a second 5xx) are not retried — break out of the loop.
-                    break
                 } else {
                     val parsed = parseResponse(responseBody)
                     if (parsed.isSuccess) {

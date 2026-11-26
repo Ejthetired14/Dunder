@@ -2943,9 +2943,9 @@ class ConnectorExecutor(
         val dollar = "\$"
         // SEC-8: JSON-escape values embedded in generated JS source to prevent code injection
         // (a newline or quote in name/secret/callbackUrl could break out of the string literal).
-        val safeName = org.json.JSONObject.quote(name).removeSurrounding('"')
-        val safeSecret = org.json.JSONObject.quote(webhookSecret).removeSurrounding('"')
-        val safeCallback = org.json.JSONObject.quote(callbackUrl).removeSurrounding('"')
+        val safeName = org.json.JSONObject.quote(name).removeSurrounding("\"")
+        val safeSecret = org.json.JSONObject.quote(webhookSecret).removeSurrounding("\"")
+        val safeCallback = org.json.JSONObject.quote(callbackUrl).removeSurrounding("\"")
         return """
             // Stripe Webhook Handler for $safeName
             // Receives Stripe events, verifies signature, forwards to app
