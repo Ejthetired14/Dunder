@@ -16,6 +16,36 @@ object AgentPolicy {
         "say",
     )
 
+    /**
+     * Extracts the first JSON object from arbitrary text. Handles markdown code fences,
+     * prose embedding, nested braces, and escaped quotes inside strings. Returns null
+     * when no JSON object is found.
+     */
+    fun extractFirstJsonObject(text: String): String? {
+        val start = text.indexOf('{') ?: return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var end = -1
+        for (i in start until text.length) {
+            val c = text[i]
+            when {
+                escaped -> escaped = false
+                c == '\\' && inString -> escaped = true
+                c == '"' -> inString = !inString
+                !inString && c == '{' -> depth++
+                !inString && c == '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        end = i
+                        break
+                    }
+                }
+            }
+        }
+        return if (end == -1) null else text.substring(start, end + 1)
+    }
+
     fun parseDecision(text: String): AgentDecision? {
         val root = Json.tryObject(text) ?: return null
         val action = Json.string(root, "action", "none").lowercase().ifBlank { "none" }
