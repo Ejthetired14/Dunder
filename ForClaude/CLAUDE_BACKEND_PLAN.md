@@ -416,10 +416,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): `OfficeWorldScreen` now reads `BootStatus.lastFailure(context)` on composition start and shows an amber banner with the reason and a "Turn autonomy on" button. The button starts `AutonomyService` as a foreground service, clears the boot status, and hides the banner. Remaining: verify `AutonomyService.start(context)` public entry point exists; device check.
 
 ### CONN-1 - Read-only gating ignores action aliases and `check_revenue`
-- Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Evidence: `ConnectorCatalog.isReadOnly` looks up the raw action name, but `ConnectorExecutor.canonicalAction` maps aliases (`ls`, `cat`, `save`...) later, so aliases always need approval (fails closed, but noisy). `check_revenue` calls `useConnector` directly and skips gating entirely.
 - Fix: canonicalize before the policy check; route every connector call through one gate.
-- Implemented (2026-11-25): Added `ConnectorCatalog.canonicalizeAction()` method. `isReadOnly` now canonicalizes action before lookup. `check_revenue` now checks `AgentPolicy.isAutoAllowed` before proceeding; creates approval if not allowed. Remaining: full connector-specific canonicalization in ConnectorCatalog (github, notion, agentmail aliases).
+- Implemented (2026-11-26): `ConnectorCatalog.canonicalizeAction()` now handles connector-specific aliases: github (whoami/list_repos/get_repo/list_issues/create_issue/get_file/create_branch/put_file/create_pr/list_prs), notion (search/query/create_page), agentmail (create_inbox/list_inboxes/send_email/get_email/list_emails/delete_inbox), slack/discord/telegram (post), cloudflare_workers (deploy/get_script/delete/list/tail_logs/deploy_webhook_handler), plus generic aliases (list/read/write/delete). `isReadOnly` now uses canonical consistently. `check_revenue` checks `AgentPolicy.isAutoAllowed` before proceeding; creates approval if not allowed.
 
 ### CONN-2 - `files` connector shares one workspace and has no quota
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: S

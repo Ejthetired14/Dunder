@@ -612,28 +612,73 @@ object ConnectorCatalog {
 
     fun canonicalizeAction(connectorId: String, action: String): String {
         val normalised = action.trim().lowercase().replace('-', '_').replace(' ', '_')
-        val generic = when (normalised) {
-            "list_files", "ls", "dir", "glob", "files" -> "list"
-            "cat", "open", "read_file", "show", "view" -> "read"
-            "save", "create", "write_file", "create_file", "append", "append_file" -> "write"
-            "rm", "remove", "unlink", "delete_file" -> "delete"
-            else -> normalised
+
+        // CONN-1: connector-specific alias canonicalization before the generic mapping.
+        return when (connectorId) {
+            "github" -> when (normalised) {
+                "whoami", "me", "account" -> "whoami"
+                "list_repos", "repos", "repositories" -> "list_repos"
+                "get_repo", "repo", "repository" -> "get_repo"
+                "list_issues", "issues" -> "list_issues"
+                "create_issue", "new_issue", "issue" -> "create_issue"
+                "get_file", "file", "read_file" -> "get_file"
+                "create_branch", "branch" -> "create_branch"
+                "put_file", "write_file", "update_file" -> "put_file"
+                "create_pr", "pull_request", "pr" -> "create_pr"
+                "list_prs", "prs", "pull_requests" -> "list_prs"
+                else -> normalised
+            }
+            "notion" -> when (normalised) {
+                "search", "find" -> "search"
+                "query", "db_query", "database_query" -> "query"
+                "create_page", "new_page", "page" -> "create_page"
+                else -> normalised
+            }
+            "agentmail" -> when (normalised) {
+                "create_inbox", "new_inbox", "inbox" -> "create_inbox"
+                "list_inboxes", "inboxes" -> "list_inboxes"
+                "send_email", "send", "email" -> "send_email"
+                "get_email", "read_email" -> "get_email"
+                "list_emails", "emails" -> "list_emails"
+                "delete_inbox", "remove_inbox" -> "delete_inbox"
+                else -> normalised
+            }
+            "slack", "discord", "telegram" -> when (normalised) {
+                "post", "send_message", "sendmsg" -> "post"
+                else -> normalised
+            }
+            "cloudflare_workers" -> when (normalised) {
+                "deploy", "publish" -> "deploy"
+                "get_script", "script", "read_script" -> "get_script"
+                "delete", "remove" -> "delete"
+                "list", "workers" -> "list"
+                "tail_logs", "logs" -> "tail_logs"
+                "deploy_webhook_handler", "webhook_handler" -> "deploy_webhook_handler"
+                else -> normalised
+            }
+            else -> when (normalised) {
+                // Generic aliases apply to all connectors.
+                "list_files", "ls", "dir", "glob", "files" -> "list"
+                "cat", "open", "read_file", "show", "view" -> "read"
+                "save", "create", "write_file", "create_file", "append", "append_file" -> "write"
+                "rm", "remove", "unlink", "delete_file" -> "delete"
+                else -> normalised
+            }
         }
-        return generic
     }
 
     fun isReadOnly(connectorId: String, action: String): Boolean {
         val def = get(connectorId) ?: return false
-        // CONN-1: canonicalize action aliases before lookup
+        // CONN-1: canonicalize action aliases before lookup.
         val canonical = canonicalizeAction(connectorId, action)
         val actionDef = def.actions.firstOrNull { it.id == action || it.id == canonical } ?: return false
         if (actionDef.mutating) return false
         return when (connectorId) {
             "wikipedia", "hn", "search", "weather", "currency" -> true
             "device" -> true
-            "accounts" -> action == "list" || canonical == "list"
-            "files" -> action == "list" || action == "read" || canonical == "list" || canonical == "read"
-            "terminal" -> action == "list" || action == "logs" || canonical == "list" || canonical == "logs"
+            "accounts" -> canonical == "list"
+            "files" -> canonical == "list" || canonical == "read"
+            "terminal" -> canonical == "list" || canonical == "logs"
             else -> false
         }
     }
