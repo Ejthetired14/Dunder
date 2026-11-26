@@ -1277,7 +1277,12 @@ class Repository(
                         createdAt = a.optLong("createdAt", existing?.createdAt ?: now),
                         updatedAt = now,
                         allowedConnectors = a.optString("allowedConnectors", existing?.allowedConnectors ?: ""),
-                        apiToken = a.optString("apiToken", existing?.apiToken ?: ""),
+                        apiToken = if (a.has("apiToken") && a.optString("apiToken").isNotBlank()) {
+                            // SEC-17: encrypt apiToken on import; never store plaintext at rest.
+                            SecretCipher.encrypt(a.optString("apiToken")) ?: ""
+                        } else {
+                            existing?.apiToken ?: ""
+                        },
                         isUndeletable = a.optBoolean("isUndeletable", existing?.isUndeletable ?: false),
                     )
                     upsertAgent(agentEntity)

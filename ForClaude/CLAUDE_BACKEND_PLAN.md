@@ -238,7 +238,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Evidence: `agents.apiToken` is plaintext in Room (SEC-2 removed it from exports only). A root backup or a stolen unlocked device exposes it; provider and connector keys already use `SecretCipher`.
 - Fix: Room migration that re-encrypts existing values with `SecretCipher`, store ciphertext only, decrypt at the single point that uses the token, and mark the row `needs_reentry` when decryption fails (same failure mode as SEC-9). No plaintext token in logs, snapshots or exports.
 - Done when: a DB dump contains no plaintext token and the agent that uses the token still works.
-- Implemented (2026-11-26): Added `Repository.agentApiToken()` (decrypts, falls back to plaintext for legacy) and `Repository.updateAgentApiToken()` (encrypts). `ConnectorExecutor` now uses `repo.agentApiToken()`. Remaining: migration to encrypt existing rows, update all write paths.
+- Implemented (2026-11-26): Added `Repository.agentApiToken()` (decrypts, falls back to plaintext for legacy) and `Repository.updateAgentApiToken()` (encrypts). `ConnectorExecutor` now uses `repo.agentApiToken()`. `importSnapshot` now encrypts apiToken via `SecretCipher.encrypt` before storing (was plaintext). Remaining: Room migration to encrypt existing rows on upgrade, update all other write paths.
 
 ---
 
