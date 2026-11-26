@@ -48,7 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     /** Deletes every row from every table. Used by reset(); callers must also delete files. */
     @Transaction
-    override suspend fun clearAllTables() {
+    suspend fun clearAllData() {
         agentDao().deleteAll()
         diaryDao().deleteAll()
         messageDao().deleteAll()

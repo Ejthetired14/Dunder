@@ -319,7 +319,7 @@ class LlmClient(private val repo: Repository) {
             cont.invokeOnCancellation { call.cancel() }
             call.enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: IOException) {
-                    cont.resumeWithException(e)
+                    cont.resumeWith(Result.failure(e))
                 }
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                     cont.resume(response)

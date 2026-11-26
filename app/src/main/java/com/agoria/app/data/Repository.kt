@@ -155,7 +155,7 @@ class Repository(
     }
 
     suspend fun reset() {
-        db.clearAllTables()
+        db.clearAllData()
         // DATA-3: also delete files so a reset truly starts clean.
         Files.clear(Files.workspace(context))
         Files.clear(Files.exports(context))
