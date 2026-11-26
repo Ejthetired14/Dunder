@@ -366,8 +366,11 @@ class HuggingFaceHandler : ConnectorHandler {
         val inputs = args.optString("inputs").trim()
         if (model.isBlank() || inputs.isBlank()) return HandlerResult(false, "Missing model or inputs.")
         val token = config?.optString("apiToken")?.trim()
-        val headers = mutableMapOf<String, String>()
-        if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+        val headers: Map<String, String> = if (token != null && token.isNotBlank()) {
+            mapOf("Authorization" to "Bearer $token")
+        } else {
+            emptyMap()
+        }
         val response = ConnectorHttp.http("POST", "https://api-inference.huggingface.co/models/$model", headers, inputs)
         if (!response.ok) return HandlerResult(false, "Hugging Face ${response.code}: ${ConnectorHttp.text(response.body, 240)}")
         HandlerResult(true, "Inference result: ${ConnectorHttp.text(response.body, 1000)}")
