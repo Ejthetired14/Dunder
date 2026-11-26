@@ -373,7 +373,7 @@ class HuggingFaceHandler : ConnectorHandler {
         }
         val response = ConnectorHttp.http("POST", "https://api-inference.huggingface.co/models/$model", headers, inputs)
         if (!response.ok) return HandlerResult(false, "Hugging Face ${response.code}: ${ConnectorHttp.text(response.body, 240)}")
-        HandlerResult(true, "Inference result: ${ConnectorHttp.text(response.body, 1000)}")
+        return HandlerResult(true, "Inference result: ${ConnectorHttp.text(response.body, 1000)}")
     }
 
     override fun onSuccess(connector: ConnectorEntity) = ConnectorHandler.defaultOnSuccess(connector)
