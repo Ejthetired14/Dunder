@@ -792,7 +792,7 @@ class ConnectorExecutor(
         if (isPrivateOrLoopbackHost(baseHost)) return ConnectorResult(false, "Base URL host is not allowed (private/loopback)")
 
         val agentToken = if (cfg(config, "authSource") == "agent") {
-            agentId?.let { repo.agent(it)?.apiToken }?.ifBlank { null }
+            agentId?.let { repo.agentApiToken(it) }?.ifBlank { null }
         } else {
             null
         }

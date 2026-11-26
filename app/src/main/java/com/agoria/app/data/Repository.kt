@@ -344,6 +344,19 @@ class Repository(
 
     suspend fun agent(id: String): AgentEntity? = db.agentDao().get(id)
 
+    // SEC-17: encrypt/decrypt apiToken at rest
+    suspend fun agentApiToken(id: String): String? {
+        val agent = db.agentDao().get(id) ?: return null
+        // Try decrypting (new format); fall back to plaintext (legacy/migration)
+        return SecretCipher.decrypt(agent.apiToken) ?: agent.apiToken.ifBlank { null }
+    }
+
+    suspend fun updateAgentApiToken(id: String, plainToken: String?) {
+        val agent = db.agentDao().get(id) ?: return
+        val encrypted = if (plainToken.isNullOrBlank()) "" else (SecretCipher.encrypt(plainToken) ?: plainToken)
+        db.agentDao().update(agent.copy(apiToken = encrypted, updatedAt = Time.now()))
+    }
+
     suspend fun allAgents(): List<AgentEntity> = db.agentDao().getAll()
 
     suspend fun upsertAgent(agent: AgentEntity) = db.agentDao().insert(agent)
