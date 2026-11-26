@@ -801,13 +801,14 @@ class AgentRuntime(
 
     private suspend fun buildContext(agent: AgentEntity): AgentContext {
         val settings = repo.settings()
-        val diary = repo.diaryFor(agent.id).first().take(18)
+        val diary = repo.recentDiaryForAgent(agent.id, 18)
+        val memories = repo.memoryDao().recentForAgent(agent.id, 14)
+","oldString">
         val memories = repo.memoriesFor(agent.id).first().take(14)
-        val messages = repo.messagesFor(agent.id).first().takeLast(14)
+","path":"/workspace/app/app/src/main/java/com/agoria/app/core/AgentRuntime.kt        val messages = repo.messagesFor(agent.id).first().takeLast(14)
         val tasks = repo.tasksFor(agent.id).first()
         val approvals = repo.approvalsFor(agent.id).first()
         val builds = repo.buildsFor(agent.id).first()
-
         val allowed = agent.allowedConnectors.split(',').map { it.trim() }.filter { it.isNotBlank() }
         val connectors = repo.connectors.first()
             .filter { it.status != "disabled" && (allowed.isEmpty() || it.id in allowed) }
@@ -844,6 +845,19 @@ class AgentRuntime(
             )
         }
 
+        // Recent talk between agents (diary kind "say") - use limited query instead of loading all diaries
+        val chatter = repo.recentSayEntries(50)
+            .filter { it.kind == "say" }
+            .mapNotNull { e ->
+                val a = repo.agent(e.agentId) ?: return@mapNotNull null
+                val m = AgentPolicy.SAY_REGEX.find(e.content.trim()) ?: return@mapNotNull null
+                ChatterLine(a.name, m.groupValues[1].trim(), m.groupValues[2].trim(), e.createdAt)
+            }
+            .filter { it.fromName == agent.name || it.toName.equals(agent.name, ignoreCase = true) }
+            .sortedByDescending { it.at }
+            .take(8)
+            .reversed()
+","oldString">
         // Recent talk between agents (diary kind "say")
         val chatter = repo.agents.first().flatMap { a ->
             repo.diaryFor(a.id).first()
@@ -857,7 +871,7 @@ class AgentRuntime(
             .sortedByDescending { it.at }
             .take(8)
             .reversed()
-
+","path":"/workspace/app/app/src/main/java/com/agoria/app/core/AgentRuntime.kt
         val agentRevenue = repo.totalRevenueForAgent(agent.id)
         val infraFund = repo.getInfrastructureFund()
 

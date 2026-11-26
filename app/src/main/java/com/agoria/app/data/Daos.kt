@@ -39,6 +39,12 @@ interface DiaryDao {
     @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC")
     fun observeForAgent(agentId: String): Flow<List<DiaryEntryEntity>>
 
+    @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForAgent(agentId: String, limit: Int): List<DiaryEntryEntity>
+","oldString">
+    @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC")
+    fun observeForAgent(agentId: String): Flow<List<DiaryEntryEntity>>
+","path":"/workspace/app/app/src/main/java/com/agoria/app/data/Daos.kt
     @Query("SELECT * FROM diary_entries WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     suspend fun pagedForAgent(agentId: String, limit: Int, offset: Int): List<DiaryEntryEntity>
 
@@ -54,9 +60,12 @@ interface DiaryDao {
     @Query("DELETE FROM diary_entries")
     suspend fun deleteAll()
 
+    @Query("SELECT * FROM diary_entries WHERE kind = 'say' ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentSayEntries(limit: Int): List<DiaryEntryEntity>
+","oldString">
     @Query("SELECT * FROM diary_entries ORDER BY createdAt ASC")
     suspend fun getAll(): List<DiaryEntryEntity>
-}
+","path":"/workspace/app/app/src/main/java/com/agoria/app/data/Daos.kt}
 
 @Dao
 interface MessageDao {
