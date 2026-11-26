@@ -802,7 +802,7 @@ class AgentRuntime(
     private suspend fun buildContext(agent: AgentEntity): AgentContext {
         val settings = repo.settings()
         val diary = repo.recentDiaryForAgent(agent.id, 18)
-        val memories = repo.memoryDao().recentForAgent(agent.id, 14)
+        val memories = repo.memoriesFor(agent.id).first().take(14)
         val messages = repo.messagesFor(agent.id).first().takeLast(14)
         val tasks = repo.tasksFor(agent.id).first()
         val approvals = repo.approvalsFor(agent.id).first()

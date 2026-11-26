@@ -423,8 +423,8 @@ class ConnectorExecutor(
         if (action != "search") return ConnectorResult(false, "Unknown search action '$action'")
         val query = args.optString("query").ifBlank { return ConnectorResult(false, "Missing query") }
         val apiKey = cfg(config, "searchApiKey")
-        if (apiKey.isNotBlank()) {
-            return braveSearch(query, apiKey)
+        if (apiKey?.isNotBlank() == true) {
+            return braveSearch(query, apiKey!!)
         }
         // No API key configured: fall back to DuckDuckGo's public instant-answer API, then the
         // HTML scraper as last resort (CONN-4).

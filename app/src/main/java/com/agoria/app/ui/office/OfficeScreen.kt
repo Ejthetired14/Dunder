@@ -272,7 +272,6 @@ private fun OfficeWorldScreen(
         }
 
     // RUN-6: show boot-restart failure in the UI, with a "Turn autonomy on" action.
-    val context = LocalContext.current
     var bootFailure by remember { mutableStateOf<BootStatus.Failure?>(null) }
     LaunchedEffect(Unit) {
         bootFailure = BootStatus.lastFailure(context)

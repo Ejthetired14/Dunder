@@ -11,6 +11,7 @@ import com.agoria.app.data.RevenueEntity
 import com.agoria.app.util.Files
 import com.agoria.app.util.Json
 import com.agoria.app.util.SecretCipher
+import com.agoria.app.util.SecretVault
 import com.agoria.app.util.Time
 import org.json.JSONArray
 import org.json.JSONObject
@@ -718,7 +719,7 @@ class Repository(
 
     // ------------------------------------------------------------------ export
 
-    suspend fun exportSnapshot(): JSONObject {
+    suspend fun exportSnapshot(includeSecrets: Boolean = false): JSONObject {
         val root = JSONObject()
         root.put("app", "Dunder")
         root.put("version", 2)
@@ -881,6 +882,19 @@ class Repository(
                 }
             },
         )
+
+        // SEC-16: when includeSecrets is true, attach a raw secrets section keyed by connector id.
+        // The caller (ViewModel) encrypts each value with SecretVault before writing to disk.
+        if (includeSecrets) {
+            val secrets = JSONObject()
+            db.connectorDao().getAll().forEach { c ->
+                val config = connectorConfig(c.id)
+                if (config != null && config.length() > 0) {
+                    secrets.put(c.id, config.toString())
+                }
+            }
+            root.put("secrets", secrets)
+        }
 
         return root
     }
@@ -1056,6 +1070,25 @@ class Repository(
         } catch (e: Exception) {
             e.printStackTrace()
             return false
+        }
+    }
+
+    // SEC-16: decrypt and apply connector secrets from an encrypted backup.
+    // Fails closed: returns false if any secret cannot be decrypted or applied.
+    suspend fun restoreSecrets(secretsJson: JSONObject, passphrase: String): Boolean {
+        return try {
+            val names = secretsJson.keys().asSequence().toList()
+            for (name in names) {
+                val encrypted = secretsJson.optString(name)
+                if (encrypted.isNotBlank()) {
+                    val decrypted = SecretVault.decrypt(encrypted, passphrase) ?: return false
+                    val config = Json.tryObject(decrypted) ?: return false
+                    saveConnectorConfig(name, config)
+                }
+            }
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
