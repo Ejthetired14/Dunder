@@ -499,6 +499,97 @@ fun SettingsScreen(
                 }
             }
 
+            SettingsCard(title = "Auto-approve") {
+                val autoEnabled = settings?.autoApproveEnabled ?: false
+                var autoCap by remember { mutableStateOf(settings?.autoApproveDailyCap ?: 5) }
+                var autoTypes by remember { mutableStateOf(settings?.autoApproveTypes ?: "") }
+                var autoAllowlist by remember { mutableStateOf(settings?.autoApproveAllowlist ?: "") }
+
+                LaunchedEffect(settings) {
+                    autoCap = settings?.autoApproveDailyCap ?: 5
+                    autoTypes = settings?.autoApproveTypes ?: ""
+                    autoAllowlist = settings?.autoApproveAllowlist ?: ""
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Auto-approve actions", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "When on, low-risk actions in the allowlist run without asking. High-risk actions (money, deploy) always need approval.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Dim,
+                        )
+                    }
+                    PixelSwitch(
+                        checked = autoEnabled,
+                        onChange = { viewModel.updateSettings { it.copy(autoApproveEnabled = it) } },
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Daily cap per agent",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                PixelSlider(
+                    value = autoCap.toFloat(),
+                    onValueChange = { autoCap = it.roundToInt().coerceIn(1, 50) },
+                    valueRange = 1f..50f,
+                    steps = 49,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelButton("Save cap", {
+                        viewModel.updateSettings { it.copy(autoApproveDailyCap = autoCap) }
+                    }, small = true)
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Auto-approve types (comma-separated)",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = "e.g. build_project, connector_action, send_email. Only types in the allowlist below are eligible.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Dim,
+                )
+                PixelTextField(
+                    value = autoTypes,
+                    onValueChange = { autoTypes = it },
+                    label = "Types",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelButton("Save types", {
+                        viewModel.updateSettings { it.copy(autoApproveTypes = autoTypes) }
+                    }, small = true)
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Allowlist (JSON map)",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = "{\"connectorId\": [\"action1\", \"action2\"]}. Empty means no connectors are auto-approved.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Dim,
+                )
+                PixelTextField(
+                    value = autoAllowlist,
+                    onValueChange = { autoAllowlist = it },
+                    label = "JSON map",
+                    singleLine = false,
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelButton("Save allowlist", {
+                        viewModel.updateSettings { it.copy(autoApproveAllowlist = autoAllowlist) }
+                    }, small = true)
+                }
+            }
+
             SettingsCard(title = "Data & privacy") {
                 Text(
                     text = "API keys and connector credentials are encrypted with a key in the Android Keystore. The database stays on this device.",
