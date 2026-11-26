@@ -647,6 +647,7 @@ fun SettingsScreen(
 
             SettingsCard(title = "App Updates") {
                 val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    var updateRefusalReason by remember { mutableStateOf<String?>(null) }
                 val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null) }
 
                 when (updateState.value) {
@@ -678,6 +679,7 @@ fun SettingsScreen(
                             PixelButton(
                                 text = "Check",
                                 onClick = {
+                                    updateRefusalReason = null
                                     updateState.value = UpdateState.Checking
                                     viewModel.checkForUpdates { result ->
                                         when (result) {
@@ -688,14 +690,17 @@ fun SettingsScreen(
                                             com.agoria.app.util.UpdateManager.CheckResult.UpToDate -> {
                                                 releaseInfo.value = null
                                                 updateState.value = UpdateState.UpToDate
+                                                updateRefusalReason = null
                                             }
                                             com.agoria.app.util.UpdateManager.CheckResult.Invalid -> {
                                                 releaseInfo.value = null
                                                 updateState.value = UpdateState.Idle
+                                                updateRefusalReason = "Update information is unavailable or invalid."
                                             }
                                             com.agoria.app.util.UpdateManager.CheckResult.NetworkError -> {
                                                 releaseInfo.value = null
                                                 updateState.value = UpdateState.Idle
+                                                updateRefusalReason = "Update failed: unable to reach the update server. Check your network and try again."
                                             }
                                         }
                                     }
@@ -736,7 +741,10 @@ fun SettingsScreen(
                             }
                             PixelButton(
                                 text = "Check Again",
-                                onClick = { updateState.value = UpdateState.Idle },
+                                onClick = {
+                                    updateRefusalReason = null
+                                    updateState.value = UpdateState.Idle
+                                },
                                 small = true,
                                 fill = Pal.tan,
                             )
@@ -795,15 +803,19 @@ fun SettingsScreen(
                                                 when (result) {
                                                     is com.agoria.app.util.UpdateManager.UpdateResult.Installed -> {
                                                         updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = null
                                                     }
                                                     com.agoria.app.util.UpdateManager.UpdateResult.NeedsPermission -> {
                                                         updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Install blocked: allow \"Install from this source\" in Settings, then try again."
                                                     }
                                                     is com.agoria.app.util.UpdateManager.UpdateResult.Refused -> {
                                                         updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Update refused: ${result.reason}"
                                                     }
                                                     com.agoria.app.util.UpdateManager.UpdateResult.NetworkError -> {
                                                         updateState.value = UpdateState.Idle
+                                                        updateRefusalReason = "Update failed: unable to reach the update server. Check your network and try again."
                                                     }
                                                 }
                                             })
@@ -817,6 +829,14 @@ fun SettingsScreen(
                                     onClick = { updateState.value = UpdateState.Idle },
                                     small = true,
                                     fill = Pal.tan,
+                                )
+                            }
+                            updateRefusalReason?.let { reason ->
+                                Text(
+                                    text = reason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Pal.amber,
+                                    modifier = Modifier.padding(top = 4.dp),
                                 )
                             }
                         }
