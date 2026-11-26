@@ -173,13 +173,13 @@ class AgentRuntime(
             repo.addDiary(
                 request.agentId,
                 "connector",
-                "The user approved a request for '$request.connectorId', but it is not in the built-in catalog. I should use the HTTP connector or ask for a specific service.",
+                "The user approved a request for '${request.connectorId}', but it is not in the built-in catalog. I should use the HTTP connector or ask for a specific service.",
                 3,
             )
             repo.addMessage(
                 request.agentId,
                 "system",
-                "Connector request approved, but '$request.connectorId' is not built in. Use the HTTP connector or ask for a different one.",
+                "Connector request approved, but '${request.connectorId}' is not built in. Use the HTTP connector or ask for a different one.",
             )
             repo.setAgentStatus(request.agentId, "idle")
             return null
@@ -512,7 +512,7 @@ class AgentRuntime(
                     repo.updateInfrastructureFund(agentAmount)
                     val fund = repo.getInfrastructureFund()
                     log("${agent.name} recorded revenue: $amountCents cents ($source). Split: agent=$agentAmount, user=$userAmount. Fund: $fund")
-                    repo.addDiary(agentId, "revenue", "Earned \${amountCents/100} USD ($source). Agent fund: \${agentAmount/100}, User: \${userAmount/100}. Infrastructure fund: \${fund/100}", 4)
+                    repo.addDiary(agentId, "revenue", "Earned ${amountCents / 100} USD ($source). Agent fund: ${agentAmount / 100}, User: ${userAmount / 100}. Infrastructure fund: ${fund / 100}", 4)
                 } else {
                     log("${agent.name} tried to record revenue with zero amount.", "error")
                 }
@@ -572,7 +572,7 @@ class AgentRuntime(
                         agentId = agentId,
                         type = "connector_action",
                         title = "${agent.name} wants to create Stripe product '$productName'",
-                        summary = "Create Stripe product and price for monetization. Amount: \${amountCents/100}/$interval",
+                        summary = "Create Stripe product and price for monetization. Amount: ${amountCents / 100}/$interval",
                         details = JSONObject().put("productName", productName).put("amountCents", amountCents).put("interval", interval).put("deployWebhook", deployWebhook).put("webhookCallbackUrl", webhookCallbackUrl).toString(2),
                         risk = "high",
                     )
@@ -596,10 +596,10 @@ class AgentRuntime(
                         if (cost <= fund) {
                             repo.updateProvider(provider.copy(model = targetModel.ifBlank { provider.model }, priority = priority, enabled = true, updatedAt = Time.now()))
                             repo.updateInfrastructureFund(-cost)
-                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '\${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: \${cost/100}. Fund remaining: \${(fund-cost)/100}", 4)
-                            log("${agent.name} reinvested \${cost/100} to upgrade $targetProvider")
+                            repo.addDiary(agentId, "reinvestment", "Upgraded $targetProvider to model '${targetModel.ifBlank { provider.model }}' with priority $priority. Cost: ${cost / 100}. Fund remaining: ${(fund - cost) / 100}", 4)
+                            log("${agent.name} reinvested ${cost / 100} to upgrade $targetProvider")
                         } else {
-                            repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need \${cost/100}, have \${fund/100}.", 2)
+                            repo.addDiary(agentId, "error", "Insufficient fund for reinvestment. Need ${cost / 100}, have ${fund / 100}.", 2)
                         }
                     }
                 }
@@ -639,7 +639,7 @@ class AgentRuntime(
                 }
                 if (recorded > 0) {
                     val fund = repo.getInfrastructureFund()
-                    repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: \${fund/100}", 4)
+                    repo.addDiary(agentId, "revenue", "Polled Stripe and recorded $recorded new payment(s). Infrastructure fund: ${fund / 100}", 4)
                 }
                 repo.addMessage(agentId, "tool", result)
             }

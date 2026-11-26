@@ -253,13 +253,17 @@ class ConnectorExecutor(
         body: String? = null,
     ): HttpResult {
         // Edge APIs answer 429/500/503 under load, and a dropped socket is not a real answer.
-        // Three attempts with 1s, 2s and 4s backoff turn most of those into a normal reply.
+        // Retry only idempotent methods (GET, HEAD, PUT, DELETE). POST/PATCH are not retried
+        // because a transient failure after the request reached the server could duplicate
+        // side effects (duplicate email, issue, payment, etc.). A caller that needs a safe
+        // retryable POST must supply its own idempotency key.
+        val retryable = method == "GET" || method == "HEAD" || method == "PUT" || method == "DELETE"
         var attempt = 0
         var last = HttpResult(-1, "not attempted", false)
         while (attempt < 3) {
             last = httpOnce(method, url, headers, body)
             val transient = last.code == -1 || last.code == 429 || last.code >= 500
-            if (!transient) return last
+            if (!transient || !retryable) return last
             attempt++
             if (attempt < 3) {
                 val waitMs = 1000L shl (attempt - 1)

@@ -568,15 +568,33 @@ object ConnectorCatalog {
     }
 
     fun isReadOnly(connectorId: String, action: String): Boolean {
+        val canonical = canonicalAction(action)
         val def = get(connectorId) ?: return false
-        val actionDef = def.actions.firstOrNull { it.id == action } ?: return false
+        val actionDef = def.actions.firstOrNull { it.id == canonical } ?: return false
         if (actionDef.mutating) return false
         return when (connectorId) {
             "wikipedia", "hn", "search", "weather", "currency" -> true
             "device" -> true
-            "accounts" -> action == "list"
-            "files" -> action == "list" || action == "read"
+            "accounts" -> canonical == "list"
+            "files" -> canonical == "list" || canonical == "read"
             else -> false
+        }
+    }
+
+    /**
+     * Normalizes an action alias to its canonical action id so that policy checks
+     * (e.g. `isReadOnly`) see the same name regardless of which synonym the agent used.
+     * Maps generic aliases (`ls`, `cat`, `save`, `rm`...) and connector-specific aliases
+     * (`repo` → `get_repo`, `search` → `query` for Notion, etc.) to the canonical id.
+     */
+    fun canonicalAction(action: String): String {
+        val normalised = action.trim().lowercase().replace('-', '_').replace(' ', '_')
+        return when (normalised) {
+            "list_files", "ls", "dir", "glob", "files" -> "list"
+            "cat", "open", "read_file", "show", "view" -> "read"
+            "save", "create", "write_file", "create_file", "append", "append_file" -> "write"
+            "rm", "remove", "unlink", "delete_file" -> "delete"
+            else -> normalised
         }
     }
 

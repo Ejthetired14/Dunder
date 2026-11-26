@@ -160,7 +160,7 @@ data class ConnectorRequestEntity(
 
 @Entity(
     tableName = "builds",
-    indices = [Index("projectId")],
+    indices = [Index("agentId"), Index("createdAt"), Index("projectId")],
 )
 data class BuildEntity(
     @PrimaryKey val id: String,
@@ -282,7 +282,10 @@ data class SettingsEntity(
     val createdAt: Long,
 )
 
-@Entity(tableName = "memories")
+@Entity(
+    tableName = "memories",
+    indices = [Index("agentId"), Index("createdAt")]
+)
 data class MemoryEntity(
     @PrimaryKey val id: String,
     val agentId: String,

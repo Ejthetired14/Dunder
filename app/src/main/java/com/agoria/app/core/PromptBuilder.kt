@@ -208,8 +208,8 @@ object PromptBuilder {
         val split = "${context.agentProfitSharePercent}/${context.userProfitSharePercent}"
         return """
             ## Monetization Context
-            - Your total revenue: \$${revenue/100} (${split}% split)
-            - Infrastructure fund: \$${fund/100} (your share to reinvest in better models)
+            - Your total revenue: ${revenue / 100} (${split}% split)
+            - Infrastructure fund: ${fund / 100} (your share to reinvest in better models)
             - Available connectors: ${context.connectors.filter { it.id in listOf("search", "hn", "github") }.joinToString(", ") { it.name }}
 
             ## Task: Find a profitable micro-API niche
@@ -288,7 +288,7 @@ object PromptBuilder {
         return """
             ## Task: Decide how to reinvest infrastructure fund
             
-            Available fund: \$${fund/100}
+            Available fund: ${fund / 100}
             Current providers:
             $providers
             
@@ -314,8 +314,8 @@ object PromptBuilder {
         return """
             ## Task: Check for new revenue from Stripe
             
-            Your total revenue: \$${revenue/100}
-            Infrastructure fund: \$${fund/100}
+            Your total revenue: ${revenue / 100}
+            Infrastructure fund: ${fund / 100}
             
             Use the 'check_revenue' action to poll Stripe for recent payment events.
             This will automatically record any new payments and update the infrastructure fund.
