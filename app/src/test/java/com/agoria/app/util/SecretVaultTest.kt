@@ -73,9 +73,15 @@ class SecretVaultTest {
     }
 
     @Test
-    fun emptyPlaintextReturnsNull() {
-        val encrypted = SecretVault.encrypt("", "passphrase")
-        assertNull(encrypted)
+    fun emptyPlaintextEncryptsAndDecrypts() {
+        val plaintext = ""
+        val passphrase = "passphrase"
+
+        val encrypted = SecretVault.encrypt(plaintext, passphrase)
+        assertNotNull(encrypted)
+
+        val decrypted = SecretVault.decrypt(encrypted!!, passphrase)
+        assertEquals(plaintext, decrypted)
     }
 
     @Test
