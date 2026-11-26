@@ -37,7 +37,6 @@ class BuildRunner(
     val buildProgress = _buildProgress.asStateFlow()
 
     suspend fun build(agent: AgentEntity, approval: ApprovalEntity): BuildEntity? {
-        if (!coroutineContext.isActive) return null
         _buildProgress.value = BuildProgress.Started(approval.id)
 
         val details = Json.tryObject(approval.details) ?: JSONObject()
@@ -73,10 +72,6 @@ class BuildRunner(
         val manifestFiles = JSONArray()
         _buildProgress.value = BuildProgress.WritingFiles(approval.id, 0, files.size)
         for ((index, file) in files.withIndex()) {
-            if (!coroutineContext.isActive) {
-                _buildProgress.value = BuildProgress.Failed(approval.id, "Build cancelled.")
-                return null
-            }
             val path = file.path.replace('\\', '/').trimStart('/')
             if (path.isBlank() || path.contains("..") || path.startsWith("/")) continue
             val target = File(root, path)

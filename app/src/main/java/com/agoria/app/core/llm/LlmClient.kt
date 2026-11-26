@@ -15,6 +15,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 data class LlmMessage(val role: String, val content: String)
@@ -213,7 +214,7 @@ class LlmClient(private val repo: Repository) {
             var lastError = "Request failed"
             var lastCode = 0
             var retried = false
-            repeat(2) { attempt ->
+            for (attempt in 0 until 2) {
                 val call = client.newCall(requestBuilder.build())
                 // BUG-10: cancel the underlying OkHttp call when the coroutine is cancelled.
                 val response = cancellableExecute(call)
@@ -233,7 +234,7 @@ class LlmClient(private val repo: Repository) {
                         delay(retryAfter ?: 600)
                     } else {
                         // 4xx errors (and a second 5xx) are not retried — break out of the loop.
-                        break@repeat
+                        break
                     }
                 } else {
                     val parsed = parseResponse(responseBody)
