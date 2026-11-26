@@ -407,10 +407,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Remaining to close this task: (1) on a device/emulator: force a failure (for example revoke the foreground-start allowance or `adb shell am broadcast` BOOT_COMPLETED with the app force-stopped is not enough, use a debug build with a forced `AutonomyService.start` failure) and confirm the notification and `BootStatus.lastFailure` appear; do a normal reboot with autonomy on and confirm restart; (2) UI surface for `BootStatus.lastFailure` is RUN-6; (3) flip to `DONE`.
 
 ### RUN-6 - Show the boot-restart failure inside the app
-- Status: TODO | Effort: S | Depends on: RUN-5 | Added 2026-11-22
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Evidence: RUN-5 stores the failure in `BootStatus` and posts a notification, but nothing in the UI reads `BootStatus.lastFailure(context)`. If notifications are off (or the user swiped it away) the failure is only in logs.
 - Fix: on app start and when the Office screen resumes, read `BootStatus.lastFailure`; if present show a one-line banner ("Autonomy did not restart after the last reboot: <reason>") with a "Turn autonomy on" button that calls `AutonomyService.start` and `BootStatus.clear`. UI files were not reviewed (section 8), so read the Office/Settings screen first.
 - Done when: forcing the failure from RUN-5 shows the banner after opening the app, and starting autonomy removes it.
+- Implemented (2026-11-26): `OfficeWorldScreen` now reads `BootStatus.lastFailure(context)` on composition start and shows an amber banner with the reason and a "Turn autonomy on" button. The button starts `AutonomyService` as a foreground service, clears the boot status, and hides the banner. Remaining: verify `AutonomyService.start(context)` public entry point exists; device check.
 
 ### CONN-1 - Read-only gating ignores action aliases and `check_revenue`
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: S
