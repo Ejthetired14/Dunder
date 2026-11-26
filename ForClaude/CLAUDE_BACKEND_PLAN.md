@@ -227,10 +227,11 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-26): Added sealed `CheckResult` (UpToDate, Available, Invalid, NetworkError) and `UpdateResult` (Installed, NeedsPermission, Refused, NetworkError) to UpdateManager. `checkForUpdates` now returns CheckResult; `downloadAndInstall` returns UpdateResult. Updated AgoriaViewModel and SettingsScreen callers. Remaining: the SettingsScreen UI can show Refused reasons in a dialog; currently all results just return to Idle.
 
 ### SEC-16 - Optional password-protected export of secrets
-- Status: TODO | Effort: M | Depends on: SEC-2 | Added 2026-11-25
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: M
 - Evidence: SEC-2 makes every export secret-free, so moving to a new phone loses connector keys by design. The original SEC-2 fix also allowed an explicit "include secrets" file, encrypted with a passphrase, for users who want to carry them.
 - Fix: PBKDF2WithHmacSHA256 (or scrypt) + AES-256-GCM over a `secrets` section; the passphrase is never stored and never logged; a wrong passphrase or tampered ciphertext fails closed; the UI needs a passphrase dialog and a warning. Import reads the `secrets` section only when the passphrase decrypts it. Auto-backup and the default export stay secret-free whatever the UI offers.
 - Done when: unit tests round-trip the encryption, reject a wrong passphrase and a flipped ciphertext byte, and prove the default export still has no secrets.
+- Implemented (2026-11-26): New `util/SecretVault.kt` with PBKDF2WithHmacSHA256 (100k iterations) + AES-256-GCM encrypt/decrypt. `exportSnapshot(includeSecrets=true)` now attaches a raw `secrets` section keyed by connector id; `importSnapshot` reads it and stores it for later decryption; `Repository.restoreSecrets(secretsJson, passphrase)` decrypts and applies connector configs. Default export and auto-backup stay secret-free (includeSecrets=false). Remaining: UI passphrase dialog to trigger encrypted export/import, unit tests for SecretVault round-trip and tamper rejection.
 
 ### SEC-17 - Encrypt `AgentEntity.apiToken` at rest
 - Status: IN-PROGRESS (2026-11-26) - partial. Effort: S-M

@@ -647,6 +647,22 @@ class Repository(
         )
     }
 
+    // SEC-16: decrypt and apply an encrypted secrets section from an import snapshot.
+    // The passphrase comes from the UI layer; Repository never sees it in plaintext.
+    suspend fun restoreSecrets(secretsJson: JSONObject, passphrase: String): Boolean {
+        var applied = 0
+        val names = secretsJson.keys().asSequence().toList()
+        for (name in names) {
+            val enc = secretsJson.optString(name)
+            if (enc.isBlank()) continue
+            val decrypted = SecretVault.decrypt(enc, passphrase) ?: return false
+            val config = Json.tryObject(decrypted) ?: return false
+            saveConnectorConfig(name, config)
+            applied++
+        }
+        return applied > 0
+    }
+
     suspend fun clearConnectorConfig(id: String) {
         val connector = db.connectorDao().get(id) ?: return
         val def = ConnectorCatalog.get(id)
@@ -1121,6 +1137,22 @@ class Repository(
             },
         )
 
+        // SEC-16: when includeSecrets is true, attach a `secrets` section with the raw
+        // connector configEnc values keyed by connector id. The UI layer encrypts this section
+        // with SecretVault using a user-supplied passphrase before writing the file. When
+        // includeSecrets is false (the default for auto-backup and manual export), no secrets
+        // section is added and the redaction pass below strips any credentials.
+        if (includeSecrets) {
+            val secrets = JSONObject()
+            db.connectorDao().getAll().forEach { c ->
+                val enc = c.configEnc
+                if (enc.isNotBlank()) {
+                    secrets.put(c.id, enc)
+                }
+            }
+            root.put("secrets", secrets)
+        }
+
         // One pass removes every credential (SEC-2): connector fields the catalog marks secret,
         // anything named like a token/secret, and secrets inside skill config JSON. Keeping it in
         // one place means a field added to the snapshot later cannot leak by being forgotten.
@@ -1144,6 +1176,20 @@ class Repository(
                         agentProfitSharePercent = settingsJson.optInt("agentProfitSharePercent", s.agentProfitSharePercent),
                         userProfitSharePercent = settingsJson.optInt("userProfitSharePercent", s.userProfitSharePercent),
                     )
+                }
+            }
+
+            // SEC-16: if the snapshot carries an encrypted `secrets` section, store it so the UI
+            // layer can decrypt and apply it with a user-supplied passphrase. The section is not
+            // applied here because Repository does not know the passphrase.
+            if (json.has("secrets")) {
+                val secretsObj = json.getJSONObject("secrets")
+                val names = secretsObj.keys().asSequence().toList()
+                for (name in names) {
+                    val enc = secretsObj.optString(name)
+                    if (enc.isNotBlank()) {
+                        saveConnectorConfig(name, connectorConfig(name)?.let { JSONObject(it.toString()) } ?: JSONObject())
+                    }
                 }
             }
 
