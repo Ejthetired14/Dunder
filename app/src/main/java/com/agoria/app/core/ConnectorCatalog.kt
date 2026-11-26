@@ -372,7 +372,6 @@ object ConnectorCatalog {
             auth = ConnectorAuth.API_KEY,
             fields = listOf(
                 ConnectorField("accessToken", "Access Token", "Polar access token from your organization settings.", true, true, "polar_oat_..."),
-                ConnectorField("organizationId", "Organization ID", "Your Polar organization ID.", false, false, "..."),
             ),
             actions = listOf(
                 ConnectorActionDef("list_products", "List Products", "List all products.", false, "{\"limit\": 10}"),
@@ -556,7 +555,6 @@ object ConnectorCatalog {
             fields = listOf(
                 ConnectorField("apiToken", "API Token", "Cloudflare API token with Workers Scripts:Edit and Account:Read permissions.", true, true, "..."),
                 ConnectorField("accountId", "Account ID", "Your Cloudflare account ID (from dashboard URL).", true, true, "..."),
-                ConnectorField("zoneId", "Zone ID (optional)", "Zone ID for custom domain. Leave empty for workers.dev subdomain.", false, false, "..."),
                 ConnectorField("contentType", "Script content type", "application/javascript (default) or text/javascript.", false, false, "application/javascript"),
             ),
             actions = listOf(

@@ -2097,6 +2097,7 @@ class ConnectorExecutor(
             "create_page" -> {
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val content = args.optString("content", "")
+                val titleProperty = args.optString("titleProperty").ifBlank { cfg(config, "titleProperty") ?: "title" }
                 val parent = when {
                     databaseId.isNotBlank() -> JSONObject().put("database_id", databaseId)
                     parentPageId.isNotBlank() -> JSONObject().put("page_id", parentPageId)
@@ -2106,28 +2107,22 @@ class ConnectorExecutor(
                             "\"parent_page_id\" with the id of a page shared with the integration.",
                     )
                 }
+                val properties = if (parent.has("database_id")) {
+                    // BUG-11: use the database's real title property name, not literal "title".
+                    JSONObject().put(
+                        titleProperty,
+                        JSONObject().put(
+                            "title",
+                            JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
+                        ),
+                    )
+                } else {
+                    // Page parent: pages don't require properties.
+                    JSONObject()
+                }
                 val payload = JSONObject()
                     .put("parent", parent)
-                    .put(
-                        "properties",
-                        if (parent.has("database_id")) {
-                            JSONObject().put(
-                                "title",
-                                JSONObject().put(
-                                    "title",
-                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
-                                ),
-                            )
-                        } else {
-                            JSONObject().put(
-                                "title",
-                                JSONObject().put(
-                                    "title",
-                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
-                                ),
-                            )
-                        },
-                    )
+                    .put("properties", properties)
                 if (content.isNotBlank()) {
                     payload.put(
                         "children",
