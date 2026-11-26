@@ -351,9 +351,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): Set `exportSchema = true` in `AppDatabase.kt`. Added `ksp { arg("room.schemaLocation", ...) }` to `build.gradle.kts`. Remaining: MigrationTestHelper tests, surface recovery message to user, open DB off main thread.
 
 ### DATA-5 - Foreign keys delete or orphan important data
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Evidence: `RevenueEntity` has `onDelete = CASCADE` on agent, so deleting an agent erases its financial history; `builds` and `memories` have no FK (orphans after agent delete); `deleteProject` leaves tasks/builds with dangling `projectId`.
 - Fix: ledger rows survive agent deletion (`SET_NULL` plus stored agent name); clean up or reassign orphans.
+- Implemented (2026-11-26): RevenueEntity FK changed CASCADE → NO_ACTION. BuildEntity gained NO_ACTION FK to agents with agentId index. MemoryEntity gained NO_ACTION FK to agents. Database version bumped 6→7 with MIGRATION_6_7 that rebuilds all three tables. Remaining: revenue `agentName` denormalization for truly surviving deletion, `deleteProject` cleanup of orphaned builds.
 
 ### DATA-6 - No approval de-duplication or expiry
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: S

@@ -28,7 +28,7 @@ import java.io.File
         SkillEntity::class,
         AgentSkillEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -51,7 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "agoria.db"
-        const val VERSION = 6
+        const val VERSION = 7
 
         fun create(context: Context): AppDatabase {
             val database = build(context)
@@ -75,7 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
                 // older APK over a newer one) falls back, because Room refuses to open a database
                 // written by a newer schema.
@@ -287,5 +287,76 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_agent_skills_agentId` ON `agent_skills` (`agentId`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_agent_skills_skillId` ON `agent_skills` (`skillId`)")
+    }
+}
+
+/** 6 -> 7 (DATA-5): foreign keys no longer cascade-delete revenue, builds, memories on agent delete. */
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Rebuild revenue with NO_ACTION instead of CASCADE
+        if (db.hasTable("revenue")) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `revenue_v7` (" +
+                    "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `source` TEXT NOT NULL, " +
+                    "`amountCents` INTEGER NOT NULL, `currency` TEXT NOT NULL DEFAULT 'USD', " +
+                    "`metadata` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                    "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) ON UPDATE NO ACTION ON DELETE NO_ACTION)",
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `revenue_v7` (`id`, `agentId`, `source`, `amountCents`, " +
+                    "`currency`, `metadata`, `createdAt`) " +
+                    "SELECT `id`, `agentId`, `source`, `amountCents`, `currency`, `metadata`, `createdAt` FROM `revenue`",
+            )
+            db.execSQL("DROP TABLE `revenue`")
+            db.execSQL("ALTER TABLE `revenue_v7` RENAME TO `revenue`")
+        }
+        db.execSQL("DROP INDEX IF EXISTS `index_revenue_agentId`")
+        db.execSQL("DROP INDEX IF EXISTS `index_revenue_createdAt`")
+        db.execSQL("DROP INDEX IF EXISTS `index_revenue_source`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_agentId` ON `revenue` (`agentId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_createdAt` ON `revenue` (`createdAt`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_revenue_source` ON `revenue` (`source`)")
+
+        // Rebuild builds with NO_ACTION FK + agentId index
+        if (db.hasTable("builds")) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `builds_v7` (" +
+                    "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                    "`description` TEXT NOT NULL, `fileCount` INTEGER NOT NULL, `zipPath` TEXT NOT NULL, " +
+                    "`status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `completedAt` INTEGER, " +
+                    "`projectId` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`), " +
+                    "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) ON UPDATE NO ACTION ON DELETE NO_ACTION)",
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `builds_v7` (`id`, `agentId`, `name`, `description`, " +
+                    "`fileCount`, `zipPath`, `status`, `createdAt`, `completedAt`, `projectId`) " +
+                    "SELECT `id`, `agentId`, `name`, `description`, `fileCount`, `zipPath`, " +
+                    "`status`, `createdAt`, `completedAt`, `projectId` FROM `builds`",
+            )
+            db.execSQL("DROP TABLE `builds`")
+            db.execSQL("ALTER TABLE `builds_v7` RENAME TO `builds`")
+        }
+        db.execSQL("DROP INDEX IF EXISTS `index_builds_projectId`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_builds_projectId` ON `builds` (`projectId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_builds_agentId` ON `builds` (`agentId`)")
+
+        // Rebuild memories with NO_ACTION FK
+        if (db.hasTable("memories")) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `memories_v7` (" +
+                    "`id` TEXT NOT NULL, `agentId` TEXT NOT NULL, `kind` TEXT NOT NULL, " +
+                    "`content` TEXT NOT NULL, `importance` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`id`), " +
+                    "FOREIGN KEY(`agentId`) REFERENCES `agents`(`id`) ON UPDATE NO ACTION ON DELETE NO_ACTION)",
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `memories_v7` (`id`, `agentId`, `kind`, `content`, `importance`, `createdAt`) " +
+                    "SELECT `id`, `agentId`, `kind`, `content`, `importance`, `createdAt` FROM `memories`",
+            )
+            db.execSQL("DROP TABLE `memories`")
+            db.execSQL("ALTER TABLE `memories_v7` RENAME TO `memories`")
+        }
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_memories_agentId` ON `memories` (`agentId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_memories_createdAt` ON `memories` (`createdAt`)")
     }
 }

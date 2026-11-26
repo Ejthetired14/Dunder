@@ -160,7 +160,15 @@ data class ConnectorRequestEntity(
 
 @Entity(
     tableName = "builds",
-    indices = [Index("projectId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.NO_ACTION,
+        )
+    ],
+    indices = [Index("projectId"), Index("agentId")]
 )
 data class BuildEntity(
     @PrimaryKey val id: String,
@@ -243,7 +251,7 @@ data class ConnectorLogEntity(
             entity = AgentEntity::class,
             parentColumns = ["id"],
             childColumns = ["agentId"],
-            onDelete = ForeignKey.CASCADE,
+            onDelete = ForeignKey.NO_ACTION,
         )
     ],
     indices = [Index("agentId"), Index("createdAt"), Index("source")]
@@ -282,7 +290,18 @@ data class SettingsEntity(
     val createdAt: Long,
 )
 
-@Entity(tableName = "memories")
+@Entity(
+    tableName = "memories",
+    foreignKeys = [
+        ForeignKey(
+            entity = AgentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["agentId"],
+            onDelete = ForeignKey.NO_ACTION,
+        )
+    ],
+    indices = [Index("agentId"), Index("createdAt")]
+)
 data class MemoryEntity(
     @PrimaryKey val id: String,
     val agentId: String,
