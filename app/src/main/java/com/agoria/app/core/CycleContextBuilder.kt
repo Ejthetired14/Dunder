@@ -3,6 +3,7 @@ package com.agoria.app.core
 import com.agoria.app.data.AgentEntity
 import com.agoria.app.data.Repository
 import com.agoria.app.util.Time
+import kotlinx.coroutines.flow.first
 
 /**
  * Builds the agent context (diary, messages, tasks, connectors, providers, peers, revenue)

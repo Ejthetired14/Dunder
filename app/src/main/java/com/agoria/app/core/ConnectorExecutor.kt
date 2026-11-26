@@ -103,7 +103,7 @@ class ConnectorExecutor(
         }
     }
 
-    private fun describeActions(def: com.agoria.app.core.ConnectorCatalog.ConnectorDef): String {
+    private fun describeActions(def: ConnectorDef): String {
         val sb = StringBuilder(def.name + " actions:")
         def.actions.forEach { action ->
             sb.append("\n- ").append(action.id).append(": ").append(action.description)
