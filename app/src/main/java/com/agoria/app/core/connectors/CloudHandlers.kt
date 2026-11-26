@@ -2,6 +2,8 @@ package com.agoria.app.core.connectors
 
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.Repository
+import com.agoria.app.util.Json
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Stripe connector — products, prices and event listing. */
@@ -364,7 +366,7 @@ class HuggingFaceHandler : ConnectorHandler {
         val inputs = args.optString("inputs").trim()
         if (model.isBlank() || inputs.isBlank()) return HandlerResult(false, "Missing model or inputs.")
         val token = config?.optString("apiToken")?.trim()
-        val headers = if (token.isNotBlank()) mapOf("Authorization" to "Bearer $token") else emptyMap()
+        val headers = if (!token.isNullOrBlank()) mapOf("Authorization" to "Bearer $token") else emptyMap()
         val response = ConnectorHttp.http("POST", "https://api-inference.huggingface.co/models/$model", headers, inputs)
         if (!response.ok) return HandlerResult(false, "Hugging Face ${response.code}: ${ConnectorHttp.text(response.body, 240)}")
         HandlerResult(true, "Inference result: ${ConnectorHttp.text(response.body, 1000)}")

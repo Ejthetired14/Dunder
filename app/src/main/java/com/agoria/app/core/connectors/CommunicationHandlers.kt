@@ -2,6 +2,7 @@ package com.agoria.app.core.connectors
 
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.data.Repository
+import com.agoria.app.util.Json
 import org.json.JSONArray
 import org.json.JSONObject
 

@@ -52,7 +52,9 @@ interface ConnectorHandler {
 
     /** The risk level of this connector's actions ("low", "medium", "high"). */
     val risk: String
-}
 
-/** Default implementations shared by all handlers. */
-fun ConnectorHandler.defaultOnSuccess(connector: ConnectorEntity): Unit = Unit
+    /** Default implementations shared by all handlers. */
+    companion object {
+        fun defaultOnSuccess(connector: ConnectorEntity): Unit = Unit
+    }
+}
