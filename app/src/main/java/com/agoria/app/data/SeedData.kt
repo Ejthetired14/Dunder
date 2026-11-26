@@ -290,16 +290,16 @@ object SeedData {
     )
 
     fun memories(now: Long): List<MemoryEntity> = listOf(
-        MemoryEntity("seed-memory-platform-engineer", "seed-platform-engineer", "identity", "I am the Platform Engineer. I cannot be deleted. I have GitHub access. Agents report platform issues to me. I fix the app and deploy updates.", 5, now - 12 * 60_000L),
-        MemoryEntity("seed-memory-michael", "seed-michael", "identity", "The office is called Dunder. The user is the Boss.", 3, now - 11 * 60_000L),
-        MemoryEntity("seed-memory-jim", "seed-jim", "identity", "Dunder's palette: amber #F2B84B, teal #5FD3C4, ink #0F1115.", 3, now - 10 * 60_000L),
-        MemoryEntity("seed-memory-pam", "seed-pam", "fact", "Kilo, OVH, and LLM7 offer keyless free access. Kilo is the first choice.", 3, now - 9 * 60_000L),
-        MemoryEntity("seed-memory-dwight", "seed-dwight", "fact", "Anonymous OVH is limited to 2 requests per minute per IP per model.", 3, now - 8 * 60_000L),
-        MemoryEntity("seed-memory-angela", "seed-angela", "fact", "Every external action needs an approval record. No exceptions.", 4, now - 7 * 60_000L),
-        MemoryEntity("seed-memory-kevin", "seed-kevin", "plan", "First connector to request: Gmail send. Then GitHub issues.", 3, now - 6 * 60_000L),
-        MemoryEntity("seed-memory-toby", "seed-toby", "plan", "Weekly digest every seven days, plus a note after every approval.", 2, now - 5 * 60_000L),
-        MemoryEntity("seed-memory-stanley", "seed-stanley", "value", "Prefer one working build over five pitches.", 3, now - 4 * 60_000L),
-        MemoryEntity("seed-memory-ryan", "seed-ryan", "plan", "Use search connector to find API niches on HN/Reddit. Build with Cloudflare Workers. Bill with Stripe. Ask approval before deploy and billing setup. Reinvest 50% into better models.", 4, now - 3 * 60_000L),
+        MemoryEntity("seed-memory-platform-engineer", "seed-platform-engineer", "", "identity", "I am the Platform Engineer. I cannot be deleted. I have GitHub access. Agents report platform issues to me. I fix the app and deploy updates.", 5, now - 12 * 60_000L),
+        MemoryEntity("seed-memory-michael", "seed-michael", "", "identity", "The office is called Dunder. The user is the Boss.", 3, now - 11 * 60_000L),
+        MemoryEntity("seed-memory-jim", "seed-jim", "", "identity", "Dunder's palette: amber #F2B84B, teal #5FD3C4, ink #0F1115.", 3, now - 10 * 60_000L),
+        MemoryEntity("seed-memory-pam", "seed-pam", "", "fact", "Kilo, OVH, and LLM7 offer keyless free access. Kilo is the first choice.", 3, now - 9 * 60_000L),
+        MemoryEntity("seed-memory-dwight", "seed-dwight", "", "fact", "Anonymous OVH is limited to 2 requests per minute per IP per model.", 3, now - 8 * 60_000L),
+        MemoryEntity("seed-memory-angela", "seed-angela", "", "fact", "Every external action needs an approval record. No exceptions.", 4, now - 7 * 60_000L),
+        MemoryEntity("seed-memory-kevin", "seed-kevin", "", "plan", "First connector to request: Gmail send. Then GitHub issues.", 3, now - 6 * 60_000L),
+        MemoryEntity("seed-memory-toby", "seed-toby", "", "plan", "Weekly digest every seven days, plus a note after every approval.", 2, now - 5 * 60_000L),
+        MemoryEntity("seed-memory-stanley", "seed-stanley", "", "value", "Prefer one working build over five pitches.", 3, now - 4 * 60_000L),
+        MemoryEntity("seed-memory-ryan", "seed-ryan", "", "plan", "Use search connector to find API niches on HN/Reddit. Build with Cloudflare Workers. Bill with Stripe. Ask approval before deploy and billing setup. Reinvest 50% into better models.", 4, now - 3 * 60_000L),
     )
 
     fun providers(now: Long): List<ProviderEntity> =

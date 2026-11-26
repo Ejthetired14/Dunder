@@ -29,6 +29,12 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
+/** Per-agent total workspace byte quota (5 MiB). Prevents one agent filling the disk. */
+private const val MAX_AGENT_WORKSPACE_BYTES = 5L * 1024 * 1024
+
+/** Max body bytes read per response. Larger bodies are truncated to avoid memory pressure. */
+private const val MAX_BODY = 1_048_576 // 1 MiB
+
 data class ConnectorResult(
     val ok: Boolean,
     val summary: String,
@@ -41,9 +47,6 @@ class ConnectorExecutor(
 ) {
 
     private val media = "application/json; charset=utf-8".toMediaType()
-
-    /** Per-agent total workspace byte quota (5 MiB). Prevents one agent filling the disk. */
-    private const val MAX_AGENT_WORKSPACE_BYTES = 5L * 1024 * 1024
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -249,9 +252,6 @@ class ConnectorExecutor(
     // ------------------------------------------------------------------ generic
 
     private data class HttpResult(val code: Int, val body: String, val ok: Boolean)
-
-    /** Max body bytes read per response. Larger bodies are truncated to avoid memory pressure. */
-    private const val MAX_BODY = 1_048_576 // 1 MiB
 
     /** Reads at most `maxBytes` from a response body, always closing the stream. */
     private fun readBoundedBody(body: ResponseBody?, maxBytes: Int): String {
