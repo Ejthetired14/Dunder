@@ -522,7 +522,7 @@ fun SettingsScreen(
                     }
                     PixelSwitch(
                         checked = autoEnabled,
-                        onChange = { viewModel.updateSettings { it.copy(autoApproveEnabled = it) } },
+                        onChange = { enabled -> viewModel.updateSettings { it.copy(autoApproveEnabled = enabled) } },
                     )
                 }
 
@@ -580,7 +580,6 @@ fun SettingsScreen(
                     onValueChange = { autoAllowlist = it },
                     label = "JSON map",
                     singleLine = false,
-                    minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
