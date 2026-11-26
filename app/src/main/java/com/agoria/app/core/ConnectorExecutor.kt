@@ -422,6 +422,12 @@ class ConnectorExecutor(
     private fun webSearch(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
         if (action != "search") return ConnectorResult(false, "Unknown search action '$action'")
         val query = args.optString("query").ifBlank { return ConnectorResult(false, "Missing query") }
+        val apiKey = cfg(config, "searchApiKey")
+        if (apiKey.isNotBlank()) {
+            return braveSearch(query, apiKey)
+        }
+        // No API key configured: fall back to DuckDuckGo's public instant-answer API, then the
+        // HTML scraper as last resort (CONN-4).
         val url = "https://api.duckduckgo.com/?q=" + enc(query) + "&format=json&no_html=1&skip_disambig=1"
         val response = http("GET", url)
         if (!response.ok) return ConnectorResult(false, "Search error: ${text(response.body, 240)}")
@@ -461,6 +467,34 @@ class ConnectorExecutor(
                 sb.append("Web results:\n").append(results)
             } else {
                 sb.append("No instant answer and no web results for '$query'.")
+            }
+        }
+        return ConnectorResult(true, sb.toString().trim())
+    }
+
+    private fun braveSearch(query: String, apiKey: String): ConnectorResult {
+        // CONN-4: documented search API (Brave Search) with scraper as last resort.
+        val url = "https://api.search.brave.com/res/v1/web/search?q=" + enc(query) + "&count=10"
+        val headers = mapOf("X-Subscription-Token" to apiKey, "Accept" to "application/json")
+        val response = http("GET", url, headers)
+        if (!response.ok) return ConnectorResult(false, "Search error: ${text(response.body, 240)}")
+        val root = json(response.body) ?: return ConnectorResult(false, "Search returned invalid JSON")
+        val web = root.optJSONObject("web") ?: return ConnectorResult(true, "No search results for '$query'.")
+        val results = web.optJSONArray("results")
+        if (results == null || results.length() == 0) return ConnectorResult(true, "No search results for '$query'.")
+        val sb = StringBuilder("Web results for '$query':\n")
+        var count = 0
+        for (i in 0 until results.length()) {
+            if (count >= 5) break
+            val item = results.optJSONObject(i) ?: continue
+            val title = item.optString("title")
+            val link = item.optString("url")
+            val desc = item.optString("description")
+            if (title.isNotBlank()) {
+                sb.append("- ").append(text(title, 120)).append('\n')
+                if (link.isNotBlank()) sb.append("  ").append(link).append('\n')
+                if (desc.isNotBlank()) sb.append("  ").append(text(desc, 200)).append('\n')
+                count++
             }
         }
         return ConnectorResult(true, sb.toString().trim())
@@ -1810,6 +1844,7 @@ class ConnectorExecutor(
             "create_page" -> {
                 val title = args.optString("title").ifBlank { return ConnectorResult(false, "Missing title") }
                 val content = args.optString("content", "")
+                val titleProperty = args.optString("titleProperty").ifBlank { cfg(config, "titleProperty") ?: "title" }
                 val parent = when {
                     databaseId.isNotBlank() -> JSONObject().put("database_id", databaseId)
                     parentPageId.isNotBlank() -> JSONObject().put("page_id", parentPageId)
@@ -1819,28 +1854,22 @@ class ConnectorExecutor(
                             "\"parent_page_id\" with the id of a page shared with the integration.",
                     )
                 }
+                val properties = if (parent.has("database_id")) {
+                    // BUG-11: use the database's real title property name, not literal "title".
+                    JSONObject().put(
+                        titleProperty,
+                        JSONObject().put(
+                            "title",
+                            JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
+                        ),
+                    )
+                } else {
+                    // Page parent: pages don't require properties.
+                    JSONObject()
+                }
                 val payload = JSONObject()
                     .put("parent", parent)
-                    .put(
-                        "properties",
-                        if (parent.has("database_id")) {
-                            JSONObject().put(
-                                "title",
-                                JSONObject().put(
-                                    "title",
-                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
-                                ),
-                            )
-                        } else {
-                            JSONObject().put(
-                                "title",
-                                JSONObject().put(
-                                    "title",
-                                    JSONArray().put(JSONObject().put("text", JSONObject().put("content", title))),
-                                ),
-                            )
-                        },
-                    )
+                    .put("properties", properties)
                 if (content.isNotBlank()) {
                     payload.put(
                         "children",
@@ -1924,7 +1953,19 @@ class ConnectorExecutor(
                 val sb = StringBuilder("Telegram updates:\n")
                 for (i in 0 until updates.length()) {
                     val update = updates.getJSONObject(i)
-                    sb.append("- update ").append(update.optInt("update_id")).append('\n')
+                    val updateId = update.optInt("update_id")
+                    val message = update.optJSONObject("message")
+                    val text = message?.optString("text") ?: ""
+                    val from = message?.optJSONObject("from")?.optString("first_name") ?: ""
+                    val chatId = message?.optJSONObject("chat")?.optLong("id") ?: 0L
+                    if (text.isNotBlank()) {
+                        sb.append("- update ").append(updateId)
+                        if (from.isNotBlank()) sb.append(" from ").append(from)
+                        if (chatId != 0L) sb.append(" (chat ").append(chatId).append(")")
+                        sb.append(": ").append(text.take(200)).append("\n")
+                    } else {
+                        sb.append("- update ").append(updateId).append(" (no text message)\n")
+                    }
                 }
                 ConnectorResult(true, sb.toString().trim())
             }

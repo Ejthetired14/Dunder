@@ -1,6 +1,7 @@
 package com.agoria.app.ui.office
 
 import android.content.Context
+import com.agoria.app.service.BootStatus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -270,12 +271,26 @@ private fun OfficeWorldScreen(
             }
         }
 
+    // RUN-6: show boot-restart failure in the UI, with a "Turn autonomy on" action.
+    val context = LocalContext.current
+    var bootFailure by remember { mutableStateOf<BootStatus.Failure?>(null) }
+    LaunchedEffect(Unit) {
+        bootFailure = BootStatus.lastFailure(context)
+    }
+    fun startAutonomy() {
+        val intent = android.content.Intent(context, com.agoria.app.service.AutonomyService::class.java)
+        context.startForegroundService(intent)
+        BootStatus.clear(context)
+        bootFailure = null
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Pal.ink)
             .then(hudTouchDetector),
     ) {
+
         OfficeWorld(
             sim = sim,
             camera = camera,
@@ -320,6 +335,31 @@ private fun OfficeWorldScreen(
             onDebugTap = { debugTap = it },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // RUN-6: boot-restart failure banner with a "Turn autonomy on" action.
+        bootFailure?.let { failure ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(8.dp)
+                    .background(Pal.amber)
+                ,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Autonomy did not restart after the last reboot: ${failure.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Pal.ink,
+                    )
+                }
+                PixelButton(
+                    text = "Turn autonomy on",
+                    onClick = { startAutonomy() },
+                    small = true,
+                )
+            }
+        }
 
         // Top HUD (auto-hide)
         if (hudVisible.value) {

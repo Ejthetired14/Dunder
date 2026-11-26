@@ -59,6 +59,22 @@ class UpdateManager(
         val sha256: String? = null,
     )
 
+    /** SEC-15: why a check returned no usable release. Never exposes exception messages or URLs with tokens. */
+    sealed class CheckResult {
+        object UpToDate : CheckResult()
+        data class Available(val release: ReleaseInfo) : CheckResult()
+        data class Invalid(val reason: String) : CheckResult()
+        object NetworkError : CheckResult()
+    }
+
+    /** SEC-15: why an install did or did not happen. Never exposes exception messages or URLs with tokens. */
+    sealed class UpdateResult {
+        object Installed : UpdateResult()
+        object NeedsPermission : UpdateResult()
+        data class Refused(val reason: String) : UpdateResult()
+        object NetworkError : UpdateResult()
+    }
+
     companion object {
         private const val TAG = "UpdateManager"
         private const val PAGES_URL = "https://ejthetired14.github.io/Dunder/latest-release.json"
@@ -76,13 +92,27 @@ class UpdateManager(
 
     /**
      * Checks GitHub Pages for a newer version.
-     * Returns ReleaseInfo if a newer version is available, null otherwise.
+     * Returns CheckResult: UpToDate, Available(release), Invalid(reason), or NetworkError.
      */
-    fun checkForUpdates(onResult: (ReleaseInfo?) -> Unit) {
+    fun checkForUpdates(onResult: (CheckResult) -> Unit) {
         scope.launch {
             val release = withContext(Dispatchers.IO) { fetchLatestRelease() }
             Log.d(TAG, "checkForUpdates: remoteRelease=${release?.versionName}, installed=$currentVersionName")
-            withContext(Dispatchers.Main) { onResult(release) }
+            val result = when (release) {
+                null -> {
+                    // Could be network error, untrusted URL, missing sha256, or up-to-date.
+                    // We can't distinguish these without more info, so treat as invalid.
+                    CheckResult.Invalid("Update information is unavailable or invalid.")
+                }
+                else -> {
+                    if (UpdatePolicy.isNewer(release.versionName, release.versionCode, currentVersionName, currentVersionCode)) {
+                        CheckResult.Available(release)
+                    } else {
+                        CheckResult.UpToDate
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) { onResult(result) }
         }
     }
 
@@ -141,11 +171,12 @@ class UpdateManager(
     /**
      * Downloads, verifies and installs the APK.
      * Requires REQUEST_INSTALL_PACKAGES permission.
+     * Returns UpdateResult: Installed, NeedsPermission, Refused(reason), or NetworkError.
      */
-    fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (Boolean) -> Unit) {
+    fun downloadAndInstall(release: ReleaseInfo, onProgress: (Int) -> Unit, onComplete: (UpdateResult) -> Unit) {
         scope.launch {
-            val success = withContext(Dispatchers.IO) { downloadApk(release, onProgress) }
-            withContext(Dispatchers.Main) { onComplete(success) }
+            val result = withContext(Dispatchers.IO) { downloadApk(release, onProgress) }
+            withContext(Dispatchers.Main) { onComplete(result) }
         }
     }
 
@@ -186,22 +217,22 @@ class UpdateManager(
         return null
     }
 
-    private fun downloadApk(release: ReleaseInfo, onProgress: (Int) -> Unit): Boolean {
+    private fun downloadApk(release: ReleaseInfo, onProgress: (Int) -> Unit): UpdateResult {
         if (!UpdatePolicy.isTrustedReleaseUrl(release.apkUrl, repoOwner, repoName)) {
             Log.w(TAG, "downloadApk: refusing untrusted apkUrl")
-            return false
+            return UpdateResult.Refused("The update URL is not trusted.")
         }
         val expectedSha = release.sha256
         if (expectedSha == null && UpdatePolicy.REQUIRE_SHA256) {
             Log.w(TAG, "downloadApk: no sha256 for this release")
-            return false
+            return UpdateResult.Refused("The release has no checksum to verify against.")
         }
 
         val downloadsDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         } else {
             context.getExternalFilesDir(null)
-        } ?: return false
+        } ?: return UpdateResult.NetworkError
 
         // Remove leftovers from earlier attempts or older versions.
         downloadsDir.listFiles { f -> f.name.startsWith("dunder-") && (f.name.endsWith(".apk") || f.name.endsWith(".part")) }
@@ -213,11 +244,11 @@ class UpdateManager(
         var connection: HttpURLConnection? = null
 
         try {
-            connection = openFollowingRedirects(release.apkUrl) ?: return false
+            connection = openFollowingRedirects(release.apkUrl) ?: return UpdateResult.NetworkError
             val totalSize = connection.contentLengthLong
             if (totalSize > UpdatePolicy.MAX_APK_BYTES) {
                 Log.w(TAG, "downloadApk: APK larger than allowed")
-                return false
+                return UpdateResult.Refused("The update file is too large to download.")
             }
 
             connection.inputStream.use { input ->
@@ -245,34 +276,36 @@ class UpdateManager(
 
             if (totalSize > 0 && partFile.length() != totalSize) {
                 Log.w(TAG, "downloadApk: truncated download")
-                return false
+                return UpdateResult.NetworkError
             }
             if (expectedSha != null && !UpdatePolicy.fileMatchesSha256(partFile, expectedSha)) {
                 Log.w(TAG, "downloadApk: SHA-256 mismatch, refusing to install")
-                return false
+                return UpdateResult.Refused("The update file did not match its checksum.")
             }
             if (apkFile.exists()) apkFile.delete()
             if (!partFile.renameTo(apkFile)) {
                 Log.w(TAG, "downloadApk: could not finalize file")
-                return false
+                return UpdateResult.NetworkError
             }
 
             return installApk(apkFile)
+        } catch (_: IOException) {
+            return UpdateResult.NetworkError
         } catch (e: Exception) {
             Log.e(TAG, "downloadApk error", e)
-            return false
+            return UpdateResult.NetworkError
         } finally {
             connection?.disconnect()
             partFile.delete() // no-op after a successful rename; removes partial/mismatching data otherwise
         }
     }
 
-    private fun installApk(apkFile: File): Boolean {
+    private fun installApk(apkFile: File): UpdateResult {
         return try {
             Log.d(TAG, "installApk: file=${apkFile.absolutePath}, exists=${apkFile.exists()}, length=${apkFile.length()}")
             if (!apkFile.exists() || apkFile.length() == 0L) {
                 Log.e(TAG, "installApk: APK file missing or empty")
-                return false
+                return UpdateResult.NetworkError
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -287,7 +320,7 @@ class UpdateManager(
                     "Turn on \"Allow from this source\" in the screen that just opened, then tap Download & Install again.",
                 )
                 openInstallPermissionSettings()
-                return false
+                return UpdateResult.NeedsPermission
             }
 
             val uri = FileProvider.getUriForFile(
@@ -309,7 +342,7 @@ class UpdateManager(
             }
             try {
                 context.startActivity(viewIntent)
-                return true
+                return UpdateResult.Installed
             } catch (e: ActivityNotFoundException) {
                 Log.e(TAG, "installApk: no activity handled ACTION_VIEW for the APK", e)
             } catch (e: Exception) {
@@ -326,14 +359,14 @@ class UpdateManager(
             }
             return try {
                 context.startActivity(legacyIntent)
-                true
+                UpdateResult.Installed
             } catch (e: Exception) {
                 Log.e(TAG, "installApk: ACTION_INSTALL_PACKAGE failed", e)
-                false
+                UpdateResult.NetworkError
             }
         } catch (e: Exception) {
             Log.e(TAG, "installApk error", e)
-            false
+            UpdateResult.NetworkError
         }
     }
 
