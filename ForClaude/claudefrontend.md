@@ -176,6 +176,7 @@ Next for frontend: review for any gaps, then assist with backend tasks that have
 | --- | --- | --- |
 | 2026-11-26 | Claude | Initial creation of `ForClaude/claudefrontend.md`. Migrated UI-relevant completed work from backend plan context: UI-1 through UI-6. UI-6 crash fix and v1.0.243 release logged. Added UI-7 through UI-14 as open TODO tasks. Added cross-reference table to backend plan. |
 | 2026-11-26 | Claude | Marked UI-8 through UI-14 as DONE after reviewing all frontend screens (AgentScreen, SettingsScreen with auto-approve card, ConnectorsScreen, HomeScreen, BuildViewerActivity, BrowsersScreen/BrowserOverlay, OnboardingScreen). All frontend screens are implemented. Only UI-7 remains as a rule (never hand-edit OfficeMapData.kt). Added changelog entry and work log entry. |
+| 2026-11-26 | Claude | Fixed two compilation bugs in SettingsScreen auto-approve UI: (1) PixelSwitch onChange lambda had ambiguous 'it' between Boolean param and updateSettings block param — named outer param 'enabled'; (2) removed 'minLines = 3' from PixelTextField which doesn't exist on that component. All component APIs (PixelSwitch, PixelSlider, PixelTextField, PixelButton) and AgoriaViewModel.updateSettings() verified against actual definitions. |
 
 ---
 
