@@ -263,6 +263,32 @@ class Repository(
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
 
+    // DATA-2: retention job. Prunes noisy/old data while keeping pinned/high-importance diary,
+    // recent messages, and resolved approvals for a grace period. Runs on startup and can be
+    // invoked periodically. Financial revenue rows are deliberately not pruned (ledger).
+    suspend fun runRetentionJob() = db.withTransaction {
+        val now = Time.now()
+        val oneDay = 24 * 60 * 60 * 1000L
+        val thirtyDays = 30 * oneDay
+        val ninetyDays = 90 * oneDay
+
+        // Connector logs are noisy diagnostics; drop anything older than 30 days.
+        val logsPruned = db.connectorLogDao().pruneOldLogs(now - thirtyDays)
+        // Messages older than 90 days are no longer needed for context.
+        val messagesPruned = db.messageDao().pruneOldMessages(now - ninetyDays)
+        // Pending approvals that were never decided expire after 24 hours.
+        val approvalsExpired = db.approvalDao().expirePendingApprovals(now - oneDay)
+        // Resolved approvals older than 30 days are historical noise.
+        val approvalsPruned = db.approvalDao().pruneResolvedApprovals(now - thirtyDays)
+        // Diary: unpinned, low-importance entries older than 90 days are pruned.
+        db.diaryDao().pruneOldEntries(now - ninetyDays)
+
+        Log.i(
+            "RetentionJob",
+            "pruned logs=$logsPruned messages=$messagesPruned approvalsExpired=$approvalsExpired approvalsPruned=$approvalsPruned",
+        )
+    }
+
     suspend fun restoreAutoBackup(file: java.io.File): Boolean {
         val text = Files.readText(file) ?: return false
         val json = try {

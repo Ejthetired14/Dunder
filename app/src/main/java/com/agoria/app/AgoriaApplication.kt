@@ -64,6 +64,8 @@ class AgoriaApplication : Application() {
             repository.seedIfNeeded()
             // One full snapshot a day, so no upgrade can ever leave the office with nothing.
             repository.writeAutoBackup()
+            // DATA-2: prune stale logs, messages, approvals and diary on startup.
+            repository.runRetentionJob()
         }
 
         updateManager = UpdateManager(this, appScope)

@@ -54,6 +54,9 @@ interface DiaryDao {
     @Query("SELECT * FROM diary_entries ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<DiaryEntryEntity>
 
+    @Query("DELETE FROM diary_entries WHERE createdAt < :olderThanMillis AND pinned = false AND importance < 3")
+    suspend fun pruneOldEntries(olderThanMillis: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: DiaryEntryEntity)
 
@@ -82,6 +85,9 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE agentId = :agentId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForAgent(agentId: String, limit: Int): List<MessageEntity>
+
+    @Query("DELETE FROM messages WHERE createdAt < :olderThanMillis")
+    suspend fun pruneOldMessages(olderThanMillis: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: MessageEntity)
@@ -139,6 +145,12 @@ interface ApprovalDao {
 
     @Query("SELECT * FROM approvals WHERE agentId = :agentId AND type = :type AND status IN ('pending', 'auto_pending')")
     suspend fun getPendingByAgentAndType(agentId: String, type: String): List<ApprovalEntity>
+
+    @Query("UPDATE approvals SET status = 'expired' WHERE status IN ('pending', 'auto_pending') AND decidedAt IS NULL AND createdAt < :olderThanMillis")
+    suspend fun expirePendingApprovals(olderThanMillis: Long): Int
+
+    @Query("DELETE FROM approvals WHERE status IN ('approved', 'rejected', 'expired') AND decidedAt IS NOT NULL AND createdAt < :olderThanMillis")
+    suspend fun pruneResolvedApprovals(olderThanMillis: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(approval: ApprovalEntity)
@@ -328,6 +340,9 @@ interface ConnectorLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: ConnectorLogEntity)
+
+    @Query("DELETE FROM connector_logs WHERE createdAt < :olderThanMillis")
+    suspend fun pruneOldLogs(olderThanMillis: Long): Int
 
     @Query("DELETE FROM connector_logs")
     suspend fun deleteAll()
