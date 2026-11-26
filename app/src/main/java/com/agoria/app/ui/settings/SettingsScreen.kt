@@ -764,8 +764,8 @@ fun SettingsScreen(
 
             SettingsCard(title = "App Updates") {
                 val updateState = remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
-    var updateRefusalReason by remember { mutableStateOf<String?>(null) }
-                val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null)>
+                var updateRefusalReason by remember { mutableStateOf<String?>(null) }
+                val releaseInfo = remember { mutableStateOf<UpdateManager.ReleaseInfo?>(null) }
 
                 when (updateState.value) {
                     UpdateState.Idle -> {
