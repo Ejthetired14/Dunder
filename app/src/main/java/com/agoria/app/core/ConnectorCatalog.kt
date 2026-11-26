@@ -86,14 +86,16 @@ object ConnectorCatalog {
             id = "search",
             name = "Web Search",
             category = "Knowledge",
-            description = "Quick answers from DuckDuckGo's public instant-answer API.",
+            description = "Web search via Brave Search API when an API key is configured; otherwise falls back to DuckDuckGo's public instant-answer API.",
             auth = ConnectorAuth.NONE,
-            fields = emptyList(),
-            actions = listOf(
-                ConnectorActionDef("search", "Search", "Return the instant answer for a query.", false, "{\"query\": \"...\"}"),
+            fields = listOf(
+                ConnectorField("searchApiKey", "Brave Search API key", "Optional Brave Search API key (search.brave.com). When set, results come from Brave; otherwise DuckDuckGo is used.", false, false, "..."),
             ),
-            setupHelp = "No setup needed. This connector is ready to use.",
-            docsUrl = "https://duckduckgo.com/api",
+            actions = listOf(
+                ConnectorActionDef("search", "Search", "Return web results for a query.", false, "{\"query\": \"...\"}"),
+            ),
+            setupHelp = "Optional: add a Brave Search API key for full web results. Without a key, DuckDuckGo instant answers are used (limited coverage).",
+            docsUrl = "https://brave.com/search/api/",
             risk = "low",
             iconKey = "search",
         ),

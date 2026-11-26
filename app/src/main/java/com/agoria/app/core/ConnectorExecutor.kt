@@ -430,6 +430,12 @@ class ConnectorExecutor(
     private fun webSearch(config: JSONObject?, action: String, args: JSONObject): ConnectorResult {
         if (action != "search") return ConnectorResult(false, "Unknown search action '$action'")
         val query = args.optString("query").ifBlank { return ConnectorResult(false, "Missing query") }
+        val apiKey = cfg(config, "searchApiKey")
+        if (apiKey.isNotBlank()) {
+            return braveSearch(query, apiKey)
+        }
+        // No API key configured: fall back to DuckDuckGo's public instant-answer API, then the
+        // HTML scraper as last resort (CONN-4).
         val url = "https://api.duckduckgo.com/?q=" + enc(query) + "&format=json&no_html=1&skip_disambig=1"
         val response = http("GET", url)
         if (!response.ok) return ConnectorResult(false, "Search error: ${text(response.body, 240)}")
@@ -469,6 +475,34 @@ class ConnectorExecutor(
                 sb.append("Web results:\n").append(results)
             } else {
                 sb.append("No instant answer and no web results for '$query'.")
+            }
+        }
+        return ConnectorResult(true, sb.toString().trim())
+    }
+
+    private fun braveSearch(query: String, apiKey: String): ConnectorResult {
+        // CONN-4: documented search API (Brave Search) with scraper as last resort.
+        val url = "https://api.search.brave.com/res/v1/web/search?q=" + enc(query) + "&count=10"
+        val headers = mapOf("X-Subscription-Token" to apiKey, "Accept" to "application/json")
+        val response = http("GET", url, headers)
+        if (!response.ok) return ConnectorResult(false, "Search error: ${text(response.body, 240)}")
+        val root = json(response.body) ?: return ConnectorResult(false, "Search returned invalid JSON")
+        val web = root.optJSONObject("web") ?: return ConnectorResult(true, "No search results for '$query'.")
+        val results = web.optJSONArray("results")
+        if (results == null || results.length() == 0) return ConnectorResult(true, "No search results for '$query'.")
+        val sb = StringBuilder("Web results for '$query':\n")
+        var count = 0
+        for (i in 0 until results.length()) {
+            if (count >= 5) break
+            val item = results.optJSONObject(i) ?: continue
+            val title = item.optString("title")
+            val link = item.optString("url")
+            val desc = item.optString("description")
+            if (title.isNotBlank()) {
+                sb.append("- ").append(text(title, 120)).append('\n')
+                if (link.isNotBlank()) sb.append("  ").append(link).append('\n')
+                if (desc.isNotBlank()) sb.append("  ").append(text(desc, 200)).append('\n')
+                count++
             }
         }
         return ConnectorResult(true, sb.toString().trim())

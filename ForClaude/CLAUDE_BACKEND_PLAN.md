@@ -434,9 +434,10 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): `httpOnce` now uses `response.use {}` with streaming read capped at 1 MB. `duckDuckGoResults` now uses `response.use {}` with streaming read capped at 1 MB.
 
 ### CONN-4 - Web search relies on scraping
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: M
 - Evidence: `webSearch` falls back to parsing DuckDuckGo HTML with regexes.
 - Fix: use a documented search API (Brave/Tavily/SearXNG, optional key) with the scraper as last resort.
+- Implemented (2026-11-26): `ConnectorCatalog` now has an optional `searchApiKey` field on the `search` connector (Brave Search API key). `ConnectorExecutor.webSearch` reads `searchApiKey` from config: when present, calls Brave Search API (`https://api.search.brave.com/res/v1/web/search` with `X-Subscription-Token` header) and returns up to 5 results; when absent, falls back to the existing DuckDuckGo instant-answer API then the HTML scraper. Remaining: none (Brave path + DDG fallback complete; key is optional so no setup required).
 
 ### LLM-1 - JSON protocol robustness
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: M
