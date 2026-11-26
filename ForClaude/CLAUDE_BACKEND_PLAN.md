@@ -479,7 +479,7 @@ Living task tracker for the **backend** of this Android app. It is written so th
 ### DOC-1 - Bring README and docs in line with the code
 - Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Fix: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2 (SEC-1 now makes "database excluded from backup" accurate; also state that backup/transfer is fully disabled and in-app export is the only path).
-- Implemented (2026-11-26): Changed app name from "Agoria" to "Dunder" in README title. Updated connector table: replaced Gmail/Google Calendar with Office Browser connector, added all 25 connectors (PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers). Updated GitHub actions list. Added backup/export security note. Remaining: full drift table reconciliation.
+- Implemented (2026-11-26): Changed app name from "Agoria" to "Dunder" in README title. Updated connector table: replaced Gmail/Google Calendar with Office Browser connector, added all 25 connectors (PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers). Updated GitHub actions list. Added backup/export security note. README drift fully reconciled: name is Dunder throughout (class names AgoriaApplication/AgoriaRoot/AgoriaNav/AgoriaViewModel kept as code references), Gmail/Calendar described via Office Browser, workflow filename corrected to build-apk.yml, artifact name corrected to `apks`, backup wording matches SEC-1/SEC-2 (backups disabled, in-app export only, secret-free). Remaining: none.
 
 ---
 

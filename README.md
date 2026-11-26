@@ -1,6 +1,6 @@
 # Dunder
 
-Agoria is a local autonomous AI office for Android 13+. Eight agents live inside the app, think on their own, keep a diary, create tasks, and propose builds. Anything that builds a project or touches the outside world asks you first.
+Dunder is a local autonomous AI office for Android 13+. Eight agents live inside the app, think on their own, keep a diary, create tasks, and propose builds. Anything that builds a project or touches the outside world asks you first.
 
 The app is built around the free model APIs in [awesome-free-llm-apis](https://github.com/mnfst/awesome-free-llm-apis). The visual direction and office assets come from [Parcha-ai/ai-office](https://github.com/Parcha-ai/ai-office).
 
@@ -10,7 +10,7 @@ The app is built around the free model APIs in [awesome-free-llm-apis](https://g
 - **A diary of thoughts** — every cycle produces a diary entry (thought, observation, plan, decision, lesson, error, build, connector, review). Read it in the agent screen or the global Diary tab.
 - **Approval gates** — building a downloadable project, sending email, posting to Slack/Discord/Telegram, creating GitHub issues, and making external HTTP requests require an approval. You see the exact payload and approve or deny with a note.
 - **Local builds** — an approved build is generated as a small starter project inside the app and packaged as a ZIP. Share it from the Builds tab. Nothing is published.
-- **Connectors** — agents can request Gmail, Google Calendar, GitHub, Slack, Discord, Notion, Telegram, a generic HTTP connector, local files, Wikipedia, Hacker News, web search, weather, and currency. You configure credentials in the Connectors screen.
+- **Connectors** — agents can request GitHub, Slack, Discord, Notion, Telegram, a generic HTTP connector, local files, Wikipedia, Hacker News, web search, weather, currency, PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers, and Gmail/Calendar through the Office Browser. You configure credentials in the Connectors screen.
 - **Provider fallback** — the app tries enabled providers in priority order. Keyless providers (Kilo, OVHcloud, LLM7) are enabled by default; add your own keys for Groq, OpenRouter, Gemini, Cohere, Cloudflare, NVIDIA, Z AI, and more.
 - **Foreground autonomy** — a foreground service keeps the loop alive while the app is backgrounded. A boot receiver restarts it after reboot if autonomy was enabled.
 - **Office view** — a visual floor with one desk per agent. Tap a desk to open the agent's chat, diary, tasks, memory, and builds.
@@ -29,12 +29,12 @@ Tested target: Android 13. The UI is phone-first; it is not optimized for tablet
 
 ### GitHub Actions (recommended)
 
-The workflow at [`.github/workflows/buildapk.yml`](.github/workflows/buildapk.yml) builds a debug APK on every push, pull request, or manual run.
+The workflow at [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) builds a debug APK on every push, pull request, or manual run.
 
 1. Push this repository to GitHub.
 2. Open the **Actions** tab.
 3. Run or wait for **Build APK**.
-4. Download the **`agoria-debug-apk`** artifact.
+4. Download the **`apks`** artifact.
 5. Copy the APK to your Android 13 device and install it. You may need to allow "Install unknown apps" for your file manager or browser.
 
 ### Local build
@@ -51,7 +51,7 @@ echo "sdk.dir=/path/to/Android/sdk" > local.properties
 1. Open the app and enter your name.
 2. On the Home screen, turn on **Autonomy**.
 3. Allow notifications if Android asks. This lets the foreground service show that the agents are running.
-4. Optionally disable battery optimization for Agoria in Settings → Battery settings. Some Chinese and Samsung ROMs are aggressive about background services.
+4. Optionally disable battery optimization for Dunder in Settings → Battery settings. Some Chinese and Samsung ROMs are aggressive about background services.
 5. Watch the agents write diary entries. Open an agent to chat or edit their persona and goal.
 6. When an agent proposes a build or a connector, review it in **Approvals**.
 
@@ -195,4 +195,4 @@ The avatars are cropped from the 384×256 sprite sheet: each of the eight charac
 
 ## License and credits
 
-The original Agoria code in this repository is provided as-is for personal experimentation. The office assets are from [Parcha-ai/ai-office](https://github.com/Parcha-ai/ai-office) and remain subject to their original terms. The free API list is from [mnfst/awesome-free-llm-apis](https://github.com/mnfst/awesome-free-llm-apis).
+The original Dunder code in this repository is provided as-is for personal experimentation. The office assets are from [Parcha-ai/ai-office](https://github.com/Parcha-ai/ai-office) and remain subject to their original terms. The free API list is from [mnfst/awesome-free-llm-apis](https://github.com/mnfst/awesome-free-llm-apis).
