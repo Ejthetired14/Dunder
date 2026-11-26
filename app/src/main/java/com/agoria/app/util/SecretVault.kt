@@ -1,6 +1,6 @@
 package com.agoria.app.util
 
-import android.util.Base64
+import java.util.Base64
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -42,7 +42,7 @@ object SecretVault {
             System.arraycopy(salt, 0, out, 0, salt.size)
             System.arraycopy(iv, 0, out, salt.size, iv.size)
             System.arraycopy(encrypted, 0, out, salt.size + iv.size, encrypted.size)
-            Base64.encodeToString(out, Base64.NO_WRAP)
+            Base64.getEncoder().encodeToString(out)
         } catch (_: Exception) {
             null
         }
@@ -54,7 +54,7 @@ object SecretVault {
      */
     fun decrypt(stored: String, passphrase: String): String? {
         return try {
-            val all = Base64.decode(stored, Base64.NO_WRAP)
+            val all = Base64.getDecoder().decode(stored)
             val minLen = SALT_BYTES + IV_BYTES + TAG_BITS / 8
             if (all.size < minLen) return null
             val salt = all.copyOfRange(0, SALT_BYTES)

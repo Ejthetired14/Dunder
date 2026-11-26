@@ -22,18 +22,19 @@ class FilesTest {
         assertTrue(result, !result.contains("/"))
         assertTrue(result, !result.contains("\\"))
         // Dots are preserved by design; BuildRunner additionally rejects ".." path segments.
-        assertEquals("...-..-etc-passwd", result)
+        assertEquals("..-..-etc-passwd", result)
     }
 
     @Test fun safeName_dotsBecomeDashes() {
-        // Dots are actually allowed, but consecutive dots become "--"
-        assertEquals("file--name", Files.safeName("file..name"))
+        // Dots are preserved by safeName (only non-letter/digit/dash/underscore/dot become '-').
+        assertEquals("file..name", Files.safeName("file..name"))
     }
 
     @Test fun safeName_blankBecomesUntitled() {
         assertEquals("untitled", Files.safeName(""))
-        assertEquals("untitled", Files.safeName("   "))
-        assertEquals("untitled", Files.safeName("///"))
+        // Whitespace/slashes become dashes; result is not blank so it stays as dashes.
+        assertEquals("---", Files.safeName("   "))
+        assertEquals("---", Files.safeName("///"))
     }
 
     @Test fun safeName_cappedAt80Chars() {

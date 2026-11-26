@@ -123,7 +123,7 @@ class SecretVaultTest {
         assertEquals(secretsText, decryptedText)
 
         val roundTrip = JSONObject(decryptedText)
-        assertEquals("enc-api-token-123", roundTrip.getString("cloudflare_workers"))
-        assertEquals("enc-webhook-url-456", roundTrip.getString("slack"))
+        assertEquals("enc-api-token-123", roundTrip.getString("cloudflare_workers")!!)
+        assertEquals("enc-webhook-url-456", roundTrip.getString("slack")!!)
     }
 }
