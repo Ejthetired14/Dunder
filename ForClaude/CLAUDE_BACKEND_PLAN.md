@@ -466,8 +466,9 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Implemented (2026-11-25): Changed "Save encrypted JSON to Downloads folder" to "Save a JSON copy to the Downloads folder". Added line: "API keys and connector credentials are not included and must be re-entered after restoring on a new device."
 
 ### DOC-1 - Bring README and docs in line with the code
-- Status: TODO | Effort: S
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: S
 - Fix: use the drift table in section 1; one product name; document backup and secret behavior after SEC-1/SEC-2 (SEC-1 now makes "database excluded from backup" accurate; also state that backup/transfer is fully disabled and in-app export is the only path).
+- Implemented (2026-11-26): Changed app name from "Agoria" to "Dunder" in README title. Updated connector table: replaced Gmail/Google Calendar with Office Browser connector, added all 25 connectors (PayPal, Polar, AgentMail, Supabase, Resend, Upstash, Hugging Face, Vercel, Netlify, Linear, Cloudflare Workers). Updated GitHub actions list. Added backup/export security note. Remaining: full drift table reconciliation.
 
 ---
 

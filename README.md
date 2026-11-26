@@ -1,4 +1,4 @@
-# Agoria
+# Dunder
 
 Agoria is a local autonomous AI office for Android 13+. Eight agents live inside the app, think on their own, keep a diary, create tasks, and propose builds. Anything that builds a project or touches the outside world asks you first.
 
@@ -98,21 +98,32 @@ Connectors are capability bundles with explicit actions and risk levels. Read-on
 | This Device | none | info, notify |
 | Local Files | none | list, read, write |
 | HTTP Request | API key + base URL | request |
-| Gmail | OAuth access token | list, get, send |
-| Google Calendar | OAuth access token | list, create |
-| GitHub | personal access token | get_repo, list_issues, create_issue |
+| Office Browser (accounts) | in-app browser session | list, signin, email, event, open_url, read |
+| GitHub | personal access token | get_repo, list_issues, create_issue, get_file, create_branch, put_file, create_pr, list_prs |
 | Slack | incoming webhook | post |
 | Discord | webhook | post |
 | Notion | integration token | query, create_page |
 | Telegram | bot token | send, get_updates |
+| PayPal | client ID + secret | create_order, capture_order |
+| Polar | access token | products, checkout |
+| AgentMail | API key | create_inbox, send_email |
+| Supabase | URL + service key | query, insert, update |
+| Resend | API key | send_email |
+| Upstash | REST URL + token | get, set, del |
+| Hugging Face | API token | inference |
+| Vercel | access token | deploy |
+| Netlify | access token | deploy |
+| Linear | API key | create_issue, list_issues |
+| Cloudflare Workers | account ID + API token | deploy, get_script, delete |
 
-Gmail and Calendar use pasted OAuth 2.0 access tokens with the scopes listed in the setup dialog. The app does not implement a full OAuth consent flow yet. Tokens expire (Google access tokens are usually valid for about an hour); paste a fresh one when needed.
+The Office Browser connector uses a WebView-based session; the app never sees passwords. Gmail/Calendar are accessed through the browser session. The app does not implement a full OAuth consent flow.
 
 ## Safety model
 
 - The app has no shell tool and no arbitrary code execution on the device.
 - External actions are gated by an approval record that stores the agent, type, risk, payload, decision, and result.
 - Build files are sandboxed under the app's private storage. The build runner rejects `..` and absolute paths.
+- Database and file backups are fully disabled (`allowBackup="false"`). In-app export/import is the only transfer path. Exports are secret-free (credentials must be re-entered on a new device).
 - API keys and connector credentials are encrypted with a key in the Android Keystore before they are stored in Room. The database is local and is excluded from backup.
 - The app is a personal test build, not a hardened multi-user service. Anyone with access to the unlocked device can read the app's data. Use a strong device lock.
 - Free providers may log prompts and outputs. Do not send personal or confidential data through a free tier.
