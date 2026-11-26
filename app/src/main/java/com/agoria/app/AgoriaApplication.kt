@@ -41,6 +41,8 @@ class AgoriaApplication : Application() {
         com.agoria.app.browser.BrowserHub.init(this)
         database = AppDatabase.create(this)
         repository = Repository(database, this)
+        // SEC-17: re-encrypt any legacy plaintext apiToken rows at rest.
+        appScope.launch { repository.reencryptLegacyApiTokens() }
         appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         val llm = LlmClient(repository)

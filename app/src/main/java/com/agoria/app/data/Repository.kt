@@ -361,6 +361,18 @@ class Repository(
         db.agentDao().update(agent.copy(apiToken = encrypted, updatedAt = Time.now()))
     }
 
+    // SEC-17: re-encrypt any legacy plaintext apiToken rows so nothing is stored unencrypted at rest.
+    // Called once at app startup (AgoriaApplication.onCreate). Safe to run multiple times.
+    suspend fun reencryptLegacyApiTokens() {
+        db.agentDao().getAll().forEach { agent ->
+            if (agent.apiToken.isNotBlank() && SecretCipher.decrypt(agent.apiToken) == null) {
+                // Value is not valid ciphertext → treat as legacy plaintext and encrypt it.
+                val encrypted = SecretCipher.encrypt(agent.apiToken) ?: agent.apiToken
+                db.agentDao().update(agent.copy(apiToken = encrypted, updatedAt = Time.now()))
+            }
+        }
+    }
+
     suspend fun allAgents(): List<AgentEntity> = db.agentDao().getAll()
 
     suspend fun upsertAgent(agent: AgentEntity) = db.agentDao().insert(agent)

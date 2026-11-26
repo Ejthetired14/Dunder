@@ -28,7 +28,7 @@ import java.io.File
         SkillEntity::class,
         AgentSkillEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -51,7 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "agoria.db"
-        const val VERSION = 7
+        const val VERSION = 8
 
         fun create(context: Context): AppDatabase {
             val database = build(context)
@@ -75,7 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 // An upgrade keeps every row. Only an actual downgrade (someone sideloading an
                 // older APK over a newer one) falls back, because Room refuses to open a database
                 // written by a newer schema.
@@ -358,5 +358,16 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
         }
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_memories_agentId` ON `memories` (`agentId`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_memories_createdAt` ON `memories` (`createdAt`)")
+    }
+}
+
+/** 7 -> 8 (SEC-17): apiToken is stored encrypted at rest. No schema change needed — the
+ * column already exists from v2→3. Existing plaintext values are re-encrypted lazily by
+ * Repository.reencryptLegacyApiTokens(), called from AgoriaApplication.onCreate. */
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // No DDL changes: agents.apiToken column already exists. Re-encryption is done in Kotlin
+        // code because SecretCipher needs the Android Keystore (a Context), which is not
+        // available inside a Room Migration.
     }
 }
