@@ -1,5 +1,6 @@
 package com.agoria.app.core.connectors
 
+import android.content.Context
 import com.agoria.app.data.ConnectorEntity
 import com.agoria.app.util.Files
 import org.json.JSONObject
@@ -7,7 +8,9 @@ import java.io.File
 
 /** Files connector — per-agent workspace with path traversal guards and quota. */
 
-class FileHandler : ConnectorHandler {
+class FileHandler(
+    private val context: Context,
+) : ConnectorHandler {
     override val connectorId = "files"
     override val description = "Per-agent file workspace. Read, write and list files safely."
     override val risk = "low"
@@ -40,9 +43,9 @@ class FileHandler : ConnectorHandler {
         // read or overwrite each other's files. When no agentId is available (should not happen
         // in normal operation) fall back to the shared root.
         val root = if (agentId != null) {
-            Files.agentWorkspace(connector.context, agentId).canonicalFile
+            Files.agentWorkspace(context, agentId).canonicalFile
         } else {
-            Files.workspace(connector.context).canonicalFile
+            Files.workspace(context).canonicalFile
         }
         // Models answer with "/notes.txt" or "./notes.txt" for the same file, so treat both as
         // relative to the workspace instead of rejecting them as an escape attempt.
@@ -105,7 +108,7 @@ class FileHandler : ConnectorHandler {
             "delete" -> {
                 if (!target.exists()) return HandlerResult(false, "File not found: $relative")
                 if (target.isDirectory) return HandlerResult(false, "Cannot delete a directory.")
-                Files.deleteQuietly(target)
+                target.delete()
                 HandlerResult(true, "Deleted $relative.")
             }
             else -> HandlerResult(false, "Unknown files action '$action'")

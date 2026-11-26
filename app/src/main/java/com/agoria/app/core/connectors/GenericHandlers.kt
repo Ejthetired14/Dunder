@@ -1,5 +1,6 @@
 package com.agoria.app.core.connectors
 
+import android.content.Context
 import com.agoria.app.data.ConnectorEntity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -425,7 +426,9 @@ class CurrencyHandler : ConnectorHandler {
     override fun onSuccess(connector: ConnectorEntity) = ConnectorHandler.defaultOnSuccess(connector)
 }
 
-class DeviceHandler : ConnectorHandler {
+class DeviceHandler(
+    private val context: Context,
+) : ConnectorHandler {
     override val connectorId = "device"
     override val description = "Device information and local notifications."
     override val risk = "low"
@@ -451,7 +454,7 @@ class DeviceHandler : ConnectorHandler {
     ): HandlerResult {
         return when (action) {
             "info", "get_info" -> {
-                val batteryManager = connector.context?.getSystemService(android.os.BatteryManager::class.java)
+                val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
                 val level = batteryManager?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
                 HandlerResult(
                     true,
@@ -463,7 +466,7 @@ class DeviceHandler : ConnectorHandler {
             "notify" -> {
                 val title = args.optString("title", "Dunder").ifBlank { "Dunder" }
                 val body = args.optString("body").ifBlank { return HandlerResult(false, "Missing body") }
-                com.agoria.app.util.Notifier.notifyLocal(connector.context, title, body)
+                com.agoria.app.util.Notifier.notifyLocal(context, title, body)
                 HandlerResult(true, "Posted local notification: $title")
             }
             else -> HandlerResult(false, "Unknown device action '$action'")
