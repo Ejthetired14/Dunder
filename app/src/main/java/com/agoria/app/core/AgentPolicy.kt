@@ -22,7 +22,8 @@ object AgentPolicy {
      * when no JSON object is found.
      */
     fun extractFirstJsonObject(text: String): String? {
-        val start = text.indexOf('{') ?: return null
+        val start = text.indexOf('{')
+        if (start == -1) return null
         var depth = 0
         var inString = false
         var escaped = false
@@ -47,7 +48,8 @@ object AgentPolicy {
     }
 
     fun parseDecision(text: String): AgentDecision? {
-        val root = Json.tryObject(text) ?: return null
+        val json = extractFirstJsonObject(text) ?: return null
+        val root = Json.tryObject(json) ?: return null
         val action = Json.string(root, "action", "none").lowercase().ifBlank { "none" }
         val inputObject = Json.obj(root, "action_input")
         val input = inputObject ?: when (action) {
