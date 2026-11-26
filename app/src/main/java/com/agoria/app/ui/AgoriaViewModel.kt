@@ -853,13 +853,14 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                     for (name in names) {
                         val enc = secrets.optString(name)
                         if (enc.isNotBlank()) {
-                            SecretVault.encrypt(enc, passphrase)?.let { encrypted.put(name, it) }
-                                ?: run {
-                                    withContext(Dispatchers.Main) {
-                                        onResult(false, "Encryption failed.")
-                                    }
-                                    return@launch
+                            val ciphertext = SecretVault.encrypt(enc, passphrase)
+                            if (ciphertext == null) {
+                                withContext(Dispatchers.Main) {
+                                    onResult(false, "Encryption failed.")
                                 }
+                                return@launch
+                            }
+                            encrypted.put(name, ciphertext)
                         }
                     }
                     snapshot.put("secrets", encrypted)
