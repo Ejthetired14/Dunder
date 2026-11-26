@@ -26,6 +26,7 @@ import com.agoria.app.core.SkillExecutor
 import android.util.Log
 import com.agoria.app.service.AutonomyService
 import com.agoria.app.util.Files
+import com.agoria.app.util.SecretVault
 import com.agoria.app.util.Share
 import com.agoria.app.util.Time
 import kotlinx.coroutines.Dispatchers
@@ -822,6 +823,114 @@ class AgoriaViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             val success = repo.importSnapshot(json)
+            withContext(Dispatchers.Main) {
+                onResult(
+                    success,
+                    if (success) "Backup restored." else "Import failed: the file could not be applied.",
+                )
+            }
+        }
+    }
+
+    /**
+     * Exports a snapshot that includes connector secrets, with the `secrets` section encrypted
+     * under a user-supplied passphrase via SecretVault (SEC-16). The passphrase is never stored,
+     * never logged, and never written to disk. A wrong passphrase cannot be recovered.
+     */
+    fun exportDataToUriWithSecrets(
+        context: Context,
+        uri: Uri,
+        passphrase: String,
+        onResult: (Boolean, String?) -> Unit,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val snapshot = repo.exportSnapshot(includeSecrets = true)
+                val secrets = snapshot.optJSONObject("secrets")
+                if (secrets != null && secrets.length() > 0) {
+                    val encrypted = JSONObject()
+                    val names = secrets.keys().asSequence().toList()
+                    for (name in names) {
+                        val enc = secrets.optString(name)
+                        if (enc.isNotBlank()) {
+                            SecretVault.encrypt(enc, passphrase)?.let { encrypted.put(name, it) }
+                                ?: run {
+                                    withContext(Dispatchers.Main) {
+                                        onResult(false, "Encryption failed.")
+                                    }
+                                    return@launch
+                                }
+                        }
+                    }
+                    snapshot.put("secrets", encrypted)
+                }
+                val jsonText = snapshot.toString(2)
+                context.contentResolver.openOutputStream(uri).use { outputStream ->
+                    outputStream?.write(jsonText.toByteArray())
+                }
+                withContext(Dispatchers.Main) {
+                    onResult(true, "Secrets exported (encrypted).")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Export failed: ${e.message?.take(200)}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Imports a snapshot and applies an encrypted `secrets` section using the user-supplied
+     * passphrase (SEC-16). Validates the passphrase before importing anything, so a wrong
+     * passphrase fails closed and no data is partially applied.
+     */
+    fun importDataFromUriWithSecrets(
+        context: Context,
+        uri: Uri,
+        passphrase: String,
+        onResult: (Boolean, String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
+            }
+            if (text.isNullOrBlank()) {
+                withContext(Dispatchers.Main) { onResult(false, "Could not read that file.") }
+                return@launch
+            }
+            val root = try {
+                JSONObject(text)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, "That file is not a Dunder backup.") }
+                return@launch
+            }
+            val secrets = root.optJSONObject("secrets")
+            if (secrets != null && secrets.length() > 0) {
+                // Validate the passphrase up front by decrypting the first entry. Fails closed:
+                // a wrong passphrase means we never touch the database.
+                val names = secrets.keys().asSequence().toList()
+                val first = names.firstOrNull { secrets.optString(it).isNotBlank() }
+                if (first != null) {
+                    if (SecretVault.decrypt(secrets.optString(first), passphrase) == null) {
+                        withContext(Dispatchers.Main) {
+                            onResult(false, "Wrong passphrase — nothing was imported.")
+                        }
+                        return@launch
+                    }
+                }
+            }
+            val success = repo.importSnapshot(root)
+            if (secrets != null && secrets.length() > 0) {
+                val secretOk = repo.restoreSecrets(secrets, passphrase)
+                if (!secretOk) {
+                    withContext(Dispatchers.Main) {
+                        onResult(false, "Secrets could not be applied (corrupt section).")
+                    }
+                    return@launch
+                }
+            }
             withContext(Dispatchers.Main) {
                 onResult(
                     success,

@@ -115,6 +115,12 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // SEC-16: passphrase-protected export/import of connector secrets.
+    var showExportSecretsDialog by remember { mutableStateOf(false) }
+    var showImportSecretsDialog by remember { mutableStateOf(false) }
+    var exportPassphrase by remember { mutableStateOf("") }
+    var importPassphrase by remember { mutableStateOf("") }
+
     // File picker for import
     val pickImportFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -122,8 +128,15 @@ fun SettingsScreen(
         uri?.let { fileUri ->
             // A document picked through the system picker is not a file path, so it has to be read
             // through the content resolver.
-            viewModel.importDataFromUri(context, fileUri) { success, message ->
-                scope.launch { snackbarHostState.showSnackbar(message) }
+            if (showImportSecretsDialog) {
+                showImportSecretsDialog = false
+                viewModel.importDataFromUriWithSecrets(context, fileUri, importPassphrase) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                }
+            } else {
+                viewModel.importDataFromUri(context, fileUri) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                }
             }
         }
     }
@@ -133,8 +146,15 @@ fun SettingsScreen(
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri: Uri? ->
         uri?.let { exportUri ->
-            viewModel.exportDataToUri(context, exportUri) { success, message ->
-                scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+            if (showExportSecretsDialog) {
+                showExportSecretsDialog = false
+                viewModel.exportDataToUriWithSecrets(context, exportUri, exportPassphrase) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+                }
+            } else {
+                viewModel.exportDataToUri(context, exportUri) { success, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message ?: (if (success) "Export successful" else "Export failed")) }
+                }
             }
         }
     }
@@ -549,6 +569,15 @@ fun SettingsScreen(
                         },
                         small = true,
                     )
+                    PixelButton(
+                        text = "Export w/ secrets",
+                        onClick = {
+                            exportPassphrase = ""
+                            showExportSecretsDialog = true
+                        },
+                        small = true,
+                        fill = Pal.wood,
+                    )
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -582,6 +611,15 @@ fun SettingsScreen(
                         text = "Import",
                         onClick = { pickImportFileLauncher.launch("application/json") },
                         small = true,
+                    )
+                    PixelButton(
+                        text = "Import w/ secrets",
+                        onClick = {
+                            importPassphrase = ""
+                            showImportSecretsDialog = true
+                        },
+                        small = true,
+                        fill = Pal.wood,
                     )
                 }
 
@@ -643,6 +681,89 @@ fun SettingsScreen(
                     small = true,
                     fill = Pal.tan,
                 )
+            }
+
+            // SEC-16: passphrase dialog for encrypted export of connector secrets.
+            if (showExportSecretsDialog) {
+                PixelDialog(
+                    onDismiss = { showExportSecretsDialog = false; exportPassphrase = "" },
+                    title = "Export with secrets",
+                ) {
+                    Text(
+                        text = "Enter a passphrase to encrypt connector credentials (API keys, tokens). " +
+                            "It is never stored; losing it means the secrets cannot be recovered.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Dim,
+                    )
+                    PixelTextField(
+                        value = exportPassphrase,
+                        onValueChange = { exportPassphrase = it },
+                        password = true,
+                        label = "Passphrase",
+                        hint = "Remember it — you will need it to import.",
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        PixelButton(
+                            text = "Cancel",
+                            onClick = { showExportSecretsDialog = false; exportPassphrase = "" },
+                            small = true,
+                        )
+                        PixelButton(
+                            text = "Export",
+                            onClick = {
+                                if (exportPassphrase.isNotBlank()) {
+                                    createExportFileLauncher.launch("agoria-export-secrets-${System.currentTimeMillis()}.json")
+                                }
+                            },
+                            small = true,
+                            fill = Pal.wood,
+                        )
+                    }
+                }
+            }
+
+            // SEC-16: passphrase dialog for encrypted import of connector secrets.
+            if (showImportSecretsDialog) {
+                PixelDialog(
+                    onDismiss = { showImportSecretsDialog = false; importPassphrase = "" },
+                    title = "Import with secrets",
+                ) {
+                    Text(
+                        text = "Enter the passphrase used when the backup was exported. Connector " +
+                            "credentials are decrypted and applied only if the passphrase matches.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Dim,
+                    )
+                    PixelTextField(
+                        value = importPassphrase,
+                        onValueChange = { importPassphrase = it },
+                        password = true,
+                        label = "Passphrase",
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        PixelButton(
+                            text = "Cancel",
+                            onClick = { showImportSecretsDialog = false; importPassphrase = "" },
+                            small = true,
+                        )
+                        PixelButton(
+                            text = "Import",
+                            onClick = {
+                                if (importPassphrase.isNotBlank()) {
+                                    pickImportFileLauncher.launch("application/json")
+                                }
+                            },
+                            small = true,
+                            fill = Pal.wood,
+                        )
+                    }
+                }
             }
 
             SettingsCard(title = "App Updates") {
