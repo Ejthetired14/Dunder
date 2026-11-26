@@ -322,7 +322,7 @@ class LlmClient(private val repo: Repository) {
                     cont.resumeWith(Result.failure(e))
                 }
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                    cont.resume(response)
+                    cont.resumeWith(Result.success(response))
                 }
             })
         }
