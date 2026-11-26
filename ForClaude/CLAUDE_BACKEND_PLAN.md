@@ -443,8 +443,9 @@ Living task tracker for the **backend** of this Android app. It is written so th
 - Fix: add JUnit, MockK/Turbine, MockWebServer, Room testing. First tests: `AgentPolicy.parseDecision`, `ConnectorCatalog.isReadOnly`, path traversal in `BuildRunner` and `files`, `LlmClient` fallback, snapshot export/import round trip (no secrets), migrations 1->4, approval gating (high risk never auto-approved). Boot path (RUN-5) and stop path (RUN-3) are good early candidates once a fake `SettingsDao` exists.
 
 ### CI-1 - CI hygiene
-- Status: TODO | Effort: M
+- Status: IN-PROGRESS (2026-11-26) - partial. Effort: M
 - Fix: run unit tests and lint; remove the 3x retry loops that hide flaky builds; drop `continue-on-error` on artifact uploads; move to current `actions/setup-java`; add ktlint/detekt; Dependabot for Gradle and Actions; verify the minified release build starts (`isMinifyEnabled = true`, rules in `proguard-rules.pro` untested, Room/org.json usage).
+- Implemented (2026-11-26): Removed `-x lint` from build commands. Added separate `Lint` step running `lintDebug`. Remaining: ktlint/detekt, Dependabot config, verify minified release.
 
 ### OBS-1 - Audit log and log redaction
 - Status: IN-PROGRESS (2026-11-25) - partial. Effort: M

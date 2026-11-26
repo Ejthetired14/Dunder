@@ -80,13 +80,16 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Lint
+        run: ./gradlew lintDebug --no-daemon --stacktrace
+
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon -x lint --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Find APKs
         id: find-apks
