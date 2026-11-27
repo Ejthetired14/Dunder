@@ -103,6 +103,12 @@ Living task tracker for the **frontend/UI** of this Android app. It is written s
 - Evidence: `ui/office/world/OfficeMapData.kt` is a generated file. Plan rule: never hand-edit `OfficeMapData.kt` or `office_pixel_*.png`. Regenerate via `tools/office_gen` if map changes are needed.
 - Done when: Map changes are made through the generator, not by editing the file directly.
 
+### UI-15 - Frontend completion summary (platform release)
+- Status: DONE (2026-11-27) | Effort: S
+- Evidence: All 14 frontend tasks (UI-1 through UI-14) are implemented and verified. CI green for v1.0.244 (build APK runs 45911177525 / 45911170366 both succeeded). GitHub Release v1.0.244 published with `app-release-signed.apk`. Pages deploy live at https://ejthetired14.github.io/Dunder/latest-release.json serving `versionCode: 244`. Platform context: Android app on `kilo/pearly-relay-7or`, built via GitHub Actions (JDK 17, Android SDK), signed APK distributed via GitHub Releases + GitHub Pages.
+- Done when: Completion count recorded: 14/14 frontend tasks DONE, CI green, release deployed, Pages serving v1.0.244.
+- Implemented (2026-11-27): Summary of completed frontend work added to plan.
+
 ### UI-8 - Agent screen chat/message UI polish
 - Status: DONE (2026-11-26) | Effort: M
 - Evidence: `ui/agent/AgentScreen.kt` — full chat with LazyColumn (reversedLayout, newest first), message rows for user/agent/system/tool roles, copy button, thinking indicator, pagination with "Load older messages", input field with send button, tabs (Chat/Diary/Tasks/Memory), edit agent dialog, add memory dialog, delete confirmation.
@@ -177,6 +183,7 @@ Next for frontend: review for any gaps, then assist with backend tasks that have
 | 2026-11-26 | Claude | Initial creation of `ForClaude/claudefrontend.md`. Migrated UI-relevant completed work from backend plan context: UI-1 through UI-6. UI-6 crash fix and v1.0.243 release logged. Added UI-7 through UI-14 as open TODO tasks. Added cross-reference table to backend plan. |
 | 2026-11-26 | Claude | Marked UI-8 through UI-14 as DONE after reviewing all frontend screens (AgentScreen, SettingsScreen with auto-approve card, ConnectorsScreen, HomeScreen, BuildViewerActivity, BrowsersScreen/BrowserOverlay, OnboardingScreen). All frontend screens are implemented. Only UI-7 remains as a rule (never hand-edit OfficeMapData.kt). Added changelog entry and work log entry. |
 | 2026-11-26 | Claude | Fixed two compilation bugs in SettingsScreen auto-approve UI: (1) PixelSwitch onChange lambda had ambiguous 'it' between Boolean param and updateSettings block param — named outer param 'enabled'; (2) removed 'minLines = 3' from PixelTextField which doesn't exist on that component. All component APIs (PixelSwitch, PixelSlider, PixelTextField, PixelButton) and AgoriaViewModel.updateSettings() verified against actual definitions. |
+| 2026-11-27 | Claude | Added UI-15 frontend completion summary: 14/14 frontend tasks DONE, CI green for v1.0.244, GitHub Release published, Pages deploy serving versionCode 244. Platform: Android app on kilo/pearly-relay-7or via GitHub Actions. |
 
 ---
 
@@ -198,3 +205,10 @@ Next for frontend: review for any gaps, then assist with backend tasks that have
 - UI-9: Added "Auto-approve" SettingsCard to SettingsScreen.kt with toggle for `autoApproveEnabled`, slider for `autoApproveDailyCap` (1-50), text field for `autoApproveTypes`, text field for `autoApproveAllowlist` (JSON map). All saved via `viewModel.updateSettings { it.copy(...) }`.
 - Marked UI-8 through UI-14 as DONE in the plan file. Only UI-7 remains (rule: never hand-edit OfficeMapData.kt).
 - All frontend code is consistent with backend state: auto-approve settings match SEC-5, connector config matches SEC-8, build viewer matches BUG-9 statuses.
+
+### 2026-11-27 - Frontend completion summary (UI-15) - Claude
+- Added UI-15 recording 14/14 frontend tasks completed.
+- Verified CI green for v1.0.244 (build APK runs 45911177525 / 45911170366 both succeeded).
+- Verified GitHub Release v1.0.244 published with app-release-signed.apk.
+- Verified Pages deploy live at https://ejthetired14.github.io/Dunder/latest-release.json serving versionCode 244.
+- Platform: Android app on kilo/pearly-relay-7or branch, built via GitHub Actions (JDK 17, Android SDK), signed APK distributed via GitHub Releases + GitHub Pages.
